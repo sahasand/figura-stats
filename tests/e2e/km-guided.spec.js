@@ -15,3 +15,12 @@ test("guided KM shows three stage tabs, syncs the hash, and starts on Understand
   await page.keyboard.press("Enter");
   await expect(page.getByRole("tab", { name: "Understand" })).toHaveAttribute("aria-selected", "true");
 });
+
+test("Understand teaches the method with a labeled non-data visual", async ({ page }) => {
+  await page.goto("/#km/understand");
+  await page.getByRole("button", { name: /kaplan-meier/i }).click();
+  await expect(page.getByRole("heading", { name: "Estimate survival over time" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /appropriate/i })).toBeVisible();
+  await expect(page.getByText("Illustration—not computed data")).toBeVisible();
+  await expect(page.getByText("Sources and methodology")).toBeVisible();
+});

@@ -1,6 +1,7 @@
 // web/guided/guided-analysis.js
 import { createKmSession, setStage, storeResult, getResult, setDemoOptions, resetDemo, STAGES }
   from "./session-state.js";
+import { renderUnderstand } from "./km/content.js";
 
 const STAGE_LABELS = { understand: "Understand", example: "Try an Example", analyze: "Analyze Your Data" };
 // Module-level session: survives switching to another analysis and back
@@ -79,8 +80,7 @@ export function renderGuidedKm(container, onSubmit, runFigure) {
 
 // Panels are filled in by Tasks 5, 6/7, and 8. Placeholders until then.
 function renderPanels(container, ctx) {
-  container.querySelector('[data-stage-panel="understand"]').textContent =
-    "Understand — coming in Task 5.";
+  renderUnderstand(container.querySelector('[data-stage-panel="understand"]'));
   container.querySelector('[data-stage-panel="example"]').textContent =
     "Try an Example — coming in Task 6.";
   container.querySelector('[data-stage-panel="analyze"]').textContent =
