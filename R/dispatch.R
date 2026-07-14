@@ -3,6 +3,7 @@ render_figure <- function(json_string) {
   result <- tryCatch({
     spec <- jsonlite::fromJSON(json_string, simplifyVector = FALSE)
     fig <- spec$figure
+    if (is.null(fig)) fig <- "(none)"
     out <- switch(as.character(fig),
       forest  = fig_forest(spec),
       consort = fig_consort(spec),
