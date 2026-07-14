@@ -4,8 +4,10 @@ mkdata <- function(n = 150) {
   lp <- -4 + 0.05 * age + 0.4 * (sex == "M")
   event <- rbinom(n, 1, plogis(lp))
   time <- round(rexp(n, 0.05) + 1, 1)
+  biomarker <- rnorm(n, 10, 2)
   lapply(seq_len(n), function(i)
-    list(age = age[i], sex = sex[i], event = event[i], time = time[i]))
+    list(age = age[i], sex = sex[i], event = event[i], time = time[i],
+         biomarker = biomarker[i]))
 }
 
 test_that("logistic regression returns an HTML table with OR", {
@@ -48,6 +50,18 @@ test_that("errors when logistic outcome is not binary", {
   expect_error(fig_regression(spec), "two", ignore.case = TRUE)
 })
 
+test_that("linear regression returns an HTML table with beta estimates", {
+  spec <- list(figure = "regression", data = mkdata(),
+    roles = list(outcome = "biomarker", covariates = list("age", "sex")),
+    options = list(model = "linear"))
+  out <- NULL
+  expect_no_warning(out <- fig_regression(spec))
+  expect_match(out$svg, "<table")
+  expect_match(out$svg, "Univariable")
+  expect_match(out$svg, "Multivariable")
+  expect_match(out$text, "beta")
+})
+
 test_that("covariate names with spaces are backtick-escaped in the formula", {
   n <- 150
   set.seed(21)
@@ -61,6 +75,8 @@ test_that("covariate names with spaces are backtick-escaped in the formula", {
     options = list(model = "logistic"))
   out <- fig_regression(spec)
   expect_match(out$svg, "<table")
+  expect_match(out$svg, "Univariable")
+  expect_match(out$svg, "Multivariable")
 })
 
 test_that("errors with a clear message when cox time/status roles are unset", {
