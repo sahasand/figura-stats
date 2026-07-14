@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clinical Manuscript Figures</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header><h1>Clinical Manuscript Figures</h1>
+    <p>Publication figures + stats, computed in your browser. Data never leaves this page.</p>
+  </header>
+  <nav>
+    <button data-figure="forest">Forest plot</button>
+    <button data-figure="consort">CONSORT</button>
+    <button data-figure="table1">Table 1</button>
+    <button data-figure="km">Kaplan-Meier</button>
+  </nav>
+  <main>
+    <section id="form"></section>
+    <section><div id="preview"></div><pre id="stats"></pre></section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "manuscript-figures-web",
+  "private": true,
+  "scripts": {
+    "serve": "python3 -m http.server 8080 --directory web",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": { "@playwright/test": "^1.45.0" }
+}

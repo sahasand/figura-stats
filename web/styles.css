@@ -1,0 +1,9 @@
+body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; }
+header, nav, main { padding: 1rem 1.5rem; }
+nav button { margin-right: .5rem; padding: .5rem 1rem; cursor: pointer; }
+main { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+#preview svg { max-width: 100%; height: auto; border: 1px solid #eee; }
+#stats { white-space: pre-wrap; background: #f6f6f6; padding: 1rem; }
+label { display: block; margin: .4rem 0 .1rem; font-size: .85rem; }
+input { padding: .3rem; width: 8rem; }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; } }
