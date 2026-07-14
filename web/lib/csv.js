@@ -15,6 +15,8 @@ export function parseCsv(text) {
     const cells = l.split(",");
     if (cells.length < columns.length)
       throw new Error(`Row ${i + 1}: expected ${columns.length} columns, found ${cells.length}.`);
+    if (cells.length > columns.length)
+      throw new Error(`Row ${i + 1}: expected ${columns.length} columns, found ${cells.length}.`);
     const row = {};
     columns.forEach((c, j) => { row[c] = (cells[j] ?? "").trim(); });
     return row;
