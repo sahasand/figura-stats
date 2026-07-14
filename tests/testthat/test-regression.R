@@ -16,6 +16,9 @@ test_that("logistic regression returns an HTML table with OR", {
   expect_match(out$svg, "<table")
   expect_match(out$text, "OR|Odds", ignore.case = TRUE)
   expect_match(out$svg, "age")
+  # Table 2: both unadjusted and adjusted estimates are present.
+  expect_match(out$svg, "Univariable")
+  expect_match(out$svg, "Multivariable")
 })
 
 test_that("cox regression returns an HTML table with HR", {
@@ -25,6 +28,9 @@ test_that("cox regression returns an HTML table with HR", {
   out <- fig_regression(spec)
   expect_match(out$svg, "<table")
   expect_match(out$text, "HR|Hazard", ignore.case = TRUE)
+  # Table 2: both unadjusted and adjusted estimates are present.
+  expect_match(out$svg, "Univariable")
+  expect_match(out$svg, "Multivariable")
 })
 
 test_that("errors when no covariates selected", {
