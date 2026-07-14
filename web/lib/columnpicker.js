@@ -27,6 +27,8 @@ export function renderColumnPicker(container, roles, table, onReady, doc = globa
     label.textContent = role.label + (role.multiple ? " (pick one or more)" : "");
     container.appendChild(label);
     const sel = doc.createElement("select");
+    sel.id = "cp_" + role.key;
+    label.htmlFor = sel.id;
     sel.multiple = !!role.multiple;
     if (!role.multiple) {
       const blank = doc.createElement("option");
