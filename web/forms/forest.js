@@ -32,9 +32,12 @@ export function renderForestForm(container, onSubmit) {
           lower: parseFloat(d.querySelector(".lo").value),
           upper: parseFloat(d.querySelector(".hi").value)
         }))
-        // Drop rows the user added but left blank, so a stray empty row does not
-        // send NaN/null numerics that would fail the R-side length checks.
-        .filter((r) => Number.isFinite(r.estimate)) };
+        // Only submit fully-specified rows: estimate AND both CI bounds must be
+        // real numbers. This drops stray blank rows and also catches a row with
+        // an estimate but a missing CI bound, which would otherwise send
+        // NaN/null numerics and surface as a cryptic R-side length error.
+        .filter((r) => Number.isFinite(r.estimate) &&
+                       Number.isFinite(r.lower) && Number.isFinite(r.upper)) };
     onSubmit(spec);
   };
   // Start with one row so "Add row" is optional; the picker shows a ready form.
