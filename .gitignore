@@ -2,5 +2,8 @@
 .Rhistory
 .RData
 node_modules/
+test-results/
 web/webr/
+# web/R/ is a build-time copy of the top-level R/ sources; never commit it.
+web/R/
 *.DS_Store
