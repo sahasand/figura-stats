@@ -24,3 +24,8 @@ test_that("errors when outcome is not binary", {
   s <- mkspec(); s$data[[1]]$out <- 2
   expect_error(fig_roc(s), "two", ignore.case = TRUE)
 })
+
+test_that("errors clearly when predictor is non-numeric", {
+  s <- mkspec(); s$data[[1]]$pred <- "not-a-number"
+  expect_error(fig_roc(s), "numeric", ignore.case = TRUE)
+})

@@ -2,9 +2,17 @@
 fig_roc <- function(spec) {
   pcol <- spec$roles$predictor; ocol <- spec$roles$outcome
   rows <- spec$data
-  predictor <- vapply(rows, function(r) as.numeric(r[[pcol]]), numeric(1))
+  predictor_raw <- vapply(rows, function(r) {
+    v <- r[[pcol]]
+    if (is.null(v)) NA_character_ else as.character(v)
+  }, character(1))
+  predictor <- suppressWarnings(as.numeric(predictor_raw))
+  failed <- !is.na(predictor_raw) & predictor_raw != "" & is.na(predictor)
+  if (any(failed)) {
+    stop(sprintf("Column '%s' must be numeric.", pcol))
+  }
   outcome_raw <- vapply(rows, function(r) as.character(r[[ocol]]), character(1))
-  ok <- !is.na(predictor) & outcome_raw != ""
+  ok <- !is.na(predictor) & !is.na(outcome_raw) & outcome_raw != ""
   predictor <- predictor[ok]; outcome_raw <- outcome_raw[ok]
   levs <- sort(unique(outcome_raw))
   if (length(levs) != 2) stop("ROC needs an outcome with exactly two distinct values.")
