@@ -20,8 +20,8 @@ fig_forest <- function(spec) {
     ggplot2::geom_vline(xintercept = null_line, linetype = "dashed",
                         colour = "grey50") +
     ggplot2::geom_point(size = 2.5) +
-    ggplot2::geom_errorbarh(ggplot2::aes(xmin = lower, xmax = upper),
-                            height = 0.2) +
+    ggplot2::geom_errorbar(ggplot2::aes(xmin = lower, xmax = upper),
+                           width = 0.2, orientation = "y") +
     ggplot2::labs(x = effect_label, y = NULL) +
     ggplot2::theme_minimal(base_size = 12)
 

@@ -9,6 +9,15 @@ worker.onmessage = (e) => {
   if (resolve) { pending.delete(id); resolve(JSON.parse(result)); }
 };
 
+worker.onerror = () => {
+  const payload = {
+    ok: false,
+    error: "Failed to load the R runtime (check your network connection and that your browser supports WebAssembly).",
+  };
+  for (const resolve of pending.values()) resolve(payload);
+  pending.clear();
+};
+
 export function runFigure(spec) {
   return new Promise((resolve) => {
     const id = nextId++;
