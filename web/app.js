@@ -51,7 +51,8 @@ import { renderKmForm } from "./forms/km.js";
 import { renderGroupCompareForm } from "./forms/groupcompare.js";
 import { renderCorrelationForm } from "./forms/correlation.js";
 import { renderRocForm } from "./forms/roc.js";
-const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderKmForm, groupcompare: renderGroupCompareForm, correlation: renderCorrelationForm, roc: renderRocForm };
+import { renderRegressionForm } from "./forms/regression.js";
+const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderKmForm, groupcompare: renderGroupCompareForm, correlation: renderCorrelationForm, roc: renderRocForm, regression: renderRegressionForm };
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
