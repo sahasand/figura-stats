@@ -2,14 +2,32 @@
 fig_correlation <- function(spec) {
   xcol <- spec$roles$x; ycol <- spec$roles$y
   rows <- spec$data
-  x <- vapply(rows, function(r) as.numeric(r[[xcol]]), numeric(1))
-  y <- vapply(rows, function(r) as.numeric(r[[ycol]]), numeric(1))
+
+  coerce_numeric_col <- function(colname) {
+    raw <- vapply(rows, function(r) {
+      v <- r[[colname]]
+      if (is.null(v)) NA_character_ else as.character(v)
+    }, character(1))
+    num <- suppressWarnings(as.numeric(raw))
+    failed <- !is.na(raw) & raw != "" & is.na(num)
+    if (any(failed)) {
+      stop(sprintf("Column '%s' must be numeric.", colname))
+    }
+    num
+  }
+
+  x <- coerce_numeric_col(xcol)
+  y <- coerce_numeric_col(ycol)
   ok <- !is.na(x) & !is.na(y)
   x <- x[ok]; y <- y[ok]
   if (length(x) < 3) stop("Correlation needs at least 3 complete point pairs.")
 
   method <- spec$options$method %||% "pearson"
-  ct <- stats::cor.test(x, y, method = method)
+  ct <- if (identical(method, "spearman")) {
+    stats::cor.test(x, y, method = method, exact = FALSE)
+  } else {
+    stats::cor.test(x, y, method = method)
+  }
   p <- ct$p.value
   pfmt <- if (p < 0.001) "p < 0.001" else sprintf("p = %.3f", p)
   df <- data.frame(x = x, y = y)
