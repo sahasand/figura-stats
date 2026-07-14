@@ -39,7 +39,8 @@ async function render(spec) {
 
 import { renderForestForm } from "./forms/forest.js";
 import { renderConsortForm } from "./forms/consort.js";
-const forms = { forest: renderForestForm, consort: renderConsortForm };
+import { renderTable1Form } from "./forms/table1.js";
+const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form };
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {

@@ -9,7 +9,7 @@ async function boot() {
   await webR.init();
   // Install ONLY what the forest plot needs. Later tasks (4-6: KM, Table 1,
   // CONSORT) extend this list with e.g. "survival", "survminer", "gtsummary".
-  await webR.installPackages(["ggplot2", "svglite", "jsonlite"], { quiet: true });
+  await webR.installPackages(["ggplot2", "svglite", "jsonlite", "knitr"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.
   // Only dispatch.R and forest.R exist today; the rest are added by later
   // tasks. Missing files 404, and the `resp.ok` guard skips them.
