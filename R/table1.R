@@ -2,6 +2,8 @@
 fig_table1 <- function(spec) {
   groups <- vapply(spec$groups, as.character, character(1))
   g <- length(groups)
+  if (g == 0) stop("Table 1 needs at least one group.")
+  if (anyDuplicated(groups)) stop("Group names must be unique.")
   vars <- vapply(spec$rows, function(r) as.character(r$variable), character(1))
   mat <- t(vapply(spec$rows, function(r) {
     v <- vapply(r$values, as.character, character(1))

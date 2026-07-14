@@ -15,3 +15,13 @@ test_that("fig_table1 errors when a row's value count != group count", {
   bad <- spec; bad$rows[[1]]$values <- list("58 (11)")
   expect_error(fig_table1(bad), "values", ignore.case = TRUE)
 })
+
+test_that("fig_table1 errors on duplicate group names", {
+  bad <- spec; bad$groups <- list("Treatment", "Treatment")
+  expect_error(fig_table1(bad), "unique", ignore.case = TRUE)
+})
+
+test_that("fig_table1 errors when there are no groups", {
+  bad <- spec; bad$groups <- list()
+  expect_error(fig_table1(bad), "at least one group", ignore.case = TRUE)
+})

@@ -1,14 +1,26 @@
 function parseCsv(text) {
-  const [head, ...lines] = text.trim().split("\n");
+  const [head, ...lines] = text.trim().split(/\r?\n/);
   const cols = head.split(",").map((s) => s.trim());
   const idx = (name) => cols.indexOf(name);
   if (idx("time") < 0 || idx("status") < 0 || idx("group") < 0)
     throw new Error("CSV needs columns: time, status, group");
-  return lines.filter(Boolean).map((l) => {
+  const need = Math.max(idx("time"), idx("status"), idx("group")) + 1;
+  const rows = lines.filter((l) => l.trim() !== "").map((l, i) => {
+    const n = i + 1; // 1-based data row number, for user-facing messages
     const c = l.split(",");
-    return { time: parseFloat(c[idx("time")]), status: parseInt(c[idx("status")], 10),
-             group: c[idx("group")].trim() };
+    if (c.length < need)
+      throw new Error(`Row ${n}: expected at least ${need} columns, found ${c.length}.`);
+    const time = parseFloat(c[idx("time")]);
+    const status = parseInt((c[idx("status")] || "").trim(), 10);
+    const group = (c[idx("group")] || "").trim();
+    if (!Number.isFinite(time)) throw new Error(`Row ${n}: 'time' is not a number.`);
+    if (status !== 0 && status !== 1)
+      throw new Error(`Row ${n}: 'status' must be 0 (censored) or 1 (event).`);
+    if (group === "") throw new Error(`Row ${n}: 'group' is empty.`);
+    return { time, status, group };
   });
+  if (rows.length === 0) throw new Error("CSV has no data rows.");
+  return rows;
 }
 
 export function renderKmForm(container, onSubmit) {
