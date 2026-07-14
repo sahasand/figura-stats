@@ -19,6 +19,9 @@ export function renderKmForm(container, onSubmit) {
     <input type="file" id="csv" accept=".csv" />
     <label for="tlabel">Time axis label</label>
     <input id="tlabel" value="Months" />
+    <label for="theme">Journal style</label>
+    <select id="theme"><option value="generic">Generic</option>
+    <option value="nejm">NEJM</option><option value="jama">JAMA</option></select>
     <button type="button" id="render" disabled>Render</button>`;
   let data = null;
   const btn = container.querySelector("#render");
@@ -32,5 +35,6 @@ export function renderKmForm(container, onSubmit) {
     reader.readAsText(file);
   };
   btn.onclick = () => onSubmit({ figure: "km", data,
-    options: { time_label: container.querySelector("#tlabel").value } });
+    options: { time_label: container.querySelector("#tlabel").value,
+      theme: container.querySelector("#theme").value } });
 }

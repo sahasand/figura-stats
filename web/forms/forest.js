@@ -5,6 +5,9 @@ export function renderForestForm(container, onSubmit) {
     <input id="effect" value="Hazard Ratio" />
     <div id="rows"></div>
     <button type="button" id="addRow">Add row</button>
+    <label for="theme">Journal style</label>
+    <select id="theme"><option value="generic">Generic</option>
+    <option value="nejm">NEJM</option><option value="jama">JAMA</option></select>
     <button type="button" id="render">Render</button>`;
   const rows = container.querySelector("#rows");
   function addRow() {
@@ -20,7 +23,8 @@ export function renderForestForm(container, onSubmit) {
   container.querySelector("#addRow").onclick = addRow;
   container.querySelector("#render").onclick = () => {
     const spec = { figure: "forest",
-      options: { effect_label: container.querySelector("#effect").value, null_line: 1 },
+      options: { effect_label: container.querySelector("#effect").value, null_line: 1,
+        theme: container.querySelector("#theme").value },
       rows: [...rows.children]
         .map((d) => ({
           label: d.querySelector(".lbl").value,

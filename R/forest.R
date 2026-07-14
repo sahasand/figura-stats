@@ -23,7 +23,7 @@ fig_forest <- function(spec) {
     ggplot2::geom_errorbar(ggplot2::aes(xmin = lower, xmax = upper),
                            width = 0.2, orientation = "y") +
     ggplot2::labs(x = effect_label, y = NULL) +
-    ggplot2::theme_minimal(base_size = 12)
+    .fig_theme(spec$options$theme)
 
   first <- df[1, ]
   txt <- sprintf("%s %.2f (95%% CI %.2f–%.2f)",

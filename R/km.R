@@ -23,6 +23,7 @@ fig_km <- function(spec) {
                           xlab = time_label, ylab = "Survival probability",
                           legend.title = "Group"))
   plot_obj <- gg$plot
+  plot_obj <- plot_obj + .fig_theme(spec$options$theme)
 
   txt <- sprintf("Log-rank p = %.3f.", p)
   if (length(unique(df$group)) == 2) {
