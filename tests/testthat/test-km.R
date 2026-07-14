@@ -39,6 +39,13 @@ strong_two_group_spec <- function() {
   km_spec(c(tA, tB), c(sA, sB), c(rep("A", nA), rep("B", nB)))
 }
 
+# Tiny fixture: one group, events at 1,2,3,4 (no censoring). KM: S(1)=.75,
+# S(2)=.50 exactly, S(3)=.25. survfit's median convention returns the midpoint
+# of the interval where S==0.5, i.e. (2+3)/2 = 2.5 (not the left endpoint).
+uncensored_spec <- function() {
+  km_spec(time = c(1, 2, 3, 4), status = c(1, 1, 1, 1), group = rep("A", 4))
+}
+
 test_that("fig_km formats a tiny log-rank p as 'p < 0.001', never '0.000'", {
   out <- fig_km(strong_two_group_spec())
   expect_match(out$text, "p < 0.001", fixed = TRUE)
@@ -108,4 +115,40 @@ test_that("fig_km SVG contains the risk table and censor marks", {
 test_that("R/km.R no longer references survminer", {
   src <- readLines(file.path("..", "..", "R", "km.R"))
   expect_false(any(grepl("survminer", src)))
+})
+
+test_that("fig_km reports per-group medians with not-reached state", {
+  out <- fig_km(uncensored_spec())
+  expect_match(out$text, "Median survival: A 2.5", fixed = TRUE)
+  s <- km_spec(time = c(10, 11, 12), status = c(0, 0, 0), group = rep("A", 3))
+  out2 <- fig_km(s)
+  expect_match(out2$text, "not reached", fixed = TRUE)
+})
+
+test_that("landmark option reports estimate with CI at requested times", {
+  s <- uncensored_spec(); s$options$landmarks <- c(2.5)
+  out <- fig_km(s)
+  expect_match(out$text, "At 2.5 Months, survival was 50.0%", fixed = TRUE)
+  expect_match(out$text, "95% CI", fixed = TRUE)
+})
+
+test_that("reference option controls HR direction", {
+  s <- strong_two_group_spec()             # existing fixture: events concentrated in A
+  s$options$reference <- "B"
+  out <- fig_km(s)
+  expect_match(out$text, "A vs B", fixed = TRUE)   # numerator flips
+  s$options$reference <- "Nope"
+  expect_error(fig_km(s), "reference")
+})
+
+test_that("conf_int, horizon, and caption affect the figure not the statistics", {
+  s <- strong_two_group_spec()
+  base <- fig_km(s)
+  s2 <- s; s2$options$conf_int <- FALSE
+  expect_false(grepl("fill-opacity", fig_km(s2)$svg))   # ribbon gone
+  expect_true(grepl("fill-opacity", base$svg))
+  s3 <- s; s3$options$horizon <- 2
+  expect_equal(fig_km(s3)$text, base$text)              # display-only
+  s4 <- s; s4$options$caption <- "Synthetic demonstration data"
+  expect_match(fig_km(s4)$svg, "Synthetic demonstration data", fixed = TRUE)
 })

@@ -11,10 +11,19 @@ fig_km <- function(spec) {
   if (any(!is.finite(df$time)) || any(df$time < 0))
     stop("KM: 'time' must be non-negative and numeric for every row.")
 
+  # Relevel BEFORE any model fit so survfit/survdiff/coxph all agree on the
+  # reference group (the caller-chosen reference becomes the first factor level,
+  # which the HR-direction code below reads back from cox$xlevels$group).
+  opts <- spec$options %||% list()
+  ref <- opts$reference
+  if (!is.null(ref)) {
+    if (!ref %in% df$group) stop(sprintf("reference '%s' is not one of the groups.", ref))
+    df$group <- stats::relevel(factor(df$group), ref = ref)
+  }
+  n_groups <- length(unique(df$group))
+
   fit <- survival::survfit(survival::Surv(time, status) ~ group, data = df)
-  lr  <- survival::survdiff(survival::Surv(time, status) ~ group, data = df)
-  p   <- 1 - stats::pchisq(lr$chisq, length(lr$n) - 1)
-  time_label <- spec$options$time_label %||% "Time"
+  time_label <- opts$time_label %||% "Time"
 
   # Report a p-value without the impossible-looking "p = 0.000": show
   # "p < 0.001" below three-decimal resolution, otherwise three decimals.
@@ -23,18 +32,22 @@ fig_km <- function(spec) {
   curve_df <- .km_curve_df(fit)
   step_df  <- .km_step_df(curve_df)
   censor_df <- curve_df[curve_df$n.censor > 0, , drop = FALSE]
-  n_groups <- length(unique(curve_df$group))
   pal <- .km_palette(n_groups)
   x_max <- max(curve_df$time)
   breaks <- pretty(c(0, x_max), n = 6)
   x_scale <- ggplot2::scale_x_continuous(limits = range(breaks), breaks = breaks,
                                          expand = ggplot2::expansion(mult = c(0.01, 0.02)))
 
+  # Add the CI ribbon (when requested) BEFORE the step curves so it draws
+  # underneath them — ggplot2 renders layers in the order they are added.
+  conf_int <- opts$conf_int %||% TRUE
   main <- ggplot2::ggplot(curve_df,
-      ggplot2::aes(x = time, y = surv, color = group, linetype = group)) +
-    ggplot2::geom_ribbon(data = step_df[!is.na(step_df$lower), , drop = FALSE],
+      ggplot2::aes(x = time, y = surv, color = group, linetype = group))
+  if (isTRUE(conf_int)) main <- main + ggplot2::geom_ribbon(
+      data = step_df[!is.na(step_df$lower), , drop = FALSE],
       ggplot2::aes(ymin = lower, ymax = upper, fill = group),
-      alpha = 0.15, color = NA, show.legend = FALSE) +
+      alpha = 0.15, color = NA, show.legend = FALSE)
+  main <- main +
     ggplot2::geom_step(linewidth = 0.7) +
     ggplot2::geom_point(data = censor_df, shape = 3, size = 1.8, show.legend = FALSE) +
     x_scale +
@@ -45,6 +58,7 @@ fig_km <- function(spec) {
                   color = "Group", linetype = "Group") +
     .fig_theme(spec$options$theme)
   if (n_groups == 1) main <- main + ggplot2::theme(legend.position = "none")
+  if (!is.null(opts$caption)) main <- main + ggplot2::labs(caption = opts$caption)
 
   r <- summary(fit, times = breaks, extend = TRUE)
   risk_df <- data.frame(
@@ -60,12 +74,27 @@ fig_km <- function(spec) {
                    axis.text.x = ggplot2::element_blank(),
                    plot.title = ggplot2::element_text(size = 9, face = "bold"))
 
+  # Display-only x cutoff: coord_cartesian zooms both panels without dropping
+  # data, so no statistic or text below changes. One coord per plot (adding a
+  # second coord would emit "replacing coordinate system").
+  horizon <- opts$horizon
+  if (!is.null(horizon)) {
+    xlim <- c(0, as.numeric(horizon))
+    main     <- main     + ggplot2::coord_cartesian(xlim = xlim)
+    risk_tab <- risk_tab + ggplot2::coord_cartesian(xlim = xlim)
+  }
+
   plot_obj <- cowplot::plot_grid(main, risk_tab, ncol = 1,
                                  rel_heights = c(0.78, 0.22),
                                  align = "v", axis = "lr")
 
-  txt <- sprintf("Log-rank %s.", fmt_p(p))
-  if (length(unique(df$group)) == 2) {
+  txt <- ""
+  if (n_groups >= 2) {
+    lr <- survival::survdiff(survival::Surv(time, status) ~ group, data = df)
+    p  <- 1 - stats::pchisq(lr$chisq, length(lr$n) - 1)
+    txt <- sprintf("Log-rank %s.", fmt_p(p))
+  }
+  if (n_groups == 2) {
     # Capture coxph's own warnings (non-convergence, infinite coefficient from
     # complete separation, etc.) here in R — the browser worker blanket-
     # suppresses warnings, so an unreliable HR would otherwise ship silently.
@@ -91,6 +120,33 @@ fig_km <- function(spec) {
                      hr, num, ref, ci[1], ci[2], fmt_p(p))
     }
   }
+
+  # Per-group median survival, appended from full-precision values (format once,
+  # never re-parse display strings). NA median => the curve never reached 0.5.
+  fmt1 <- function(x) sprintf("%.1f", x)
+  med_tab <- summary(fit)$table
+  if (is.null(dim(med_tab))) med_tab <- t(as.matrix(med_tab))  # single-group case
+  med_lines <- vapply(seq_len(nrow(med_tab)), function(i) {
+    g <- sub("^group=", "", rownames(med_tab)[i] %||% as.character(unique(df$group)[i]))
+    m <- med_tab[i, "median"]
+    if (is.na(m)) sprintf("%s not reached", g)
+    else sprintf("%s %s %s", g, fmt1(m), time_label)
+  }, character(1))
+  txt <- paste0(txt, if (nzchar(txt)) " " else "",
+                "Median survival: ", paste(med_lines, collapse = "; "), ".")
+
+  # Optional landmark survival estimates at caller-requested times.
+  landmarks <- opts$landmarks %||% numeric(0)
+  if (length(landmarks) > 0) {
+    lm <- summary(fit, times = as.numeric(landmarks), extend = TRUE)
+    lg <- if (is.null(lm$strata)) rep(as.character(unique(df$group)[1]), length(lm$time))
+          else sub("^group=", "", as.character(lm$strata))
+    lm_lines <- sprintf("At %s %s, survival was %s%% (95%% CI %s%%–%s%%) in %s",
+                        fmt1(lm$time), time_label, fmt1(100 * lm$surv),
+                        fmt1(100 * lm$lower), fmt1(100 * lm$upper), lg)
+    txt <- paste0(txt, " ", paste(lm_lines, collapse = "; "), ".")
+  }
+
   list(svg = .svg_string(plot_obj, width = 7, height = 6), text = txt)
 }
 
