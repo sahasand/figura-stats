@@ -8,7 +8,7 @@ let webRReady;
 // of that type is requested — not at boot — so a user who only makes a forest
 // plot never downloads survminer's large dependency tree. Boot installs only
 // the shared base below. See ensureExtraPackages().
-const EXTRA_PACKAGES = { km: ["survival", "survminer"] };
+const EXTRA_PACKAGES = { km: ["survival", "survminer"], roc: ["pROC"], regression: ["gtsummary", "broom", "broom.helpers"] };
 const installedExtras = new Set();
 // Single-flight guard: figure type -> in-flight install Promise. Without this,
 // two concurrent requests for the same figure type (e.g. a double-click on
@@ -28,7 +28,7 @@ async function boot() {
   // Load the R sources that define render_figure() and the fig_* functions.
   // Only dispatch.R and forest.R exist today; the rest are added by later
   // tasks. Missing files 404, and the `resp.ok` guard skips them.
-  for (const f of ["dispatch.R", "forest.R", "consort.R", "table1.R", "km.R", "themes.R"]) {
+  for (const f of ["dispatch.R", "forest.R", "consort.R", "table1.R", "km.R", "groupcompare.R", "correlation.R", "roc.R", "regression.R", "themes.R"]) {
     const resp = await fetch(`R/${f}`);
     if (resp.ok) await webR.evalRVoid(await resp.text());
   }

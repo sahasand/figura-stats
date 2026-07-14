@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "serve": "python3 -m http.server 8080 --directory web",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:unit": "node web/lib/csv.test.mjs && node web/lib/columnpicker.test.mjs"
   },
   "devDependencies": { "@playwright/test": "^1.45.0" }
 }
