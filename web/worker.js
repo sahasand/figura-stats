@@ -10,6 +10,13 @@ let webRReady;
 // the shared base below. See ensureExtraPackages().
 const EXTRA_PACKAGES = { km: ["survival", "survminer"] };
 const installedExtras = new Set();
+// Single-flight guard: figure type -> in-flight install Promise. Without this,
+// two concurrent requests for the same figure type (e.g. a double-click on
+// Render, which doesn't disable the button mid-render) would both see
+// installedExtras empty and both call webR.installPackages(), double-downloading
+// survminer's large dependency tree and racing webR's package-install state.
+// Mirrors the webRReady = webRReady || boot() single-flight pattern below.
+const pendingExtraInstalls = new Map();
 
 async function boot() {
   const webR = new WebR();
@@ -35,9 +42,21 @@ async function ensureExtraPackages(webR, figure, id) {
   if (!pkgs) return;
   const missing = pkgs.filter((p) => !installedExtras.has(p));
   if (missing.length === 0) return;
-  self.postMessage({ id, progress: `Loading ${figure} packages (first time, this may take a minute)…` });
-  await webR.installPackages(missing, { quiet: true });
-  for (const p of missing) installedExtras.add(p);
+
+  // If an install for this figure type is already in flight, await THAT
+  // promise instead of starting a second webR.installPackages() call.
+  let installPromise = pendingExtraInstalls.get(figure);
+  if (!installPromise) {
+    self.postMessage({ id, progress: `Loading ${figure} packages (first time, this may take a minute)…` });
+    installPromise = webR.installPackages(missing, { quiet: true }).then(() => {
+      for (const p of missing) installedExtras.add(p);
+    });
+    // Clear the in-flight entry once settled (success or failure) so a failed
+    // install can be retried by a later request rather than wedging forever.
+    installPromise.finally(() => pendingExtraInstalls.delete(figure));
+    pendingExtraInstalls.set(figure, installPromise);
+  }
+  await installPromise;
 }
 
 self.onmessage = async (e) => {
