@@ -18,7 +18,7 @@ JS unit tests (plain Node, no framework) and browser end-to-end tests:
 
 - JS unit: `npm run test:unit` (runs `web/lib/*.test.mjs`)
 - E2E (Playwright + webR): `rm -rf web/R && cp -R R web/R && npm run test:e2e`
-- Serve locally: `rm -rf web/R && cp -R R web/R && npm run serve` (→ http://localhost:8080)
+- Serve locally: `rm -rf web/R && cp -R R web/R && npm run serve` (→ http://localhost:8321; non-default port so stale service workers from other localhost PWA projects can't hijack the page)
 
 **`web/R/` is a gitignored build copy of `R/`.** The worker fetches R sources at `R/<file>` relative to the `web/` root, so `R/` must be copied into `web/` before serving or running e2e. Use `rm -rf web/R` first — a bare `cp -R R web/R` nests into an existing dir. The deploy workflow does this copy at publish time.
 
@@ -56,3 +56,17 @@ For CSV analyses, build the form on `web/lib/csv.js` + `web/lib/columnpicker.js`
 ## Design docs
 
 Specs and implementation plans live in `docs/superpowers/{specs,plans}/`. Read the relevant one before extending a feature — they carry the rationale (e.g. why regression is a merged univariable+multivariable "Table 2", why the KM risk-table is a deferred follow-up).
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as local Markdown files under `.scratch/`; external pull requests are not a request surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the standard `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repository using root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.

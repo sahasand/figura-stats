@@ -5,9 +5,9 @@ module.exports = {
   timeout: 240000,
   webServer: {
     command: "npm run serve",
-    url: "http://localhost:8080",
+    url: "http://localhost:8321",
     reuseExistingServer: true,
     timeout: 240000
   },
-  use: { baseURL: "http://localhost:8080" }
+  use: { baseURL: "http://localhost:8321" }
 };
