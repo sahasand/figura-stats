@@ -10,7 +10,7 @@ fig_consort <- function(spec) {
   boxes <- data.frame(x = 1, y = ys, label = nodes)
   p <- ggplot2::ggplot() +
     ggplot2::geom_label(data = boxes, ggplot2::aes(x, y, label = label),
-      fill = "white", label.size = 0.4, size = 3.5) +
+      fill = "white", linewidth = 0.4, size = 3.5) +
     ggplot2::geom_segment(
       data = data.frame(x = 1, xend = 1, y = ys[-n] - 0.2, yend = ys[-1] + 0.2),
       ggplot2::aes(x, y, xend = xend, yend = yend),
