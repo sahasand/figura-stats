@@ -11,6 +11,7 @@ render_figure <- function(json_string) {
       km      = fig_km(spec),
       groupcompare = fig_groupcompare(spec),
       correlation = fig_correlation(spec),
+      roc     = fig_roc(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
     list(ok = TRUE, svg = out$svg, text = out$text)
