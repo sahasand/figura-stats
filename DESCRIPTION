@@ -3,6 +3,6 @@ Title: Publication-ready clinical figures via webR
 Version: 0.0.0.9000
 Description: R figure functions rendered client-side in the browser.
 Encoding: UTF-8
-Imports: ggplot2, survival, survminer, svglite, jsonlite, knitr, grDevices, stats, pROC, gtsummary, broom
+Imports: ggplot2, survival, survminer, svglite, jsonlite, knitr, grDevices, stats, pROC, gtsummary, broom, broom.helpers
 Suggests: testthat (>= 3.0.0)
 Config/testthat/edition: 3

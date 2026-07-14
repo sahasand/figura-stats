@@ -22,21 +22,27 @@ fig_regression <- function(spec) {
   }), stringsAsFactors = FALSE)
   names(df) <- covs
 
+  rhs <- paste(sprintf("`%s`", covs), collapse = " + ")
+
   build <- function() {
     if (model == "cox") {
+      if (is.null(spec$roles$time) || is.null(spec$roles$status))
+        stop("Cox regression needs a time column and a 0/1 status column.")
       df$.time <- col(spec$roles$time); df$.status <- col(spec$roles$status)
       if (any(is.na(df$.time)) || !all(df$.status %in% c(0, 1)))
         stop("Cox regression needs numeric time and a 0/1 status column.")
-      fml <- stats::as.formula(paste("survival::Surv(.time, .status) ~", paste(covs, collapse = " + ")))
+      fml <- stats::as.formula(paste("survival::Surv(.time, .status) ~", rhs))
       survival::coxph(fml, data = df)
     } else if (model == "linear") {
+      if (is.null(spec$roles$outcome)) stop("Select an outcome column.")
       df$.y <- col(spec$roles$outcome)
-      stats::lm(stats::as.formula(paste(".y ~", paste(covs, collapse = " + "))), data = df)
+      stats::lm(stats::as.formula(paste(".y ~", rhs)), data = df)
     } else {
+      if (is.null(spec$roles$outcome)) stop("Select an outcome column.")
       y <- col(spec$roles$outcome, numeric = FALSE)
       if (length(unique(y[!is.na(y) & y != ""])) != 2) stop("Logistic regression needs a binary (two-value) outcome.")
       df$.y <- as.integer(factor(y)) - 1L
-      stats::glm(stats::as.formula(paste(".y ~", paste(covs, collapse = " + "))),
+      stats::glm(stats::as.formula(paste(".y ~", rhs)),
                  data = df, family = stats::binomial())
     }
   }

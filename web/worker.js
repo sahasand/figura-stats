@@ -8,7 +8,7 @@ let webRReady;
 // of that type is requested — not at boot — so a user who only makes a forest
 // plot never downloads survminer's large dependency tree. Boot installs only
 // the shared base below. See ensureExtraPackages().
-const EXTRA_PACKAGES = { km: ["survival", "survminer"], roc: ["pROC"], regression: ["gtsummary", "broom"] };
+const EXTRA_PACKAGES = { km: ["survival", "survminer"], roc: ["pROC"], regression: ["gtsummary", "broom", "broom.helpers"] };
 const installedExtras = new Set();
 // Single-flight guard: figure type -> in-flight install Promise. Without this,
 // two concurrent requests for the same figure type (e.g. a double-click on
