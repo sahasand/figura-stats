@@ -9,6 +9,7 @@ render_figure <- function(json_string) {
       consort = fig_consort(spec),
       table1  = fig_table1(spec),
       km      = fig_km(spec),
+      groupcompare = fig_groupcompare(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
     list(ok = TRUE, svg = out$svg, text = out$text)

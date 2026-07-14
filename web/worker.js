@@ -28,7 +28,7 @@ async function boot() {
   // Load the R sources that define render_figure() and the fig_* functions.
   // Only dispatch.R and forest.R exist today; the rest are added by later
   // tasks. Missing files 404, and the `resp.ok` guard skips them.
-  for (const f of ["dispatch.R", "forest.R", "consort.R", "table1.R", "km.R", "themes.R"]) {
+  for (const f of ["dispatch.R", "forest.R", "consort.R", "table1.R", "km.R", "groupcompare.R", "themes.R"]) {
     const resp = await fetch(`R/${f}`);
     if (resp.ok) await webR.evalRVoid(await resp.text());
   }
