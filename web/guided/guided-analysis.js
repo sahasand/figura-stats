@@ -103,12 +103,21 @@ function renderExample(panel, ctx) {
     <div id="demo-experiments"></div>`;
   const runBtn = panel.querySelector("#run-demo");
 
+  // Controls that must be frozen for the duration of a run: the Run button
+  // plus the three experiment inputs. Worker requests aren't serialized, so
+  // toggling an experiment mid-run could let a stale response land last and
+  // silently mismatch the visible control state.
+  function inFlightControls() {
+    return [runBtn, ...panel.querySelectorAll("#exp-ci, #exp-landmarks, #exp-horizon")];
+  }
+
   // Shared run path: the Run button always calls this, and the experiment
   // controls call it too (conditionally) so both go through one place.
   async function runDemo() {
-    runBtn.disabled = true;                       // no duplicate runs while one is in flight
+    const controls = inFlightControls();
+    controls.forEach((el) => { el.disabled = true; });   // no duplicate/overlapping runs
     try { await ctx.runAndShow(buildDemoSpec(ctx.getSession().demoOptions), "demo"); }
-    finally { runBtn.disabled = false; }
+    finally { controls.forEach((el) => { el.disabled = false; }); }
   }
 
   runBtn.addEventListener("click", runDemo);
