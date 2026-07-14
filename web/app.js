@@ -49,7 +49,8 @@ import { renderConsortForm } from "./forms/consort.js";
 import { renderTable1Form } from "./forms/table1.js";
 import { renderKmForm } from "./forms/km.js";
 import { renderGroupCompareForm } from "./forms/groupcompare.js";
-const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderKmForm, groupcompare: renderGroupCompareForm };
+import { renderCorrelationForm } from "./forms/correlation.js";
+const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderKmForm, groupcompare: renderGroupCompareForm, correlation: renderCorrelationForm };
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
