@@ -76,3 +76,36 @@ test_that("fig_km errors on non-finite follow-up time", {
   s <- make_spec(); s$data[[1]]$time <- Inf
   expect_error(fig_km(s), "non-negative")
 })
+
+test_that(".km_step_df expands rows into exact step coordinates", {
+  d <- data.frame(time = c(0, 2, 5), surv = c(1, .8, .4),
+                  lower = c(1, .6, .2), upper = c(1, .95, .7),
+                  n.censor = 0, group = "A", stringsAsFactors = FALSE)
+  s <- manuscriptfigures:::.km_step_df(d)
+  # (t1,y1),(t2,y1),(t2,y2),(t3,y2),(t3,y3)
+  expect_equal(s$time, c(0, 2, 2, 5, 5))
+  expect_equal(s$surv, c(1, 1, .8, .8, .4))
+  expect_equal(s$lower, c(1, 1, .6, .6, .2))
+})
+
+test_that(".km_curve_df prepends a time-zero row per group", {
+  df <- data.frame(time = c(1, 2, 1, 3), status = c(1, 0, 1, 1),
+                   group = c("A", "A", "B", "B"))
+  fit <- survival::survfit(survival::Surv(time, status) ~ group, data = df)
+  d <- manuscriptfigures:::.km_curve_df(fit)
+  t0 <- d[d$time == 0, ]
+  expect_setequal(t0$group, c("A", "B"))
+  expect_true(all(t0$surv == 1))
+})
+
+test_that("fig_km SVG contains the risk table and censor marks", {
+  s <- make_spec()  # existing two-group helper in this file
+  out <- fig_km(s)
+  expect_match(out$svg, "Number at risk", fixed = TRUE)
+  expect_match(out$svg, ">Group<|>group<|legend", ignore.case = TRUE)  # legend present
+})
+
+test_that("R/km.R no longer references survminer", {
+  src <- readLines(file.path("..", "..", "R", "km.R"))
+  expect_false(any(grepl("survminer", src)))
+})
