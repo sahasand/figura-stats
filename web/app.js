@@ -4,7 +4,14 @@ const pending = new Map();
 let nextId = 1;
 
 worker.onmessage = (e) => {
-  const { id, result } = e.data;
+  const { id, result, progress } = e.data;
+  // Progress pings (e.g. lazy package downloads) update the UI without
+  // resolving the pending request; the final message carries `result`.
+  if (progress !== undefined) {
+    const preview = document.getElementById("preview");
+    if (preview) preview.textContent = progress;
+    return;
+  }
   const resolve = pending.get(id);
   if (resolve) { pending.delete(id); resolve(JSON.parse(result)); }
 };
@@ -40,7 +47,8 @@ async function render(spec) {
 import { renderForestForm } from "./forms/forest.js";
 import { renderConsortForm } from "./forms/consort.js";
 import { renderTable1Form } from "./forms/table1.js";
-const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form };
+import { renderKmForm } from "./forms/km.js";
+const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderKmForm };
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {

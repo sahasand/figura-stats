@@ -4,11 +4,19 @@ import { WebR } from "https://webr.r-wasm.org/latest/webr.mjs";
 
 let webRReady;
 
+// Heavy, figure-specific packages are installed LAZILY the first time a figure
+// of that type is requested — not at boot — so a user who only makes a forest
+// plot never downloads survminer's large dependency tree. Boot installs only
+// the shared base below. See ensureExtraPackages().
+const EXTRA_PACKAGES = { km: ["survival", "survminer"] };
+const installedExtras = new Set();
+
 async function boot() {
   const webR = new WebR();
   await webR.init();
-  // Install ONLY what the forest plot needs. Later tasks (4-6: KM, Table 1,
-  // CONSORT) extend this list with e.g. "survival", "survminer", "gtsummary".
+  // Boot installs ONLY the packages shared by every figure. Heavy per-figure
+  // dependencies (e.g. survival + survminer for KM) are installed lazily on
+  // first use via ensureExtraPackages(), keeping first load fast for everyone.
   await webR.installPackages(["ggplot2", "svglite", "jsonlite", "knitr"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.
   // Only dispatch.R and forest.R exist today; the rest are added by later
@@ -20,11 +28,28 @@ async function boot() {
   return webR;
 }
 
+// Install any heavy packages a given figure type needs, once. Idempotent:
+// tracks what's already installed so the download happens only on first use.
+async function ensureExtraPackages(webR, figure, id) {
+  const pkgs = EXTRA_PACKAGES[figure];
+  if (!pkgs) return;
+  const missing = pkgs.filter((p) => !installedExtras.has(p));
+  if (missing.length === 0) return;
+  self.postMessage({ id, progress: `Loading ${figure} packages (first time, this may take a minute)…` });
+  await webR.installPackages(missing, { quiet: true });
+  for (const p of missing) installedExtras.add(p);
+}
+
 self.onmessage = async (e) => {
   const { id, json } = e.data;
   try {
     webRReady = webRReady || boot();
     const webR = await webRReady;
+    // Parse the incoming spec just enough to learn the figure type, so we can
+    // lazily install that figure's heavy packages before evaluating it.
+    let figure;
+    try { figure = JSON.parse(json).figure; } catch (_) { /* dispatch reports bad JSON */ }
+    await ensureExtraPackages(webR, figure, id);
     // Bind the JSON spec string into R's global env, then call render_figure.
     // Binding (rather than string-interpolating) avoids any R-escaping issues.
     await webR.objs.globalEnv.bind("figure_input", json);
