@@ -40,3 +40,17 @@ test("Run Example Analysis computes the real pinned demo result", async ({ page 
   await expect(page.locator("#preview")).toContainText("Number at risk");
   await expect(page.locator("#preview")).toContainText("Synthetic demonstration data");
 });
+
+test("landmark experiment adds 12/24-month estimates and Reset restores defaults", async ({ page }) => {
+  test.setTimeout(360000);
+  await page.goto("/#km/example");
+  await page.getByRole("button", { name: /kaplan-meier/i }).click();
+  await page.getByRole("button", { name: "Run Example Analysis" }).click();
+  await expect(page.locator("#preview svg")).toBeVisible({ timeout: 330000 });
+  await page.locator("#exp-landmarks").check();
+  await expect(page.locator("#stats")).toContainText("At 12.0 Months since randomization, survival was 73.5%",
+    { timeout: 120000 });   // packages cached now; rerun is fast
+  await page.getByRole("button", { name: "Reset Example" }).click();
+  await expect(page.locator("#exp-landmarks")).not.toBeChecked();
+  await expect(page.locator("#preview svg")).toHaveCount(0);   // demo result cleared
+});

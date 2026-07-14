@@ -1,7 +1,7 @@
 // web/guided/guided-analysis.js
 import { createKmSession, setStage, storeResult, getResult, setDemoOptions, resetDemo, STAGES }
   from "./session-state.js";
-import { renderUnderstand, EXAMPLE_INTRO_HTML } from "./km/content.js";
+import { renderUnderstand, EXAMPLE_INTRO_HTML, CALLOUTS } from "./km/content.js";
 import { buildDemoSpec } from "./km/demo.js";
 import { KM_DEMO } from "./km/demo-data.js";
 
@@ -102,13 +102,51 @@ function renderExample(panel, ctx) {
     </div>
     <div id="demo-experiments"></div>`;
   const runBtn = panel.querySelector("#run-demo");
-  runBtn.addEventListener("click", async () => {
+
+  // Shared run path: the Run button always calls this, and the experiment
+  // controls call it too (conditionally) so both go through one place.
+  async function runDemo() {
     runBtn.disabled = true;                       // no duplicate runs while one is in flight
     try { await ctx.runAndShow(buildDemoSpec(ctx.getSession().demoOptions), "demo"); }
     finally { runBtn.disabled = false; }
-  });
+  }
+
+  runBtn.addEventListener("click", runDemo);
   panel.querySelector("#reset-demo").addEventListener("click", () => {
     ctx.resetDemoState();
-    renderExample(panel, ctx);                    // clears result + restores default controls (Task 7)
+    renderExample(panel, ctx);                    // clears result + restores default controls
+  });
+
+  // An experiment change only reruns if a demo result already exists;
+  // before the first Run click it just patches the pending options.
+  renderExperiments(panel, ctx, () => {
+    if (ctx.getSession().results.demo) runDemo();
+  });
+}
+
+function renderExperiments(panel, ctx, rerun) {
+  const o = ctx.getSession().demoOptions;
+  panel.querySelector("#demo-experiments").innerHTML = `
+    <h4>Optional experiments</h4>
+    <label><input type="checkbox" id="exp-ci" ${o.conf_int ? "checked" : ""}>
+      Show 95% confidence bands</label>
+    <p class="callout">${CALLOUTS.confidenceBands}</p>
+    <label><input type="checkbox" id="exp-landmarks" ${o.landmarks.length ? "checked" : ""}>
+      Report survival at 12 and 24 months</label>
+    <p class="callout">${CALLOUTS.landmarks}</p>
+    <label>Displayed horizon
+      <select id="exp-horizon">
+        <option value="" ${o.horizon === null ? "selected" : ""}>Full follow-up (36 months)</option>
+        <option value="24" ${o.horizon === 24 ? "selected" : ""}>24 months</option>
+      </select></label>
+    <p class="callout">${CALLOUTS.horizon}</p>`;
+  panel.querySelector("#exp-ci").addEventListener("change", (e) => {
+    ctx.patchDemoOptions({ conf_int: e.target.checked }); rerun();
+  });
+  panel.querySelector("#exp-landmarks").addEventListener("change", (e) => {
+    ctx.patchDemoOptions({ landmarks: e.target.checked ? [12, 24] : [] }); rerun();
+  });
+  panel.querySelector("#exp-horizon").addEventListener("change", (e) => {
+    ctx.patchDemoOptions({ horizon: e.target.value ? Number(e.target.value) : null }); rerun();
   });
 }
