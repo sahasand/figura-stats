@@ -1,4 +1,9 @@
-function parseCsv(text) {
+// Full-string decimal: optional sign, digits with optional fraction (or a
+// leading-dot fraction), optional exponent. Rejects `12abc`, `1e5x`, `--3`,
+// `0x1A`, `Infinity` — anything that isn't the entire cell being a decimal.
+const DECIMAL_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
+export function parseKmCsv(text) {
   const [head, ...lines] = text.trim().split(/\r?\n/);
   const cols = head.split(",").map((s) => s.trim());
   const idx = (name) => cols.indexOf(name);
@@ -10,12 +15,16 @@ function parseCsv(text) {
     const c = l.split(",");
     if (c.length < need)
       throw new Error(`Row ${n}: expected at least ${need} columns, found ${c.length}.`);
-    const time = parseFloat(c[idx("time")]);
-    const status = parseInt((c[idx("status")] || "").trim(), 10);
+    const timeCell = (c[idx("time")] || "").trim();
+    const statusCell = (c[idx("status")] || "").trim();
     const group = (c[idx("group")] || "").trim();
-    if (!Number.isFinite(time)) throw new Error(`Row ${n}: 'time' is not a number.`);
-    if (status !== 0 && status !== 1)
+    if (timeCell === "" || !DECIMAL_RE.test(timeCell))
+      throw new Error(`Row ${n}: 'time' is not a number.`);
+    const time = Number(timeCell);
+    if (time < 0) throw new Error(`Row ${n}: 'time' must be non-negative.`);
+    if (statusCell !== "0" && statusCell !== "1")
       throw new Error(`Row ${n}: 'status' must be 0 (censored) or 1 (event).`);
+    const status = Number(statusCell);
     if (group === "") throw new Error(`Row ${n}: 'group' is empty.`);
     return { time, status, group };
   });
@@ -41,7 +50,7 @@ export function renderKmForm(container, onSubmit) {
     const file = e.target.files[0];
     const reader = new FileReader();
     reader.onload = () => {
-      try { data = parseCsv(reader.result); btn.disabled = false; }
+      try { data = parseKmCsv(reader.result); btn.disabled = false; }
       catch (err) { document.getElementById("stats").textContent = "Error: " + err.message; }
     };
     reader.readAsText(file);
