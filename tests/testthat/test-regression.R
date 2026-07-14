@@ -79,6 +79,17 @@ test_that("covariate names with spaces are backtick-escaped in the formula", {
   expect_match(out$svg, "Multivariable")
 })
 
+test_that("blank logistic outcome cells are dropped, not mis-coded", {
+  d <- mkdata()
+  d[[1]]$event <- ""
+  spec <- list(figure = "regression", data = d,
+    roles = list(outcome = "event", covariates = list("age", "sex")),
+    options = list(model = "logistic"))
+  out <- NULL
+  expect_no_warning(out <- fig_regression(spec))
+  expect_match(out$svg, "<table")
+})
+
 test_that("errors with a clear message when cox time/status roles are unset", {
   spec <- list(figure = "regression", data = mkdata(),
     roles = list(covariates = list("age", "sex")),

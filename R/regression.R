@@ -44,6 +44,12 @@ fig_regression <- function(spec) {
       if (is.null(spec$roles$outcome)) stop("Select an outcome column.")
       y <- col(spec$roles$outcome, numeric = FALSE)
       if (length(unique(y[!is.na(y) & y != ""])) != 2) stop("Logistic regression needs a binary (two-value) outcome.")
+      # Blank cells ("") are not NA, so left unmapped they'd form a spurious
+      # third factor level and .y would land outside {0,1}, making glm()
+      # fail with a cryptic "y values must be 0 <= y <= 1". Map them to NA
+      # here so those rows are dropped by glm()'s na.action like every
+      # other analysis, leaving exactly the two valid levels to code as 0/1.
+      y[!is.na(y) & y == ""] <- NA
       df$.y <<- as.integer(factor(y)) - 1L
       stats::glm(stats::as.formula(paste(".y ~", rhs)),
                  data = df, family = stats::binomial())
@@ -56,6 +62,15 @@ fig_regression <- function(spec) {
   mv <- suppressWarnings(gtsummary::tbl_regression(fit, exponentiate = exp))
 
   # UNIVARIABLE (unadjusted) — one model per covariate via tbl_uvregression.
+  # tbl_uvregression FUSES model fitting and formatting into a single call
+  # (unlike the multivariable path, where `fit <- build()` above happens
+  # outside suppressWarnings). That means this suppressWarnings() necessarily
+  # also silences model-fit diagnostics for the per-covariate unadjusted
+  # models (e.g. perfect-separation "fitted probabilities numerically 0 or
+  # 1", non-convergence) — there's no way to isolate formatting warnings
+  # from fitting warnings without un-fusing tbl_uvregression, which would be
+  # a large rework. This is a conscious, accepted trade-off made to hold the
+  # WARN-0 gate; it does not apply to the multivariable fit above.
   uv <- suppressWarnings(
     if (model == "cox") {
       gtsummary::tbl_uvregression(
