@@ -1,9 +1,437 @@
-body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; }
-header, nav, main { padding: 1rem 1.5rem; }
-nav button { margin-right: .5rem; padding: .5rem 1rem; cursor: pointer; }
-main { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-#preview svg { max-width: 100%; height: auto; border: 1px solid #eee; }
-#stats { white-space: pre-wrap; background: #f6f6f6; padding: 1rem; }
-label { display: block; margin: .4rem 0 .1rem; font-size: .85rem; }
-input { padding: .3rem; width: 8rem; }
-@media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+/* ---------------------------------------------------------------------------
+   Workbench chrome — an IDE-style frame in the RStudio idiom:
+   slim toolbar, three hairline panes, monospace console, status bar.
+   System font stacks only: this site makes no network calls beyond webR.
+--------------------------------------------------------------------------- */
+
+:root {
+  --chrome: #e8ecf1;      /* pane gutters and title bars */
+  --panel: #ffffff;       /* pane bodies */
+  --line: #c6cfd9;        /* hairline borders */
+  --line-soft: #dde3ea;
+  --ink: #1e2a36;
+  --slate: #5c6b7a;
+  --rblue: #246fa8;       /* single accent: session chrome, actions, focus */
+  --rblue-dark: #1b5583;
+  --sky: #eaf2f9;         /* active-item wash */
+  --console-bg: #f7f9fb;
+  --error: #b3372f;
+  --ok: #2e7d4f;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font: 13px/1.5 var(--sans);
+  color: var(--ink);
+  background: var(--chrome);
+  display: flex;
+  flex-direction: column;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rblue);
+  outline-offset: 1px;
+}
+
+/* ---- Toolbar ------------------------------------------------------------ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 .875rem;
+  height: 42px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.brand { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
+
+.mark {
+  width: 14px;
+  height: 14px;
+  fill: var(--rblue);
+  align-self: center;
+  flex: none;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: .875rem;
+  font-weight: 650;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.engine {
+  font: .6875rem var(--mono);
+  color: var(--slate);
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  padding: 0 .375rem;
+  align-self: center;
+}
+
+/* Session status chip: idle -> busy -> ready, like an R session indicator. */
+.chip {
+  font: .6875rem var(--mono);
+  padding: .1875rem .5rem;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  color: var(--slate);
+  background: var(--chrome);
+  white-space: nowrap;
+}
+
+.chip.busy  { color: var(--rblue-dark); border-color: var(--rblue); background: var(--sky); }
+.chip.ready { color: var(--ok); border-color: #bcd9c8; background: #eef7f1; }
+.chip.error { color: var(--error); border-color: #e0b9b5; background: #fbf0ef; }
+
+/* ---- Pane frame --------------------------------------------------------- */
+
+.workbench {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(300px, 1fr) minmax(0, 1.6fr);
+  gap: 6px;
+  padding: 6px;
+}
+
+.pane {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pane-title {
+  font: 600 .6875rem/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--slate);
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line);
+  padding: .5rem .75rem;
+  flex: none;
+}
+
+/* ---- Analyses sidebar --------------------------------------------------- */
+
+.nav-pane nav {
+  overflow-y: auto;
+  padding: .375rem;
+}
+
+.nav-group {
+  margin: .625rem .375rem .25rem;
+  font-size: .6563rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--slate);
+}
+
+.nav-group:first-child { margin-top: .25rem; }
+
+.nav-pane nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 2px;
+  padding: .3125rem .625rem;
+  cursor: pointer;
+}
+
+.nav-pane nav button:hover { background: var(--sky); }
+
+.nav-pane nav button.active {
+  background: var(--sky);
+  border-left-color: var(--rblue);
+  color: var(--rblue-dark);
+  font-weight: 600;
+}
+
+/* ---- Configuration pane (forms are generated markup; style by element) -- */
+
+#form {
+  overflow-y: auto;
+  padding: .875rem 1rem 1.25rem;
+}
+
+#form h2 {
+  margin: 0 0 .25rem;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: .01em;
+}
+
+#form p {
+  margin: .25rem 0 .75rem;
+  color: var(--slate);
+}
+
+#form code {
+  font: .75rem var(--mono);
+  background: var(--console-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  padding: 0 .25rem;
+}
+
+label {
+  display: block;
+  margin: .75rem 0 .1875rem;
+  font-size: .6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--slate);
+}
+
+input, select, textarea {
+  font: .8125rem var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: .3438rem .5rem;
+  width: 12rem;
+  max-width: 100%;
+}
+
+textarea {
+  width: 100%;
+  font: .75rem/1.6 var(--mono);
+  resize: vertical;
+}
+
+select { width: auto; min-width: 12rem; max-width: 100%; }
+
+select[multiple] { min-height: 7rem; width: 100%; }
+
+input:hover, select:hover, textarea:hover { border-color: var(--slate); }
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--rblue);
+  box-shadow: 0 0 0 2px var(--sky);
+}
+
+input[type="file"] {
+  width: 100%;
+  padding: .3125rem;
+  font-size: .75rem;
+  color: var(--slate);
+  background: var(--console-bg);
+  border-style: dashed;
+}
+
+input[type="file"]::file-selector-button {
+  font: 600 .75rem var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: .25rem .625rem;
+  margin-right: .625rem;
+  cursor: pointer;
+}
+
+#form button {
+  font: 600 .8125rem var(--sans);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: .375rem .875rem;
+  margin: .875rem .375rem 0 0;
+  cursor: pointer;
+}
+
+#form button:hover { border-color: var(--slate); background: var(--console-bg); }
+
+/* Every form's submit button is #render: the one primary action per pane.
+   It sits on its own line, like a toolbar action, below the inputs. */
+#form #render {
+  display: block;
+  margin-top: 1.125rem;
+  color: #fff;
+  background: var(--rblue);
+  border-color: var(--rblue-dark);
+}
+
+#form #render:hover { background: var(--rblue-dark); }
+
+#form #render:disabled {
+  color: var(--slate);
+  background: var(--chrome);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+/* Forest-plot rows: label/input pairs flow into four aligned columns. */
+#rows > div {
+  display: grid;
+  grid-template-rows: auto auto;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0 .5rem;
+  padding: .5rem 0 .125rem;
+  border-bottom: 1px dotted var(--line-soft);
+}
+
+#rows label { margin: 0 0 .1875rem; }
+#rows input { width: 100%; }
+
+/* Empty states read as instructions, not decoration. */
+.empty {
+  color: var(--slate);
+  padding: .25rem 0;
+}
+
+.empty p { margin: 0 0 .375rem; }
+
+/* ---- Output pane: Figure viewer + Console ------------------------------- */
+
+.output-pane {
+  background: none;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  gap: 6px;
+}
+
+.output-figure, .output-console {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.output-figure { flex: 1 1 62%; }
+.output-console { flex: 1 1 38%; }
+
+#preview {
+  flex: 1;
+  overflow: auto;
+  padding: .875rem 1rem;
+  /* Plain-text states (progress pings, "Rendering…") read as session output. */
+  font: .75rem var(--mono);
+  color: var(--slate);
+}
+
+#preview svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* gtsummary tables (Table 1, regression) arrive as HTML in the figure slot;
+   give them journal rules: top/bottom borders and a header rule only. */
+#preview table {
+  font: .8125rem var(--sans);
+  color: var(--ink);
+  border-collapse: collapse;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  margin: .25rem 0;
+}
+
+#preview th, #preview td {
+  padding: .3125rem .75rem;
+  border: none;
+  text-align: left;
+}
+
+#preview thead th, #preview tr:first-child th { border-bottom: 1px solid var(--ink); }
+
+#preview tbody tr:hover td { background: var(--console-bg); }
+
+#stats {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: .75rem 1rem;
+  font: .75rem/1.65 var(--mono);
+  color: var(--ink);
+  background: var(--console-bg);
+  white-space: pre-wrap;
+  border-left: 3px solid var(--rblue);
+}
+
+#stats:empty { border-left-color: var(--line); }
+
+#stats.error { color: var(--error); border-left-color: var(--error); }
+
+/* ---- Status bar --------------------------------------------------------- */
+
+.statusbar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .3125rem .875rem;
+  font: .6875rem var(--mono);
+  color: var(--slate);
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  margin-right: .4375rem;
+  vertical-align: 1px;
+}
+
+/* ---- Responsive --------------------------------------------------------- */
+
+@media (max-width: 960px) {
+  body { height: auto; }
+  .workbench { grid-template-columns: 1fr; }
+  .pane, .output-figure, .output-console { min-height: auto; }
+  .nav-pane nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    align-items: center;
+  }
+  .nav-pane nav button { width: auto; border: 1px solid var(--line); }
+  .nav-pane nav button.active { border-color: var(--rblue); }
+  .nav-group { width: 100%; margin: .375rem .25rem .125rem; }
+  #preview { min-height: 10rem; }
+  #stats { min-height: 6rem; }
+  .statusbar { flex-direction: column; gap: .125rem; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-pane nav button, #form button, input, select, textarea, .chip {
+    transition: background-color .12s ease, border-color .12s ease;
+  }
+}

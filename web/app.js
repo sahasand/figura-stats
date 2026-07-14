@@ -3,6 +3,14 @@ const worker = new Worker("worker.js", { type: "module" });
 const pending = new Map();
 let nextId = 1;
 
+// Session status chip in the toolbar: idle -> busy -> ready/error.
+function setStatus(state, label) {
+  const chip = document.getElementById("rstatus");
+  if (!chip) return;
+  chip.className = "chip " + state;
+  chip.textContent = label;
+}
+
 worker.onmessage = (e) => {
   const { id, result, progress } = e.data;
   // Progress pings (e.g. lazy package downloads) update the UI without
@@ -10,6 +18,7 @@ worker.onmessage = (e) => {
   if (progress !== undefined) {
     const preview = document.getElementById("preview");
     if (preview) preview.textContent = progress;
+    setStatus("busy", "R: installing packages…");
     return;
   }
   const resolve = pending.get(id);
@@ -38,10 +47,19 @@ async function render(spec) {
   const stats = document.getElementById("stats");
   preview.innerHTML = "Rendering… (first run downloads R, ~30s)";
   stats.textContent = "";
+  stats.classList.remove("error");
+  setStatus("busy", "R: working…");
   const out = await runFigure(spec);
-  if (!out.ok) { preview.innerHTML = ""; stats.textContent = "Error: " + out.error; return; }
+  if (!out.ok) {
+    preview.innerHTML = "";
+    stats.textContent = "Error: " + out.error;
+    stats.classList.add("error");
+    setStatus("error", "R: error");
+    return;
+  }
   preview.innerHTML = out.svg;
   stats.textContent = out.text;
+  setStatus("ready", "R: ready");
 }
 
 import { renderForestForm } from "./forms/forest.js";
@@ -57,6 +75,8 @@ const forms = { forest: renderForestForm, consort: renderConsortForm, table1: re
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const kind = btn.dataset.figure;
+    document.querySelectorAll("[data-figure]").forEach((b) =>
+      b.classList.toggle("active", b === btn));
     const container = document.getElementById("form");
     container.innerHTML = "";
     (forms[kind] || (() => {}))(container, render);

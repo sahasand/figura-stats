@@ -7,23 +7,65 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header><h1>Clinical Manuscript Figures</h1>
-    <p>Publication figures + stats, computed in your browser. Data never leaves this page.</p>
+  <header class="toolbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <rect x="1" y="9" width="3" height="6" />
+        <rect x="6" y="5" width="3" height="10" />
+        <rect x="11" y="1" width="3" height="14" />
+      </svg>
+      <h1>Clinical Manuscript Figures</h1>
+      <span class="engine">webR</span>
+    </div>
+    <div class="session">
+      <span id="rstatus" class="chip idle" role="status">R: idle</span>
+    </div>
   </header>
-  <nav>
-    <button data-figure="forest">Forest plot</button>
-    <button data-figure="consort">CONSORT</button>
-    <button data-figure="table1">Table 1</button>
-    <button data-figure="km">Kaplan-Meier</button>
-    <button data-figure="groupcompare">Group comparison</button>
-    <button data-figure="correlation">Correlation</button>
-    <button data-figure="roc">ROC / AUC</button>
-    <button data-figure="regression">Regression table</button>
-  </nav>
-  <main>
-    <section id="form"></section>
-    <section><div id="preview"></div><pre id="stats"></pre></section>
-  </main>
+
+  <div class="workbench">
+    <aside class="pane nav-pane" aria-label="Analyses">
+      <div class="pane-title">Analyses</div>
+      <nav>
+        <p class="nav-group">Summary figures</p>
+        <button data-figure="forest">Forest plot</button>
+        <button data-figure="consort">CONSORT</button>
+        <button data-figure="table1">Table 1</button>
+        <p class="nav-group">CSV analyses</p>
+        <button data-figure="km">Kaplan-Meier</button>
+        <button data-figure="groupcompare">Group comparison</button>
+        <button data-figure="correlation">Correlation</button>
+        <button data-figure="roc">ROC / AUC</button>
+        <button data-figure="regression">Regression table</button>
+      </nav>
+    </aside>
+
+    <section class="pane config-pane" aria-label="Configuration">
+      <div class="pane-title">Configuration</div>
+      <div id="form">
+        <div class="empty">
+          <p>Select an analysis on the left to begin.</p>
+          <p>Everything runs in this browser tab — your data is never uploaded.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane output-pane" aria-label="Output">
+      <div class="output-figure">
+        <div class="pane-title">Figure</div>
+        <div id="preview"><div class="empty"><p>The rendered figure or table appears here.</p></div></div>
+      </div>
+      <div class="output-console">
+        <div class="pane-title">Console</div>
+        <pre id="stats"></pre>
+      </div>
+    </section>
+  </div>
+
+  <footer class="statusbar">
+    <span><span class="dot" aria-hidden="true"></span>Local session — data never leaves this browser</span>
+    <span>R packages run via webR (WebAssembly)</span>
+  </footer>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
