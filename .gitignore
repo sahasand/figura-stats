@@ -1,0 +1,6 @@
+.Rproj.user
+.Rhistory
+.RData
+node_modules/
+web/webr/
+*.DS_Store
