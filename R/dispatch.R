@@ -7,7 +7,7 @@ render_figure <- function(json_string) {
     out <- switch(as.character(fig),
       forest  = fig_forest(spec),
       consort = fig_consort(spec),
-      table1  = fig_table1(spec),
+      summary = fig_summary(spec),
       km      = fig_km(spec),
       groupcompare = fig_groupcompare(spec),
       correlation = fig_correlation(spec),
