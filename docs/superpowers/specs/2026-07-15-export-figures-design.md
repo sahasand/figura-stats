@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-15
 **Status:** Approved
-**Scope:** Shell-level feature benefiting every analysis. New `web/lib/export.js`, toolbar markup in `web/index.html`, wiring in `web/app.js`, styles in `web/styles.css`. No changes to R, `web/worker.js`, or the guided-shell factory.
+**Scope:** Shell-level feature. After the 2026-07-15 trim, the app's two analyses are the guided Kaplan-Meier (`km`) and Summary statistics (`summary`) — the export toolbars serve both, with no per-analysis gating needed. New `web/lib/export.js` + `web/export-ui.js`, toolbar markup in `web/index.html`, wiring in `web/app.js`, styles in `web/styles.css`. No changes to R, `web/worker.js`, or the guided-shell factory.
 
 ## Why (research findings)
 
@@ -55,7 +55,7 @@ Two small toolbars, styled exclusively with existing CSS tokens:
 **Filenames:** `<figure-key>-figure-<dpi>dpi.png`, `<figure-key>-figure.svg`,
 `<figure-key>-panel-<n>-<dpi>dpi.png`, `<figure-key>-panel-<n>.svg`,
 `<figure-key>-output.tsv`, where `<figure-key>` is the active analysis key from the
-nav state (`summary`, `km`, `forest`, …).
+nav state (`summary` or `km`).
 
 **Journal framing is explicit in the UI copy** — this feature exists for journal
 submission and the interface says so: the figure toolbar is prefixed

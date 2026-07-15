@@ -88,7 +88,7 @@ assert.equal(exportFilename("summary", "png", { dpi: 600 }), "summary-figure-600
 assert.equal(exportFilename("summary", "png", { dpi: 300, panel: 2 }), "summary-panel-2-300dpi.png");
 assert.equal(exportFilename("km", "svg", {}), "km-figure.svg");
 assert.equal(exportFilename("km", "svg", { panel: 1 }), "km-panel-1.svg");
-assert.equal(exportFilename("roc", "tsv", {}), "roc-output.tsv");
+assert.equal(exportFilename("km", "tsv", {}), "km-output.tsv");
 
 console.log("ok - export core (dimensions, stitching, filenames)");
 ```
@@ -155,7 +155,7 @@ export function combineSvgs(panels) {
 }
 
 // Journal-conventional filenames: summary-figure-600dpi.png, km-panel-2.svg,
-// roc-output.tsv.
+// km-output.tsv.
 export function exportFilename(figureKey, kind, { dpi, panel } = {}) {
   const base = panel
     ? `${figureKey}-panel-${panel}`
@@ -728,7 +728,7 @@ npm run test:unit
 rm -rf web/R && cp -R R web/R && npm run test:e2e
 ```
 
-Expected: R `[ FAIL 0 | WARN 0 | … ]` (no R changes — confirms nothing regressed); unit all ok; Playwright: all tests passing (18 existing + 2 new).
+Expected: R `[ FAIL 0 | WARN 0 | … ]` (no R changes — confirms nothing regressed); unit all ok; Playwright: all tests passing (17 existing + 2 new).
 
 - [ ] **Step 4: Commit**
 
