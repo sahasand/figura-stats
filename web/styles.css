@@ -704,3 +704,9 @@ figcaption.synthetic {
   color: var(--warn-ink); background: var(--warn-bg); border: 1px solid var(--warn-border);
 }
 @media (pointer: coarse) { .var-list .var-row { min-height: 44px; } }  /* touch targets */
+.csv-help {
+  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
+  padding: .5rem .75rem; color: var(--slate);
+}
+.csv-help summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.csv-help ul { margin: .5rem 0 0; padding-left: 1.25rem; line-height: 1.6; }

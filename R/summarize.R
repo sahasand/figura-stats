@@ -314,7 +314,7 @@ fig_summary <- function(spec) {
         if (want_plots) c(paste0(
           "<span class=\"mean-key\">dashed = mean</span> · ",
           "<span class=\"median-key\">solid = median</span> · curve = density",
-          " — when the lines separate, the variable is skewed"),
+          " — when the lines separate, the variable is skewed (or, in grouped data, shifted between groups)"),
           "box = median and IQR, whiskers to 1.5 × IQR, dots = individual observations"),
         if (want_qq)
           "Q–Q: points near the line support mean ± SD; a curved tail supports median (IQR)")
