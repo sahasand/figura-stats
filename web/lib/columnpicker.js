@@ -15,8 +15,12 @@ export function renderColumnPicker(container, roles, table, onReady, doc = globa
         if (chosen.length === 0) return null;
         map[role.key] = chosen;
       } else {
-        if (!sel.value) return null;
-        map[role.key] = sel.value;
+        if (!sel.value) {
+          if (!role.optional) return null;
+          map[role.key] = null;
+        } else {
+          map[role.key] = sel.value;
+        }
       }
     }
     return map;
@@ -32,7 +36,7 @@ export function renderColumnPicker(container, roles, table, onReady, doc = globa
     sel.multiple = !!role.multiple;
     if (!role.multiple) {
       const blank = doc.createElement("option");
-      blank.value = ""; blank.textContent = "— choose —";
+      blank.value = ""; blank.textContent = role.optional ? "— none —" : "— choose —";
       sel.add ? sel.add(blank) : sel.appendChild(blank);
     }
     for (const col of compatible(role)) {

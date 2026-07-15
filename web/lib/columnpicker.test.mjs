@@ -80,4 +80,18 @@ const covLabel = container2.children.filter((c) => c.tag === "label")[0];
 assert.equal(covSelect.id, "cp_covariates");
 assert.equal(covLabel.htmlFor, "cp_covariates");
 
+// --- optional: true path (summary form's group picker depends on this) ---
+{
+  const container3 = { children: [], innerHTML: "", appendChild(c) { this.children.push(c); } };
+  const table3 = { columns: ["a", "g"], rows: [{ a: "1", g: "x" }],
+                   types: { a: "numeric", g: "categorical" } };
+  let last;
+  renderColumnPicker(
+    container3,
+    [{ key: "group", label: "Group by", type: "categorical", optional: true }],
+    table3, (v) => { last = v; }, makeDoc());
+  assert.deepEqual(last, { group: null }, "blank optional role maps to null, not an incomplete map");
+  console.log("ok - columnpicker optional role");
+}
+
 console.log("columnpicker.test.mjs OK");
