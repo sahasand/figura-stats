@@ -64,8 +64,10 @@ async function render(spec) {
 
 import { renderGuidedSummary } from "./guided/summary/guided-summary.js";
 import { renderGuidedKm } from "./guided/guided-analysis.js";
+import { renderGuidedExplore } from "./guided/explore/guided-explore.js";
 import { initExportUI } from "./export-ui.js";
-const forms = { summary: renderGuidedSummary, km: renderGuidedKm };
+const forms = { summary: renderGuidedSummary, km: renderGuidedKm,
+                explore: renderGuidedExplore };
 
 let currentFigure = "figure";   // export filename stem before any selection
 
