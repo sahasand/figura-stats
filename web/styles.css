@@ -256,8 +256,8 @@ input, select, textarea {
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 2px;
-  padding: .3438rem .5rem;
+  border-radius: var(--radius-ctl);
+  padding: .4375rem .625rem;
   width: 12rem;
   max-width: 100%;
 }
@@ -276,17 +276,18 @@ input:hover, select:hover, textarea:hover { border-color: var(--slate); }
 
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: var(--rblue);
-  box-shadow: 0 0 0 2px var(--sky);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 input[type="file"] {
   width: 100%;
-  padding: .3125rem;
+  padding: .5rem;
   font-size: .75rem;
   color: var(--slate);
   background: var(--console-bg);
   border-style: dashed;
+  border-radius: var(--radius-ctl);
 }
 
 input[type="file"]::file-selector-button {
@@ -294,8 +295,8 @@ input[type="file"]::file-selector-button {
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 2px;
-  padding: .25rem .625rem;
+  border-radius: var(--radius-ctl);
+  padding: .3125rem .75rem;
   margin-right: .625rem;
   cursor: pointer;
 }
@@ -305,30 +306,39 @@ input[type="file"]::file-selector-button {
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 2px;
-  padding: .375rem .875rem;
+  border-radius: var(--radius-ctl);
+  padding: .4375rem 1rem;
   margin: .875rem .375rem 0 0;
   cursor: pointer;
 }
 
-#form button:hover { border-color: var(--slate); background: var(--console-bg); }
-
-/* Every form's submit button is #render: the one primary action per pane.
-   It sits on its own line, like a toolbar action, below the inputs. */
-#form #render {
-  display: block;
-  margin-top: 1.125rem;
-  color: #fff;
-  background: var(--rblue);
-  border-color: var(--rblue-dark);
+#form button:hover {
+  border-color: var(--slate);
+  background: var(--console-bg);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .06);
 }
 
-#form #render:hover { background: var(--rblue-dark); }
+/* Primary actions — one per stage: #render on classic forms, #run-demo on
+   the guided example stage. Filled accent so the next step is unmissable. */
+#form #render, #form #run-demo {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent-dark);
+}
 
-#form #render:disabled {
+#form #render { display: block; margin-top: 1.125rem; }
+
+#form #render:hover, #form #run-demo:hover {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+  box-shadow: 0 1px 3px rgba(11, 93, 87, .3);
+}
+
+#form button:disabled {
   color: var(--slate);
   background: var(--chrome);
   border-color: var(--line);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
@@ -348,17 +358,24 @@ input[type="file"]::file-selector-button {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  border-radius: 0;
-  padding: .4rem .8rem;
+  border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
+  padding: .5rem .875rem;
   margin: 0 0 -1px;
+  box-shadow: none;
   cursor: pointer;
 }
 
-#form .stage-tabs [role="tab"]:hover { color: var(--ink); background: none; }
+#form .stage-tabs [role="tab"]:hover {
+  color: var(--ink);
+  background: #f1f4f8;
+  border-color: transparent;
+  box-shadow: none;
+}
 
 #form .stage-tabs [role="tab"][aria-selected="true"] {
-  color: var(--rblue-dark);
-  border-bottom-color: var(--rblue);
+  color: var(--accent-dark);
+  border-bottom-color: var(--accent);
+  background: none;
 }
 
 /* Mandatory synthetic-data banner on the Try an Example stage. */
