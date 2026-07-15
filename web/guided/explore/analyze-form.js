@@ -47,6 +47,7 @@ export function renderExploreForm(container, onSubmit, doc = globalThis.document
   }
 
   const submitDebounced = debounce((state) => {
+    if (!table) return;                              // failed re-upload landed mid-debounce
     if (!state.roles.x) return;                      // incomplete mapping: wait
     const need_y = ["scatter", "line", "boxplot", "violin"]
       .includes(state.options.geom);
