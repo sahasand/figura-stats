@@ -482,20 +482,6 @@ input[type="file"]::file-selector-button {
   accent-color: var(--accent);
 }
 
-/* Forest-plot rows: label/input pairs flow into four aligned columns. */
-#rows > div {
-  display: grid;
-  grid-template-rows: auto auto;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 0 .5rem;
-  padding: .5rem 0 .125rem;
-  border-bottom: 1px dotted var(--line-soft);
-}
-
-#rows label { margin: 0 0 .1875rem; }
-#rows input { width: 100%; }
-
 /* Empty states read as instructions, not decoration. */
 .empty {
   color: var(--slate);
@@ -560,8 +546,8 @@ input[type="file"]::file-selector-button {
   height: auto;
 }
 
-/* gtsummary tables (Table 1, regression) arrive as HTML in the figure slot;
-   give them journal rules: top/bottom borders and a header rule only. */
+/* The Summary statistics table arrives as HTML in the figure slot;
+   give it journal rules: top/bottom borders and a header rule only. */
 #preview table {
   font: .8125rem var(--sans);
   color: var(--ink);
