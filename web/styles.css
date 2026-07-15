@@ -426,6 +426,13 @@ input[type="file"]::file-selector-button {
   color: var(--ink);
 }
 
+/* The global `input { width: 12rem }` rule must not stretch checkboxes —
+   it pushes the label text a full control-width away from the box. */
+#demo-experiments input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
 /* Forest-plot rows: label/input pairs flow into four aligned columns. */
 #rows > div {
   display: grid;
