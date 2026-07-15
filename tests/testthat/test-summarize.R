@@ -247,3 +247,16 @@ test_that("histogram row is density-scaled with a density curve, warning-free", 
   expect_match(out$svg, "dashed = mean", fixed = TRUE)
   expect_match(out$svg, "lines separate", fixed = TRUE)
 })
+
+test_that("show_plots yields histogram and box rows as sibling SVGs", {
+  spec <- mk_summary_spec(); spec$options$show_plots <- TRUE
+  out <- expect_no_warning(fig_summary(spec))
+  expect_equal(n_svgs(out$svg), 2)
+  expect_match(out$svg, "individual observations", fixed = TRUE)
+})
+
+test_that("ungrouped box row renders warning-free with a single Overall category", {
+  spec <- mk_summary_spec(group = NULL); spec$options$show_plots <- TRUE
+  out <- expect_no_warning(fig_summary(spec))
+  expect_equal(n_svgs(out$svg), 2)
+})

@@ -161,6 +161,25 @@
   .svg_string(gg, width = 7, height = 2.6 * ceiling(nlevels(df$variable) / 2))
 }
 
+# Row 2: box plot per variable with the individual observations jittered on
+# top. X axis is the group (a single "Overall" category when no group role,
+# matching the table's column header), so the panel reads as a group
+# comparison. Boxplot outliers are hidden because the jitter layer already
+# draws every point once. Fills reuse the Tol data palette (.km_palette),
+# deliberately distinct from chrome colors.
+.summary_box_svg <- function(df) {
+  gg <- ggplot2::ggplot(df, ggplot2::aes(x = group, y = value)) +
+    ggplot2::geom_boxplot(ggplot2::aes(fill = group), outlier.shape = NA,
+                          linewidth = 0.3, alpha = 0.6, show.legend = FALSE) +
+    ggplot2::geom_jitter(width = 0.15, height = 0, size = 0.6, alpha = 0.35,
+                         colour = "grey30") +
+    ggplot2::scale_fill_manual(values = .km_palette(nlevels(df$group))) +
+    ggplot2::facet_wrap(~ variable, scales = "free_y") +
+    ggplot2::labs(x = NULL, y = NULL) +
+    ggplot2::theme_minimal(base_size = 11)
+  .svg_string(gg, width = 7, height = 2.6 * ceiling(nlevels(df$variable) / 2))
+}
+
 #' Auto-computed Table 1 with normality-aware continuous summaries.
 fig_summary <- function(spec) {
   rows <- spec$data
@@ -259,8 +278,8 @@ fig_summary <- function(spec) {
   table_html <- .summary_table_html(headers, out_rows)
 
   # Optional distribution figure: stacked sibling SVGs inside one <figure>.
-  # show_plots gates the histogram+density row (Tasks 4-5 add box+jitter and
-  # the show_qq-gated Q-Q row). The teaching legend and synthetic caption are
+  # show_plots gates the histogram+density and box+jitter rows as a pair
+  # (a later task adds the show_qq-gated Q-Q row). The teaching legend and synthetic caption are
   # HTML (styleable), not ggplot in-SVG text. No <figure> at all when nothing
   # is plottable.
   figure_html <- ""
@@ -268,11 +287,12 @@ fig_summary <- function(spec) {
   if (want_plots && length(continuous) > 0) {
     df <- .summary_plot_df(rows, continuous, labels, grp, levels_g)
     if (!is.null(df)) {
-      svgs <- c(.summary_hist_svg(df))
+      svgs <- c(.summary_hist_svg(df), .summary_box_svg(df))
       legend_bits <- c(paste0(
         "<span class=\"mean-key\">dashed = mean</span> · ",
         "<span class=\"median-key\">solid = median</span> · curve = density",
-        " — when the lines separate, the variable is skewed"))
+        " — when the lines separate, the variable is skewed"),
+        "box = median and IQR, whiskers to 1.5 × IQR, dots = individual observations")
       legend_html <- paste0("<div class=\"plot-legend\">",
                             paste(legend_bits, collapse = "<br>"), "</div>")
       cap <- opt$caption %||% ""
