@@ -53,7 +53,7 @@ test("Run Example computes the real Table 1 with the right decisions, plot, and 
   await expect(preview).toContainText("Age, mean ± SD");                // normal -> mean±SD
   await expect(preview).toContainText("Length of stay, median (IQR)"); // skewed -> median
   await expect(preview).toContainText("Missing");
-  await expect(page.locator("#preview svg")).toBeVisible();             // bundled distribution plot
+  await expect(page.locator("#preview svg")).toHaveCount(2);            // histogram+density and box+jitter rows
   await expect(page.locator("#preview .plot-legend")).toContainText("dashed = mean");
   await expect(preview).not.toContainText("p-value");                  // Table 1 fallacy guardrail
 });
@@ -90,4 +90,35 @@ test("demo and user results are separate contexts; checklist controls the table"
   await expect(page.locator("#preview")).not.toContainText("crp");
   await page.getByRole("tab", { name: "Try an Example" }).click();
   await expect(page.locator("#preview")).toContainText("Age, mean ± SD");  // demo restored
+});
+
+test("Analyze tab explains the expected CSV and offers an example download", async ({ page }) => {
+  await page.goto("/#summary/analyze");
+  await page.getByRole("button", { name: /summary statistics/i }).click();
+  await expect(page.getByText("What your CSV should look like")).toBeVisible();
+  await expect(page.locator("#example-csv")).toHaveAttribute("download", "example-baseline.csv");
+  const href = await page.locator("#example-csv").getAttribute("href");
+  expect(href).toMatch(/^blob:/);                       // client-side Blob — no network egress
+});
+
+test("Q–Q experiment adds a third distribution panel and its legend", async ({ page }) => {
+  test.setTimeout(360000);
+  await page.goto("/#summary/example");
+  await page.getByRole("button", { name: /summary statistics/i }).click();
+  await page.getByRole("button", { name: "Run Example Analysis" }).click();
+  await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
+  await expect(page.locator("#preview svg")).toHaveCount(2);
+  await expect(page.locator("#exp-qq")).not.toBeChecked();       // default off
+  await page.locator("#exp-qq").check();
+  await expect(page.locator("#preview svg")).toHaveCount(3, { timeout: 120000 });
+  await expect(page.locator("#preview .plot-legend")).toContainText("curved tail");
+});
+
+test("upload form has the Q–Q toggle, default off", async ({ page }) => {
+  await page.goto("/#summary/analyze");
+  await page.getByRole("button", { name: /summary statistics/i }).click();
+  await page.locator("#csv").setInputFiles(
+    path.join(__dirname, "..", "testthat", "fixtures", "summary-demo.csv"));
+  await expect(page.locator("#summary-vars")).toBeVisible();
+  await expect(page.locator("#showqq")).not.toBeChecked();
 });
