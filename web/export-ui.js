@@ -3,8 +3,8 @@
 // plain-form analyses and both guided shells are covered identically — no
 // changes to R, worker.js, or the shell factory. A MutationObserver keeps the
 // buttons' disabled state (and the per-panel row) in sync with the panes.
-import { collectSvgPanels, combineSvgs, svgToPngBlob, downloadBlob, exportFilename }
-  from "./lib/export.js";
+import { collectSvgPanels, combineSvgs, svgToPngBlob, downloadBlob, exportFilename,
+  textExportDescriptor } from "./lib/export.js";
 
 export function initExportUI(getFigureKey) {
   const preview = document.getElementById("preview");
@@ -37,9 +37,11 @@ export function initExportUI(getFigureKey) {
 
   pngBtn.addEventListener("click", () => exportPng(combineSvgs(collectSvgPanels(preview))));
   svgBtn.addEventListener("click", () => exportSvg(combineSvgs(collectSvgPanels(preview))));
-  tsvBtn.addEventListener("click", () => downloadBlob(
-    new Blob([stats.textContent], { type: "text/tab-separated-values" }),
-    exportFilename(getFigureKey(), "tsv", {})));
+  tsvBtn.addEventListener("click", () => {
+    const d = textExportDescriptor(getFigureKey());
+    downloadBlob(new Blob([stats.textContent], { type: d.mime }),
+      exportFilename(getFigureKey(), d.ext, {}));
+  });
   copyBtn.addEventListener("click", () => navigator.clipboard.writeText(stats.textContent)
     .then(() => note(conNote, "Copied"))
     .catch(() => note(conNote, "Copy failed — select the text manually")));
@@ -72,6 +74,11 @@ export function initExportUI(getFigureKey) {
   }
 
   function sync() {
+    const d = textExportDescriptor(getFigureKey());
+    tsvBtn.textContent = d.buttonLabel;
+    tsvBtn.title = d.downloadTitle;
+    copyBtn.textContent = d.copyLabel;
+    copyBtn.title = d.copyTitle;
     const n = preview.querySelectorAll("svg").length;
     pngBtn.disabled = svgBtn.disabled = n === 0;
     const hasText = stats.textContent.trim() !== "" && !stats.classList.contains("error");
@@ -83,4 +90,9 @@ export function initExportUI(getFigureKey) {
   obs.observe(preview, { childList: true, subtree: true });
   obs.observe(stats, { childList: true, characterData: true, subtree: true, attributes: true });
   sync();
+
+  // app.js registers its nav handlers before initExportUI runs, so by the time
+  // this listener fires getFigureKey() already reflects the new selection.
+  document.querySelectorAll("[data-figure]").forEach((b) =>
+    b.addEventListener("click", sync));
 }

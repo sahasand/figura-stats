@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { svgDimensions, combineSvgs, exportFilename, crc32, setPngDpi } from "./export.js";
+import { svgDimensions, combineSvgs, exportFilename, crc32, setPngDpi, textExportDescriptor } from "./export.js";
 
 // svgDimensions: svglite emits pt (1pt = 4/3 px)
 const svgPt = `<svg xmlns="http://www.w3.org/2000/svg" width="504.00pt" height="252.00pt" viewBox="0 0 504.00 252.00"><rect/></svg>`;
@@ -96,3 +96,18 @@ assert.throws(() => setPngDpi(new Uint8Array([1, 2, 3]), 600), /not a png/i);
 assert.throws(() => setPngDpi(concatBytes([SIG, chunk("IHDR", new Uint8Array(13)), chunk("IEND", new Uint8Array(0))]), 600), /idat/i);
 
 console.log("ok - export pHYs stamping (journal dpi metadata)");
+
+// ---- analysis-aware text export -----------------------------------------
+{
+  const r = textExportDescriptor("explore");
+  assert.equal(r.ext, "R");
+  assert.equal(r.mime, "text/plain");
+  assert.equal(r.buttonLabel, ".R");
+  assert.equal(r.copyLabel, "Copy R code");
+  const d = textExportDescriptor("summary");
+  assert.equal(d.ext, "tsv");
+  assert.equal(d.mime, "text/tab-separated-values");
+  assert.equal(textExportDescriptor(undefined).ext, "tsv");
+}
+
+console.log("ok - analysis-aware text export descriptor");

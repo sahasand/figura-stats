@@ -60,6 +60,23 @@ export function exportFilename(figureKey, kind, { dpi, panel } = {}) {
   return `${base}.tsv`;
 }
 
+// Per-analysis text-pane export. Explore's text pane holds R code, not a
+// table — journals get tables as .tsv, scripts as .R. Default covers every
+// other analysis so adding one never touches this file unless its text pane
+// is not tabular.
+export function textExportDescriptor(figureKey) {
+  if (figureKey === "explore") {
+    return { buttonLabel: ".R", copyLabel: "Copy R code", ext: "R",
+      mime: "text/plain",
+      copyTitle: "Copy the ggplot2 code — paste into your own R script",
+      downloadTitle: "Download the ggplot2 code as an .R script" };
+  }
+  return { buttonLabel: ".tsv", copyLabel: "Copy", ext: "tsv",
+    mime: "text/tab-separated-values",
+    copyTitle: "Copy the table and methods text — journals want tables as editable text, paste into Word or Excel",
+    downloadTitle: "Download the table and methods text as .tsv" };
+}
+
 // ---- PNG DPI stamping -------------------------------------------------
 // A canvas-produced PNG has no resolution metadata, so journal submission
 // checkers read it as 72 dpi no matter how many pixels it has. Inserting a
