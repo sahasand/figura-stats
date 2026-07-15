@@ -7,7 +7,7 @@ export const TEACHING_VISUAL_ALT =
 
 export const TEACHING_VISUAL_SVG = `
 <svg viewBox="0 0 560 330" role="img" xmlns="http://www.w3.org/2000/svg"
-     style="max-width:100%;height:auto;font-family:system-ui,sans-serif">
+     style="max-width:100%;height:auto;font-family:inherit">
   <text x="16" y="20" font-size="13" font-weight="bold" fill="#88400a">Illustration — not computed data</text>
   <g stroke="#333" stroke-width="1">
     <line x1="50" y1="40" x2="50" y2="240"/><line x1="50" y1="240" x2="520" y2="240"/>

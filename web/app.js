@@ -76,7 +76,11 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const kind = btn.dataset.figure;
     document.querySelectorAll("[data-figure]").forEach((b) =>
-      b.classList.toggle("active", b === btn));
+      { b.classList.toggle("active", b === btn);
+        // Expose the selection to assistive tech, matching the guided
+        // tabs' aria-selected standard.
+        if (b === btn) b.setAttribute("aria-current", "true");
+        else b.removeAttribute("aria-current"); });
     const container = document.getElementById("form");
     container.innerHTML = "";
     (forms[kind] || (() => {}))(container, render, runFigure, setStatus);
