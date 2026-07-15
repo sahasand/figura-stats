@@ -2,7 +2,7 @@ export function renderTable1Form(container, onSubmit) {
   container.innerHTML = `
     <h2>Table 1</h2>
     <label for="groups">Group names (comma separated)</label>
-    <input id="groups" value="Treatment, Placebo" style="width:20rem" />
+    <input id="groups" value="Treatment, Placebo" class="input-wide" />
     <p>One row per line as: <code>Variable | val1 | val2</code></p>
     <textarea id="rows" rows="6" cols="50">Age, mean (SD) | 58 (11) | 57 (12)
 Male, n (%) | 40 (53%) | 38 (51%)</textarea>
