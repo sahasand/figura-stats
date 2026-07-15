@@ -5,14 +5,8 @@ render_figure <- function(json_string) {
     fig <- spec$figure
     if (is.null(fig)) fig <- "(none)"
     out <- switch(as.character(fig),
-      forest  = fig_forest(spec),
-      consort = fig_consort(spec),
       summary = fig_summary(spec),
       km      = fig_km(spec),
-      groupcompare = fig_groupcompare(spec),
-      correlation = fig_correlation(spec),
-      roc     = fig_roc(spec),
-      regression = fig_regression(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
     list(ok = TRUE, svg = out$svg, text = out$text)

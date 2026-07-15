@@ -5,10 +5,10 @@ import { WebR } from "https://webr.r-wasm.org/latest/webr.mjs";
 let webRReady;
 
 // Heavy, figure-specific packages are installed LAZILY the first time a figure
-// of that type is requested — not at boot — so a user who only makes a forest
-// plot never downloads the KM package tree. Boot installs only
-// the shared base below. See ensureExtraPackages().
-const EXTRA_PACKAGES = { km: ["survival", "cowplot"], roc: ["pROC"], regression: ["gtsummary", "broom", "broom.helpers"] };
+// of that type is requested — not at boot — so a Summary-statistics user never
+// downloads the KM survival tree. Boot installs only the shared base below.
+// See ensureExtraPackages().
+const EXTRA_PACKAGES = { km: ["survival", "cowplot"] };
 const installedExtras = new Set();
 // Single-flight guard: figure type -> in-flight install Promise. Without this,
 // two concurrent requests for the same figure type (e.g. a double-click on
@@ -24,11 +24,10 @@ async function boot() {
   // Boot installs ONLY the packages shared by every figure. Heavy per-figure
   // dependencies (e.g. survival + cowplot for KM) are installed lazily on
   // first use via ensureExtraPackages(), keeping first load fast for everyone.
-  await webR.installPackages(["ggplot2", "svglite", "jsonlite", "knitr"], { quiet: true });
+  await webR.installPackages(["ggplot2", "svglite", "jsonlite"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.
-  // Only dispatch.R and forest.R exist today; the rest are added by later
-  // tasks. Missing files 404, and the `resp.ok` guard skips them.
-  for (const f of ["dispatch.R", "forest.R", "consort.R", "summarize.R", "km.R", "groupcompare.R", "correlation.R", "roc.R", "regression.R", "themes.R"]) {
+  // Missing files 404, and the `resp.ok` guard skips them.
+  for (const f of ["dispatch.R", "summarize.R", "km.R", "themes.R"]) {
     const resp = await fetch(`R/${f}`);
     if (resp.ok) await webR.evalRVoid(await resp.text());
   }

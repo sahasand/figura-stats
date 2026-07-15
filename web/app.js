@@ -62,15 +62,9 @@ async function render(spec) {
   setStatus("ready", "R: ready");
 }
 
-import { renderForestForm } from "./forms/forest.js";
-import { renderConsortForm } from "./forms/consort.js";
 import { renderGuidedSummary } from "./guided/summary/guided-summary.js";
-import { renderGroupCompareForm } from "./forms/groupcompare.js";
-import { renderCorrelationForm } from "./forms/correlation.js";
-import { renderRocForm } from "./forms/roc.js";
-import { renderRegressionForm } from "./forms/regression.js";
 import { renderGuidedKm } from "./guided/guided-analysis.js";
-const forms = { forest: renderForestForm, consort: renderConsortForm, summary: renderGuidedSummary, km: renderGuidedKm, groupcompare: renderGroupCompareForm, correlation: renderCorrelationForm, roc: renderRocForm, regression: renderRegressionForm };
+const forms = { summary: renderGuidedSummary, km: renderGuidedKm };
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
