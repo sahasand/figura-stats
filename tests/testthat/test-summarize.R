@@ -260,3 +260,28 @@ test_that("ungrouped box row renders warning-free with a single Overall category
   out <- expect_no_warning(fig_summary(spec))
   expect_equal(n_svgs(out$svg), 2)
 })
+
+test_that("show_qq is off by default and adds a Q-Q row when on", {
+  spec <- mk_summary_spec(); spec$options$show_plots <- TRUE
+  expect_false(grepl("Q–Q", fig_summary(spec)$svg, fixed = TRUE))
+  spec$options$show_qq <- TRUE
+  out <- expect_no_warning(fig_summary(spec))
+  expect_equal(n_svgs(out$svg), 3)
+  expect_match(out$svg, "Q–Q", fixed = TRUE)
+})
+
+test_that("show_qq alone renders one svg with the Q-Q legend only", {
+  spec <- mk_summary_spec()
+  spec$options$show_plots <- FALSE; spec$options$show_qq <- TRUE
+  out <- expect_no_warning(fig_summary(spec))
+  expect_equal(n_svgs(out$svg), 1)
+  expect_match(out$svg, "curved tail", fixed = TRUE)
+  expect_false(grepl("dashed = mean", out$svg, fixed = TRUE))
+})
+
+test_that("ungrouped show_qq facets by variable only, warning-free", {
+  spec <- mk_summary_spec(group = NULL)
+  spec$options$show_plots <- FALSE; spec$options$show_qq <- TRUE
+  out <- expect_no_warning(fig_summary(spec))
+  expect_equal(n_svgs(out$svg), 1)
+})

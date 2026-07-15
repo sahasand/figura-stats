@@ -180,6 +180,25 @@
   .svg_string(gg, width = 7, height = 2.6 * ceiling(nlevels(df$variable) / 2))
 }
 
+# Row 3 (opt-in via options$show_qq): normal Q-Q per variable — per group when
+# grouped, mirroring how the mean-vs-median decision assesses normality
+# (within groups). Points near the line support mean ± SD; a tail curving
+# away supports median (IQR).
+.summary_qq_svg <- function(df, grouped) {
+  gg <- ggplot2::ggplot(df, ggplot2::aes(sample = value)) +
+    ggplot2::stat_qq(size = 0.6, alpha = 0.5, colour = "grey30") +
+    ggplot2::stat_qq_line(linewidth = 0.4, colour = "#2b6cb0") +
+    ggplot2::labs(x = "Theoretical quantiles", y = "Sample quantiles") +
+    ggplot2::theme_minimal(base_size = 11)
+  if (grouped) {
+    gg <- gg + ggplot2::facet_grid(group ~ variable, scales = "free")
+    .svg_string(gg, width = 7, height = 2.2 * nlevels(df$group))
+  } else {
+    gg <- gg + ggplot2::facet_wrap(~ variable, scales = "free")
+    .svg_string(gg, width = 7, height = 2.6 * ceiling(nlevels(df$variable) / 2))
+  }
+}
+
 #' Auto-computed Table 1 with normality-aware continuous summaries.
 fig_summary <- function(spec) {
   rows <- spec$data
@@ -278,21 +297,27 @@ fig_summary <- function(spec) {
   table_html <- .summary_table_html(headers, out_rows)
 
   # Optional distribution figure: stacked sibling SVGs inside one <figure>.
-  # show_plots gates the histogram+density and box+jitter rows as a pair
-  # (a later task adds the show_qq-gated Q-Q row). The teaching legend and synthetic caption are
-  # HTML (styleable), not ggplot in-SVG text. No <figure> at all when nothing
-  # is plottable.
+  # show_plots gates the histogram+density and box+jitter rows as a pair;
+  # show_qq independently adds the Q-Q row. The teaching legend and synthetic
+  # caption are HTML (styleable), not ggplot in-SVG text. No <figure> at all
+  # when nothing is plottable.
   figure_html <- ""
   want_plots <- isTRUE(opt$show_plots)
-  if (want_plots && length(continuous) > 0) {
+  want_qq <- isTRUE(opt$show_qq)
+  if ((want_plots || want_qq) && length(continuous) > 0) {
     df <- .summary_plot_df(rows, continuous, labels, grp, levels_g)
     if (!is.null(df)) {
-      svgs <- c(.summary_hist_svg(df), .summary_box_svg(df))
-      legend_bits <- c(paste0(
-        "<span class=\"mean-key\">dashed = mean</span> · ",
-        "<span class=\"median-key\">solid = median</span> · curve = density",
-        " — when the lines separate, the variable is skewed"),
-        "box = median and IQR, whiskers to 1.5 × IQR, dots = individual observations")
+      svgs <- c(
+        if (want_plots) c(.summary_hist_svg(df), .summary_box_svg(df)),
+        if (want_qq) .summary_qq_svg(df, grouped = !is.null(gcol)))
+      legend_bits <- c(
+        if (want_plots) c(paste0(
+          "<span class=\"mean-key\">dashed = mean</span> · ",
+          "<span class=\"median-key\">solid = median</span> · curve = density",
+          " — when the lines separate, the variable is skewed"),
+          "box = median and IQR, whiskers to 1.5 × IQR, dots = individual observations"),
+        if (want_qq)
+          "Q–Q: points near the line support mean ± SD; a curved tail supports median (IQR)")
       legend_html <- paste0("<div class=\"plot-legend\">",
                             paste(legend_bits, collapse = "<br>"), "</div>")
       cap <- opt$caption %||% ""
