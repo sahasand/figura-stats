@@ -35,7 +35,9 @@ Kaplan–Meier routes through a guided three-stage shell (`web/guided/`) — Und
 
 **Lazy package install.** The worker boots with only the shared packages (`ggplot2, svglite, jsonlite, knitr`). Heavy per-figure packages install on first use of that figure via `EXTRA_PACKAGES` in `worker.js` (`km → survival/cowplot`, `roc → pROC`, `regression → gtsummary/broom/broom.helpers`), guarded by a single-flight promise so concurrent requests install once. This keeps a forest-plot user from downloading the whole survival/gtsummary trees.
 
-**No data egress.** The only network calls are the webR runtime/packages from the CDN and `fetch("R/*.R")`. There is no analytics or upload of user data — this is an invariant, not a preference. All statistics live in R; JS only parses CSVs and marshals columns.
+**No data egress.** The only network calls are the webR runtime/packages from the CDN and `fetch("R/*.R")`. There is no analytics or upload of user data — this is an invariant, not a preference. All statistics live in R; JS only parses CSVs and marshals columns. Fonts (IBM Plex) are self-hosted in `web/fonts/` for the same reason — never link a font CDN.
+
+**UI tokens.** All chrome styling routes through the CSS variables at the top of `web/styles.css` (teal `--accent`, `--radius*`, warn palette). Data colors in figures (Tol palette, `R/km.R .km_palette`) are deliberately distinct from chrome colors. Known UI/a11y fast-follows live in `.scratch/guided-analysis-km/issues/stage-a-fast-follows.md`.
 
 ## Adding a figure or analysis
 
