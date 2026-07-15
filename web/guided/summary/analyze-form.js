@@ -28,7 +28,7 @@ export function classifyColumns(table) {
 
 // Pure: assemble the spec. Rows are projected to selected + group columns so
 // unticked data never crosses to the worker.
-export function buildSummarySpec(table, { groupBy, showPlots, selected }) {
+export function buildSummarySpec(table, { groupBy, showPlots, showQq, selected }) {
   const { kinds } = classifyColumns(table);
   const vars = table.columns.filter((c) => c !== groupBy && selected.includes(c));
   const keep = groupBy ? [...vars, groupBy] : vars;
@@ -43,6 +43,7 @@ export function buildSummarySpec(table, { groupBy, showPlots, selected }) {
       categorical: vars.filter((c) => kinds[c] !== "continuous"),
       labels: null, overrides: {},
       show_plots: !!showPlots,
+      show_qq: !!showQq,
     },
   };
 }
@@ -116,12 +117,18 @@ export function renderSummaryForm(container, onSubmit, doc = globalThis.document
     plotsLabel.append(plots, doc.createTextNode(" Show distribution plots"));
     config.appendChild(plotsLabel);
 
+    const qqLabel = doc.createElement("label");
+    const qq = doc.createElement("input");
+    qq.type = "checkbox"; qq.id = "showqq";
+    qqLabel.append(qq, doc.createTextNode(" Show Q–Q normality plots"));
+    config.appendChild(qqLabel);
+
     const btn = doc.createElement("button");
     btn.type = "button"; btn.id = "render"; btn.textContent = "Render summary table";
     btn.onclick = () => {
       const selected = table.columns.filter((c) => boxes[c].checked && c !== groupChoice.group);
       onSubmit(buildSummarySpec(table, {
-        groupBy: groupChoice.group, showPlots: plots.checked, selected }));
+        groupBy: groupChoice.group, showPlots: plots.checked, showQq: qq.checked, selected }));
     };
     config.appendChild(btn);
   }

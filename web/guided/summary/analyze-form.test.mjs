@@ -26,18 +26,20 @@ const table = {
 }
 {
   const spec = buildSummarySpec(table, {
-    groupBy: "arm", showPlots: true, selected: ["age", "crp", "diabetes"] });
+    groupBy: "arm", showPlots: true, showQq: true, selected: ["age", "crp", "diabetes"] });
   assert.equal(spec.figure, "summary");
   assert.equal(spec.roles.group, "arm");
   assert.deepEqual(spec.options.continuous, ["age", "crp"]);
   assert.deepEqual(spec.options.categorical, ["diabetes"]);
   assert.equal(spec.options.show_plots, true);
+  assert.equal(spec.options.show_qq, true);
   assert.deepEqual(Object.keys(spec.data[0]).sort(), ["age", "arm", "crp", "diabetes"],
     "rows are projected to selected + group columns only");
 }
 {
   const spec = buildSummarySpec(table, { groupBy: null, showPlots: false, selected: ["age"] });
   assert.equal(spec.roles.group, null);
+  assert.equal(spec.options.show_qq, false, "absent showQq must serialize as false");
   assert.deepEqual(Object.keys(spec.data[0]), ["age"]);
 }
 console.log("ok - classifyColumns + buildSummarySpec");
