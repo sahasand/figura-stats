@@ -180,7 +180,7 @@ test_that("scatter renders and emits matching standalone code", {
     roles = list(x = "age", y = "bmi", color = "arm"),
     options = list(geom = "scatter", point_size = 2, alpha = 0.8,
                    smoother = "lm", se = TRUE)))
-  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$svg, "<svg", fixed = TRUE)
   expect_match(out$text, "library\\(ggplot2\\)")
   expect_match(out$text, "geom_point", fixed = TRUE)
   expect_match(out$text, "geom_smooth", fixed = TRUE)
@@ -199,7 +199,7 @@ test_that("adversarial column names and labels survive", {
     roles = list(x = "age (years)", y = "BMI, kg/m²"),
     options = list(geom = "scatter",
                    title = 'He said "wow"\nline two')))
-  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$svg, "<svg", fixed = TRUE)
   expect_match(out$text, '.data[["age (years)"]]', fixed = TRUE)
   expect_match(out$text, '\\"wow\\"', fixed = TRUE)    # deparse-escaped quote
 })
@@ -466,7 +466,7 @@ test_that("line draws per-subject trajectories via the group role", {
     roles = list(x = "visit_month", y = "biomarker",
                  color = "arm", group = "patient_id"),
     options = list(geom = "line", linewidth = 0.8, show_points = TRUE)))
-  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$svg, "<svg", fixed = TRUE)
   expect_match(out$text, "geom_line(linewidth = 0.8)", fixed = TRUE)
   expect_match(out$text, 'group = .data[["patient_id"]]', fixed = TRUE)
   expect_match(out$text, "geom_point", fixed = TRUE)
@@ -476,7 +476,7 @@ test_that("boxplot factor()-wraps a numeric-coded x and supports jitter", {
   out <- fig_explore(list(data = demo_rows,
     roles = list(x = "ecog", y = "biomarker"),
     options = list(geom = "boxplot", jitter = TRUE, notch = FALSE)))
-  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$svg, "<svg", fixed = TRUE)
   expect_match(out$text, 'factor(.data[["ecog"]])', fixed = TRUE)
   expect_match(out$text, "geom_jitter", fixed = TRUE)
 })
@@ -485,7 +485,7 @@ test_that("violin renders with inner box", {
   out <- fig_explore(list(data = demo_rows,
     roles = list(x = "arm", y = "biomarker"),
     options = list(geom = "violin", inner_box = TRUE, trim = FALSE)))
-  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$svg, "<svg", fixed = TRUE)
   expect_match(out$text, "geom_violin", fixed = TRUE)
   expect_match(out$text, "geom_boxplot(width = 0.15", fixed = TRUE)
 })
@@ -521,7 +521,7 @@ test_that("facet emits facet_wrap(vars(...)) and renders", {
     roles = list(x = "age", y = "biomarker", facet = "sex"),
     options = list(geom = "scatter")))
   expect_match(out$text, 'facet_wrap(vars(.data[["sex"]]))', fixed = TRUE)
-  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$svg, "<svg", fixed = TRUE)
 })
 ```
 
