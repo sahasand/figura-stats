@@ -235,3 +235,15 @@ test_that("plotting continuous data emits no ggplot warning", {
   spec <- mk_summary_spec(); spec$options$show_plots <- TRUE
   expect_no_warning(fig_summary(spec))
 })
+
+# Count sibling <svg> elements inside the bundled HTML output.
+n_svgs <- function(html) sum(gregexpr("<svg", html, fixed = TRUE)[[1]] > 0)
+
+test_that("histogram row is density-scaled with a density curve, warning-free", {
+  spec <- mk_summary_spec(); spec$options$show_plots <- TRUE
+  out <- expect_no_warning(fig_summary(spec))
+  expect_gte(n_svgs(out$svg), 1)   # Task 4 raises the exact count to 2
+  expect_match(out$svg, "curve = density", fixed = TRUE)
+  expect_match(out$svg, "dashed = mean", fixed = TRUE)
+  expect_match(out$svg, "lines separate", fixed = TRUE)
+})

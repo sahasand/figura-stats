@@ -114,33 +114,51 @@
          paste(body, collapse = ""), "</tbody></table>")
 }
 
-# Faceted distribution plot: one panel per continuous variable (pooled values),
-# with dashed mean and solid median reference lines so the reader sees why each
-# variable got its summary. The legend is emitted as HTML by fig_summary (a
-# styleable .plot-legend div), NOT as a ggplot caption. Returns an inline <svg>
-# string, or "" when nothing is plottable.
-.summary_plot_svg <- function(rows, continuous, labels) {
+# ---- Distribution figure ----------------------------------------------------
+# The figure is a stack of SIBLING <svg> elements (histogram+density, box+
+# jitter, and an opt-in Q-Q row) inside one <figure> block. fig_summary's svg
+# field already carries HTML, so no composition package is needed and the
+# summary analysis keeps its no-extra-download property.
+
+# Long data frame of plottable values: one row per non-missing observation
+# with its display label and group. NULL when nothing is plottable. Variable
+# order follows the user's selection; group order is first-appearance.
+.summary_plot_df <- function(rows, continuous, labels, grp, levels_g) {
   disp <- function(col) as.character((labels %||% list())[[col]] %||% col)
   parts <- lapply(continuous, function(col) {
-    x <- .numeric_col(rows, col); x <- x[!is.na(x)]
-    if (length(x) == 0) return(NULL)
-    data.frame(variable = disp(col), value = x,
-               mean = mean(x), median = stats::median(x),
+    x <- .numeric_col(rows, col)
+    keep <- !is.na(x)
+    if (!any(keep)) return(NULL)
+    data.frame(variable = disp(col), value = x[keep], group = grp[keep],
                stringsAsFactors = FALSE)
   })
   df <- do.call(rbind, parts[!vapply(parts, is.null, logical(1))])
-  if (is.null(df) || nrow(df) == 0) return("")
-  refs <- unique(df[c("variable", "mean", "median")])
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  df$variable <- factor(df$variable, levels = unique(df$variable))
+  df$group <- factor(df$group, levels = levels_g)
+  df
+}
+
+# Row 1: faceted histogram on a density scale with a smoothed density curve
+# and dashed-mean / solid-median reference lines (pooled values), so the
+# reader sees why each variable got its summary.
+.summary_hist_svg <- function(df) {
+  refs <- do.call(rbind, lapply(split(df, df$variable), function(d)
+    data.frame(variable = d$variable[1], mean = mean(d$value),
+               median = stats::median(d$value))))
   gg <- ggplot2::ggplot(df, ggplot2::aes(x = value)) +
-    ggplot2::geom_histogram(bins = 20, fill = "grey85", colour = "white", linewidth = 0.2) +
+    ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)),
+                            bins = 20, fill = "grey85", colour = "white",
+                            linewidth = 0.2) +
+    ggplot2::geom_density(colour = "grey40", linewidth = 0.4) +
     ggplot2::geom_vline(data = refs, ggplot2::aes(xintercept = mean),
                         linetype = "dashed", linewidth = 0.5, colour = "#2b6cb0") +
     ggplot2::geom_vline(data = refs, ggplot2::aes(xintercept = median),
                         linetype = "solid", linewidth = 0.5, colour = "#c05621") +
     ggplot2::facet_wrap(~ variable, scales = "free") +
-    ggplot2::labs(x = NULL, y = "Count") +
+    ggplot2::labs(x = NULL, y = "Density") +
     ggplot2::theme_minimal(base_size = 11)
-  .svg_string(gg, width = 7, height = 2.6 * ceiling(length(continuous) / 2))
+  .svg_string(gg, width = 7, height = 2.6 * ceiling(nlevels(df$variable) / 2))
 }
 
 #' Auto-computed Table 1 with normality-aware continuous summaries.
@@ -240,23 +258,28 @@ fig_summary <- function(spec) {
 
   table_html <- .summary_table_html(headers, out_rows)
 
-  # Optional faceted distribution plot bundled inside the same .summary-output
-  # wrapper. The teaching legend and synthetic caption are HTML (styleable),
-  # not ggplot in-SVG text. No <figure> at all when nothing is plottable.
+  # Optional distribution figure: stacked sibling SVGs inside one <figure>.
+  # show_plots gates the histogram+density row (Tasks 4-5 add box+jitter and
+  # the show_qq-gated Q-Q row). The teaching legend and synthetic caption are
+  # HTML (styleable), not ggplot in-SVG text. No <figure> at all when nothing
+  # is plottable.
   figure_html <- ""
-  if (isTRUE(opt$show_plots) && length(continuous) > 0) {
-    plot_svg <- .summary_plot_svg(rows, continuous, labels)
-    if (nzchar(plot_svg)) {
-      legend_html <- paste0(
-        "<div class=\"plot-legend\">",
+  want_plots <- isTRUE(opt$show_plots)
+  if (want_plots && length(continuous) > 0) {
+    df <- .summary_plot_df(rows, continuous, labels, grp, levels_g)
+    if (!is.null(df)) {
+      svgs <- c(.summary_hist_svg(df))
+      legend_bits <- c(paste0(
         "<span class=\"mean-key\">dashed = mean</span> · ",
-        "<span class=\"median-key\">solid = median</span>",
-        " — when the lines separate, the variable is skewed</div>")
+        "<span class=\"median-key\">solid = median</span> · curve = density",
+        " — when the lines separate, the variable is skewed"))
+      legend_html <- paste0("<div class=\"plot-legend\">",
+                            paste(legend_bits, collapse = "<br>"), "</div>")
       cap <- opt$caption %||% ""
       cap_html <- if (nzchar(cap))
         sprintf("<figcaption class=\"synthetic\">%s</figcaption>", .esc(cap)) else ""
       figure_html <- sprintf("<figure class=\"dist-plot\">%s%s%s</figure>",
-                             plot_svg, legend_html, cap_html)
+                             paste(svgs, collapse = ""), legend_html, cap_html)
     }
   }
   # Scroll wrapper: on narrow viewports the table scrolls inside its own
