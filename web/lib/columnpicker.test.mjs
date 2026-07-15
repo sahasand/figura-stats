@@ -94,4 +94,19 @@ assert.equal(covLabel.htmlFor, "cp_covariates");
   console.log("ok - columnpicker optional role");
 }
 
+// --- "categorical+" role type: numeric-coded groups admitted after true categoricals ---
+{
+  const table4 = { columns: ["age", "arm", "ecog"], rows: [],
+    types: { age: "numeric", arm: "categorical", ecog: "numeric" } };
+  const container4 = { children: [], innerHTML: "", appendChild(c) { this.children.push(c); } };
+  let got = null;
+  renderColumnPicker(container4, [{ key: "x", label: "X", type: "categorical+" }],
+    table4, (v) => { got = v; }, makeDoc());
+  const opts = container4.children[1].options.map((o) => [o.value, o.textContent]);
+  // blank, then categoricals, then numerics with the hint suffix
+  assert.deepEqual(opts.slice(1),
+    [["arm", "arm"], ["age", "age (as categories)"], ["ecog", "ecog (as categories)"]]);
+  console.log("ok - columnpicker categorical+ role");
+}
+
 console.log("columnpicker.test.mjs OK");

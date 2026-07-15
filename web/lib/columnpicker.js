@@ -3,8 +3,18 @@
 export function renderColumnPicker(container, roles, table, onReady, doc = globalThis.document) {
   container.innerHTML = "";
   const selects = {};
-  const compatible = (role) =>
-    table.columns.filter((c) => role.type === "any" || table.types[c] === role.type);
+  // "categorical+" also admits numeric columns (0/1/2-coded groups are common
+  // in clinical data), listed after true categoricals with a visible hint.
+  // The option VALUE is always the bare column name.
+  const compatible = (role) => {
+    if (role.type === "any") return table.columns.map((c) => [c, c]);
+    const match = table.columns.filter((c) => table.types[c] === role.type.replace("+", ""))
+      .map((c) => [c, c]);
+    if (!role.type.endsWith("+")) return match;
+    const extra = table.columns.filter((c) => table.types[c] === "numeric")
+      .map((c) => [c, c + " (as categories)"]);
+    return [...match, ...extra];
+  };
 
   const current = () => {
     const map = {};
@@ -39,9 +49,9 @@ export function renderColumnPicker(container, roles, table, onReady, doc = globa
       blank.value = ""; blank.textContent = role.optional ? "— none —" : "— choose —";
       sel.add ? sel.add(blank) : sel.appendChild(blank);
     }
-    for (const col of compatible(role)) {
+    for (const [col, text] of compatible(role)) {
       const opt = doc.createElement("option");
-      opt.value = col; opt.textContent = col;
+      opt.value = col; opt.textContent = text;
       sel.add ? sel.add(opt) : sel.appendChild(opt);
     }
     sel.onchange = () => onReady(current());
