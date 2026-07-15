@@ -29,3 +29,6 @@ render_figure <- function(json_string) {
   grDevices::dev.off()
   paste(s(), collapse = "")
 }
+
+#' Null-coalescing helper shared by every figure implementation.
+`%||%` <- function(a, b) if (is.null(a)) b else a

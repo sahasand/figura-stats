@@ -31,5 +31,3 @@ fig_forest <- function(spec) {
   list(svg = .svg_string(p, width = 6, height = 0.6 * nrow(df) + 1.5),
        text = txt)
 }
-
-`%||%` <- function(a, b) if (is.null(a)) b else a
