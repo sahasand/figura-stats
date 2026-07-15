@@ -1,4 +1,4 @@
-# Population skewness of the non-missing values; NA if fewer than 3 or zero spread.
+# Population skewness of the non-missing values; NA if fewer than 3; 0 if zero spread.
 .skewness <- function(x) {
   x <- x[!is.na(x)]
   n <- length(x)
@@ -270,10 +270,13 @@ fig_summary <- function(spec) {
   tsv_header <- paste(c("Characteristic", headers, "Missing"), collapse = "\t")
   tsv_lines <- vapply(out_rows, function(r)
     paste(c(r$label, r$cells, r$missing), collapse = "\t"), character(1))
+  normality_clause <- if (!is.null(gcol))
+    "normality was assessed within groups with the Shapiro–Wilk test (n ≤ 300) and skewness."
+  else
+    "normality was assessed with the Shapiro–Wilk test (n ≤ 300) and skewness."
   methods <- paste(
     "Continuous variables are summarized as mean ± SD when approximately normal",
-    "and as median (IQR) otherwise; normality was assessed within groups with the",
-    "Shapiro–Wilk test (n ≤ 300) and skewness. Categorical variables are n (%)",
+    "and as median (IQR) otherwise;", normality_clause, "Categorical variables are n (%)",
     "with the non-missing count as the denominator. Missing values are reported",
     "per variable. No hypothesis tests are reported for baseline characteristics.")
   text <- paste0(paste(c(tsv_header, tsv_lines), collapse = "\n"), "\n\n", methods)

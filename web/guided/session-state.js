@@ -4,6 +4,9 @@
 export const STAGES = ["understand", "example", "analyze"];
 
 export function createSession(demoOptions) {
+  // _demoDefaults is a SHALLOW copy of the initial demoOptions and is the reset
+  // target (see resetDemo). Mutators must REPLACE demoOptions objects, never
+  // mutate nested values in place, or the shared nested references corrupt it.
   return { stage: "understand", results: { demo: null, user: null },
            demoOptions, _demoDefaults: { ...demoOptions }, demoGeneration: 0 };
 }

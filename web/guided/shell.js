@@ -13,8 +13,8 @@ const STAGE_LABELS = { understand: "Understand", example: "Try an Example", anal
 const CONTEXT_FOR_STAGE = { understand: null, example: "demo", analyze: "user" };
 
 export function createGuidedShell(cfg) {
-  // Module-level per-analysis session: survives switching to another analysis
-  // and back within the tab; page reload starts clean by construction.
+  // Per-instance session closure: survives switching to another analysis and
+  // back within the tab; page reload starts clean by construction.
   let session = null;
   const hashRe = new RegExp("^#" + cfg.hashPrefix + "/(\\w+)$");
 

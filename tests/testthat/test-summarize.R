@@ -171,6 +171,17 @@ test_that("text is TSV with a header row plus a methods sentence", {
   expect_match(out$text, "\t")
 })
 
+test_that("grouped run: methods sentence claims within-group normality assessment", {
+  out <- fig_summary(mk_summary_spec())
+  expect_match(out$text, "assessed within groups")
+})
+
+test_that("no-group run: methods sentence drops the within-groups claim but keeps Shapiro-Wilk", {
+  out <- fig_summary(mk_summary_spec(group = NULL))
+  expect_false(grepl("within groups", out$text, fixed = TRUE))
+  expect_match(out$text, "Shapiro–Wilk")
+})
+
 test_that("a non-numeric value in a continuous column errors clearly, no warning", {
   spec <- mk_summary_spec()
   spec$data[[1]]$age <- "not-a-number"
