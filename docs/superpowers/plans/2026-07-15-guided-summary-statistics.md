@@ -520,12 +520,14 @@ test_that("a group where a variable has zero non-missing values renders an em-da
   expect_match(out$svg, ">—<")
 })
 
-test_that("no group -> a single Overall column and no p-value anywhere", {
+test_that("no group -> a single Overall column and no p-value column", {
   spec <- mk_summary_spec(group = NULL)
   out <- fig_summary(spec)
   expect_match(out$svg, "Overall")
+  # Diagnostic Shapiro–Wilk p inside a .why reason is sanctioned; a p-value
+  # COLUMN is the forbidden thing.
   expect_false(grepl("p-value", out$svg, ignore.case = TRUE))
-  expect_false(grepl("p =", out$svg, fixed = TRUE))
+  expect_false(grepl("<th>\\s*p\\s*</th>", out$svg, ignore.case = TRUE))
 })
 
 test_that("override forces the summary and records that the user chose it", {
