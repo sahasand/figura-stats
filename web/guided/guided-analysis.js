@@ -1,5 +1,6 @@
 // web/guided/guided-analysis.js
-import { createKmSession, setStage, storeResult, getResult, setDemoOptions, resetDemo, STAGES }
+import { createKmSession, setStage, storeResult, getResult, setDemoOptions, resetDemo,
+  getDemoGeneration, isDemoGenerationCurrent, STAGES }
   from "./session-state.js";
 import { renderUnderstand, EXAMPLE_INTRO_HTML, CALLOUTS } from "./km/content.js";
 import { buildDemoSpec } from "./km/demo.js";
@@ -7,6 +8,10 @@ import { KM_DEMO } from "./km/demo-data.js";
 import { renderKmForm } from "../forms/km.js";
 
 const STAGE_LABELS = { understand: "Understand", example: "Try an Example", analyze: "Analyze Your Data" };
+// The result context each stage is allowed to paint into the shared #preview/#stats.
+// A run that resolves may repaint only if its context still matches the selected
+// stage; "understand" paints nothing (null never equals a context key).
+const CONTEXT_FOR_STAGE = { understand: null, example: "demo", analyze: "user" };
 // Module-level session: survives switching to another analysis and back
 // within the tab (PRD story 3/4); page reload starts clean by construction.
 let session = null;
@@ -35,15 +40,26 @@ export function renderGuidedKm(container, onSubmit, runFigure) {
     preview.innerHTML = "Rendering… (first run downloads R packages)";
     stats.textContent = "";
     stats.classList.remove("error");
+    // Snapshot the demo generation so a Reset Example landing mid-run can be
+    // detected on resolve and the stale result fully dropped.
+    const startGen = getDemoGeneration(session);
     return runFigure(spec).then((out) => {
+      // Reset-mid-run: a demo run invalidated by Reset Example neither stores nor paints.
+      if (context === "demo" && !isDemoGenerationCurrent(session, startGen)) return out;
+      // Tab-switch-mid-run: paint only when this context is still the one the
+      // selected stage owns. A stale-but-valid result is still stored below so it
+      // reappears when its own tab is reselected.
+      const shouldPaint = CONTEXT_FOR_STAGE[session.stage] === context;
       if (!out.ok) {
-        preview.innerHTML = "";
-        stats.textContent = "Error: " + out.error;
-        stats.classList.add("error");
+        if (shouldPaint) {
+          preview.innerHTML = "";
+          stats.textContent = "Error: " + out.error;
+          stats.classList.add("error");
+        }
         return out;
       }
       session = storeResult(session, context, out);
-      showStored(context);
+      if (shouldPaint) showStored(context);
       return out;
     });
   }
@@ -106,12 +122,14 @@ function renderExample(panel, ctx) {
     <div id="demo-experiments"></div>`;
   const runBtn = panel.querySelector("#run-demo");
 
-  // Controls that must be frozen for the duration of a run: the Run button
-  // plus the three experiment inputs. Worker requests aren't serialized, so
-  // toggling an experiment mid-run could let a stale response land last and
-  // silently mismatch the visible control state.
+  // Controls that must be frozen for the duration of a run: the Run and Reset
+  // buttons plus the three experiment inputs. Worker requests aren't serialized,
+  // so toggling an experiment mid-run could let a stale response land last and
+  // silently mismatch the visible control state; disabling Reset closes the
+  // reset-mid-run path at the UI (the generation counter guards it in state).
   function inFlightControls() {
-    return [runBtn, ...panel.querySelectorAll("#exp-ci, #exp-landmarks, #exp-horizon")];
+    return [runBtn, panel.querySelector("#reset-demo"),
+      ...panel.querySelectorAll("#exp-ci, #exp-landmarks, #exp-horizon")];
   }
 
   // Shared run path: the Run button always calls this, and the experiment
