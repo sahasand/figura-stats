@@ -4,6 +4,7 @@ import { createKmSession, setStage, storeResult, getResult, setDemoOptions, rese
 import { renderUnderstand, EXAMPLE_INTRO_HTML, CALLOUTS } from "./km/content.js";
 import { buildDemoSpec } from "./km/demo.js";
 import { KM_DEMO } from "./km/demo-data.js";
+import { renderKmForm } from "../forms/km.js";
 
 const STAGE_LABELS = { understand: "Understand", example: "Try an Example", analyze: "Analyze Your Data" };
 // Module-level session: survives switching to another analysis and back
@@ -80,12 +81,14 @@ export function renderGuidedKm(container, onSubmit, runFigure) {
   selectStage(session.stage);
 }
 
-// Panels are filled in by Tasks 5, 6/7, and 8. Placeholders until then.
 function renderPanels(container, ctx) {
   renderUnderstand(container.querySelector('[data-stage-panel="understand"]'));
   renderExample(container.querySelector('[data-stage-panel="example"]'), ctx);
-  container.querySelector('[data-stage-panel="analyze"]').textContent =
-    "Analyze Your Data — coming in Task 8.";
+  // analyze panel: the existing (Stage 0-hardened) CSV form, submitting through
+  // the shell so the user result is cached per-context like the demo's.
+  const analyzePanel = container.querySelector('[data-stage-panel="analyze"]');
+  analyzePanel.innerHTML = "";
+  renderKmForm(analyzePanel, (spec) => ctx.runAndShow(spec, "user"));
 }
 
 // The synthetic label is mandatory and appears TWICE: as the visible banner here

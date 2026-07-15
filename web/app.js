@@ -65,7 +65,6 @@ async function render(spec) {
 import { renderForestForm } from "./forms/forest.js";
 import { renderConsortForm } from "./forms/consort.js";
 import { renderTable1Form } from "./forms/table1.js";
-import { renderKmForm } from "./forms/km.js";
 import { renderGroupCompareForm } from "./forms/groupcompare.js";
 import { renderCorrelationForm } from "./forms/correlation.js";
 import { renderRocForm } from "./forms/roc.js";

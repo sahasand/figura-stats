@@ -31,7 +31,9 @@ JS unit tests (plain Node, no framework) and browser end-to-end tests:
 
 **Two input modes.** Summary-number figures (forest, CONSORT, Table 1) take typed values via a form. CSV-data analyses (Kaplan-Meier, group comparison, correlation, ROC, regression) upload a CSV parsed in-browser. The four newest analyses share a foundation in `web/lib/`: `csv.js` (`parseCsv` → `{columns, rows, types}` with numeric/categorical inference) and `columnpicker.js` (`renderColumnPicker` → type-filtered dropdowns mapping columns to analysis roles). Their forms send `{figure, data:[...rows], roles:{...}, options:{...}}`; R extracts columns by role. (KM predates this and keeps its own fixed-column parser.)
 
-**Lazy package install.** The worker boots with only the shared packages (`ggplot2, svglite, jsonlite, knitr`). Heavy per-figure packages install on first use of that figure via `EXTRA_PACKAGES` in `worker.js` (`km → survival/survminer`, `roc → pROC`, `regression → gtsummary/broom/broom.helpers`), guarded by a single-flight promise so concurrent requests install once. This keeps a forest-plot user from downloading the whole survival/gtsummary trees.
+Kaplan–Meier routes through a guided three-stage shell (`web/guided/`) — Understand / Try an Example / Analyze Your Data — with a frozen synthetic demo (`data-raw/km-demo-generator.R`); the other analyses keep the plain form registry.
+
+**Lazy package install.** The worker boots with only the shared packages (`ggplot2, svglite, jsonlite, knitr`). Heavy per-figure packages install on first use of that figure via `EXTRA_PACKAGES` in `worker.js` (`km → survival/cowplot`, `roc → pROC`, `regression → gtsummary/broom/broom.helpers`), guarded by a single-flight promise so concurrent requests install once. This keeps a forest-plot user from downloading the whole survival/gtsummary trees.
 
 **No data egress.** The only network calls are the webR runtime/packages from the CDN and `fetch("R/*.R")`. There is no analytics or upload of user data — this is an invariant, not a preference. All statistics live in R; JS only parses CSVs and marshals columns.
 
@@ -55,7 +57,7 @@ For CSV analyses, build the form on `web/lib/csv.js` + `web/lib/columnpicker.js`
 
 ## Design docs
 
-Specs and implementation plans live in `docs/superpowers/{specs,plans}/`. Read the relevant one before extending a feature — they carry the rationale (e.g. why regression is a merged univariable+multivariable "Table 2", why the KM risk-table is a deferred follow-up).
+Specs and implementation plans live in `docs/superpowers/{specs,plans}/`. Read the relevant one before extending a feature — they carry the rationale (e.g. why regression is a merged univariable+multivariable "Table 2", why the KM figure ships a built-in number-at-risk table via cowplot).
 
 ## Agent skills
 

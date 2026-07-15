@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const path = require("path");
 
 test("guided KM shows three stage tabs, syncs the hash, and starts on Understand", async ({ page }) => {
   await page.goto("/");
@@ -53,4 +54,19 @@ test("landmark experiment adds 12/24-month estimates and Reset restores defaults
   await page.getByRole("button", { name: "Reset Example" }).click();
   await expect(page.locator("#exp-landmarks")).not.toBeChecked();
   await expect(page.locator("#preview svg")).toHaveCount(0);   // demo result cleared
+});
+
+test("demo and user results are separate contexts", async ({ page }) => {
+  test.setTimeout(360000);
+  await page.goto("/#km/example");
+  await page.getByRole("button", { name: /kaplan-meier/i }).click();
+  await page.getByRole("button", { name: "Run Example Analysis" }).click();
+  await expect(page.locator("#stats")).toContainText("p = 0.108", { timeout: 330000 });
+  await page.getByRole("tab", { name: "Analyze Your Data" }).click();
+  await expect(page.locator("#preview svg")).toHaveCount(0);   // user context empty
+  await page.locator("#csv").setInputFiles(path.join(__dirname, "fixtures", "km.csv"));
+  await page.getByRole("button", { name: /render/i }).click();
+  await expect(page.locator("#preview svg")).toBeVisible({ timeout: 120000 });
+  await page.getByRole("tab", { name: "Try an Example" }).click();
+  await expect(page.locator("#stats")).toContainText("p = 0.108");  // demo restored
 });
