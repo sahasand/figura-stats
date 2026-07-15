@@ -44,11 +44,36 @@
 
     <section class="pane output-pane" aria-label="Output">
       <div class="output-figure">
-        <div class="pane-title">Figure</div>
+        <div class="pane-head">
+          <div class="pane-title">Figure</div>
+          <div class="export-toolbar" role="group" aria-label="Download figure for journal submission">
+            <span class="export-hint">Journal-ready download:</span>
+            <select id="export-dpi" aria-label="PNG resolution — journals require 300 dpi or more">
+              <option value="300">300 dpi</option>
+              <option value="600" selected>600 dpi · journal default</option>
+              <option value="1200">1200 dpi · line art</option>
+            </select>
+            <button id="export-png" disabled
+              title="High-resolution PNG stamped with the selected DPI — meets journal figure requirements">PNG</button>
+            <button id="export-svg" disabled
+              title="Vector master for Illustrator/Inkscape or journals accepting vector">SVG</button>
+            <span id="export-feedback-figure" class="export-feedback" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+        <div id="export-panels" hidden></div>
         <div id="preview"><div class="empty"><p>The rendered figure or table appears here.</p></div></div>
       </div>
       <div class="output-console">
-        <div class="pane-title">Console</div>
+        <div class="pane-head">
+          <div class="pane-title">Console</div>
+          <div class="export-toolbar" role="group" aria-label="Export table and methods text">
+            <button id="export-copy" disabled
+              title="Copy the table and methods text — journals want tables as editable text, paste into Word or Excel">Copy</button>
+            <button id="export-tsv" disabled
+              title="Download the table and methods text as .tsv">.tsv</button>
+            <span id="export-feedback-console" class="export-feedback" role="status" aria-live="polite"></span>
+          </div>
+        </div>
         <pre id="stats"></pre>
       </div>
     </section>

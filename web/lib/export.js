@@ -107,3 +107,61 @@ export function setPngDpi(buffer, dpi) {
   for (const a of parts) { out.set(a, off); off += a.length; }
   return out;
 }
+
+// ---- Browser-facing helpers (covered by e2e, not Node unit tests) ------
+
+export function collectSvgPanels(previewEl) {
+  return [...previewEl.querySelectorAll("svg")].map((el) => {
+    const svg = el.outerHTML;
+    const { width, height } = svgDimensions(svg);
+    return { svg, width, height };
+  });
+}
+
+// Rasterize an SVG string to a DPI-stamped PNG Blob at journal resolution.
+// White background first (journals expect white; canvas defaults to
+// transparent). Rejects with a readable message when the canvas would
+// exceed maxDim — never a silent blank file.
+export function svgToPngBlob(svg, { dpi = 600, maxDim = 16000 } = {}) {
+  const { width, height } = svgDimensions(svg);
+  const scale = dpi / 96;
+  const w = Math.round(width * scale);
+  const h = Math.round(height * scale);
+  if (w > maxDim || h > maxDim)
+    return Promise.reject(new Error(
+      `Too large at ${dpi} dpi (${w}×${h}px) — choose a lower DPI.`));
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        if (!blob) { reject(new Error("PNG encoding failed.")); return; }
+        blob.arrayBuffer().then((buf) =>
+          resolve(new Blob([setPngDpi(buf, dpi)], { type: "image/png" })));
+      }, "image/png");
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not rasterize the figure."));
+    };
+    img.src = url;
+  });
+}
+
+export function downloadBlob(blob, filename, doc = globalThis.document) {
+  const a = doc.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}

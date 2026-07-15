@@ -696,3 +696,26 @@ figcaption.synthetic {
 }
 .csv-help summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 .csv-help ul { margin: .5rem 0 0; padding-left: 1.25rem; line-height: 1.6; }
+
+/* Journal-export toolbars: pane titles gain a right-aligned control strip. */
+.pane-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.export-toolbar { display: flex; align-items: center; gap: .4rem; }
+.export-toolbar .export-hint {
+  font-size: .68rem; color: var(--slate); text-transform: uppercase; letter-spacing: .05em;
+}
+.export-toolbar button, .export-toolbar select {
+  font: inherit; font-size: .78rem; color: var(--ink); background: var(--paper, #fff);
+  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
+  padding: .15rem .55rem; cursor: pointer;
+}
+.export-toolbar button:disabled { opacity: .45; cursor: default; }
+.export-feedback { font-size: .74rem; color: var(--slate); }
+#export-panels {
+  display: flex; align-items: center; gap: .4rem; padding: .3rem 0;
+  font-size: .74rem; color: var(--slate);
+}
+#export-panels button {
+  font: inherit; font-size: .7rem; color: var(--ink); background: var(--paper, #fff);
+  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
+  padding: .05rem .45rem; cursor: pointer;
+}

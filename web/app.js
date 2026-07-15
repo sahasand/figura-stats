@@ -64,11 +64,15 @@ async function render(spec) {
 
 import { renderGuidedSummary } from "./guided/summary/guided-summary.js";
 import { renderGuidedKm } from "./guided/guided-analysis.js";
+import { initExportUI } from "./export-ui.js";
 const forms = { summary: renderGuidedSummary, km: renderGuidedKm };
+
+let currentFigure = "figure";   // export filename stem before any selection
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const kind = btn.dataset.figure;
+    currentFigure = kind;
     document.querySelectorAll("[data-figure]").forEach((b) =>
       { b.classList.toggle("active", b === btn);
         // Expose the selection to assistive tech, matching the guided
@@ -80,3 +84,5 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
     (forms[kind] || (() => {}))(container, render, runFigure, setStatus);
   });
 });
+
+initExportUI(() => currentFigure);
