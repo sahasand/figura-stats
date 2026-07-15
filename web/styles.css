@@ -248,6 +248,53 @@ body {
   color: var(--slate);
 }
 
+/* Guided teaching prose (Understand / Try an Example) — these panels render
+   headings, quotes, lists, and disclosures that must sit inside the type
+   hierarchy, not at browser defaults. */
+#form h3 {
+  margin: 1.125rem 0 .375rem;
+  font-size: .9375rem;
+  font-weight: 650;
+  letter-spacing: .005em;
+}
+
+#form h4 {
+  margin: .875rem 0 .25rem;
+  font-size: .8125rem;
+  font-weight: 650;
+}
+
+#form blockquote {
+  margin: .75rem 0;
+  padding: .5625rem .875rem;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-ctl);
+  font-size: .8125rem;
+}
+
+#form ul { margin: .375rem 0 .75rem; padding-left: 1.25rem; }
+#form li { margin: .1875rem 0; }
+
+#form details { margin: 1rem 0; }
+
+#form summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--slate);
+}
+
+#form summary:hover { color: var(--ink); }
+
+#form figure { margin: 1rem 0; }
+
+#form figcaption {
+  font-size: .75rem;
+  color: var(--slate);
+  margin-top: .375rem;
+}
+
 #form code {
   font: .75rem var(--mono);
   background: var(--console-bg);
@@ -284,6 +331,8 @@ textarea {
 }
 
 select { width: auto; min-width: 12rem; max-width: 100%; }
+
+.input-wide { width: 20rem; }
 
 select[multiple] { min-height: 7rem; width: 100%; }
 
