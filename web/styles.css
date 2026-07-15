@@ -714,6 +714,8 @@ figcaption.synthetic {
   display: flex; align-items: center; gap: .4rem; padding: .3rem 0;
   font-size: .74rem; color: var(--slate);
 }
+/* The id selector above outranks the UA [hidden] rule — restore it. */
+#export-panels[hidden] { display: none; }
 #export-panels button {
   font: inherit; font-size: .7rem; color: var(--ink); background: var(--paper, #fff);
   border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
