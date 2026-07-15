@@ -40,4 +40,20 @@ assert.equal(getResult(s, "demo"), null);                 // demo result cleared
 assert.deepEqual(s.demoOptions, { conf_int: true, landmarks: [], horizon: null });
 assert.equal(getResult(s, "user").text, "user text");     // user context untouched
 assert.equal(getDemoGeneration(s), 1);                    // reset also bumps here
+
+// Generic factory: any guided shell gets identical stage/context/reset/generation
+// semantics; resetDemo restores the demoOptions the session was created with.
+import { createSession } from "./session-state.js";
+{
+  const s = createSession({ groupBy: null, showPlots: true });
+  assert.equal(s.stage, "understand");
+  assert.deepEqual(s.results, { demo: null, user: null });
+  assert.deepEqual(s.demoOptions, { groupBy: null, showPlots: true });
+  const s2 = setDemoOptions(s, { showPlots: false });
+  const s3 = resetDemo(s2);
+  assert.deepEqual(s3.demoOptions, { groupBy: null, showPlots: true },
+    "resetDemo restores the created defaults");
+  assert.equal(s3.demoGeneration, 1, "resetDemo bumps generation");
+  console.log("ok - createSession generic factory");
+}
 console.log("session-state.test.mjs OK");
