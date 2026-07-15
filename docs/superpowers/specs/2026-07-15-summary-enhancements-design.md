@@ -49,7 +49,7 @@ Panel rows, in order:
 2. **Box + jitter** — gated by `options.show_plots`. `geom_boxplot` drawn first, faint
    `geom_jitter` points layered on top, one facet per continuous variable with free y
    scales. X-axis is the group variable when `roles$group` is set; otherwise a single
-   "All" category. Fills use the Tol data palette (distinct from chrome colors).
+   "Overall" category (matching the ungrouped table's column header). Fills use the Tol data palette (distinct from chrome colors).
    Outliers are drawn once (suppress the boxplot's own outlier points where the jitter
    layer already shows them).
 3. **Q–Q** — gated by new `options.show_qq` (boolean, default `false` / absent).
@@ -96,8 +96,10 @@ until a parse succeeds):
   separators).
 - **"Download example CSV"** link that serializes `SUMMARY_DEMO.rows` client-side via a
   small pure `toCsv(rows, columns)` helper (lives in `web/lib/csv.js` next to
-  `parseCsv`; quotes fields containing commas/quotes/newlines). Download uses a Blob
-  object URL — no network request, preserving the no-egress invariant.
+  `parseCsv`). `parseCsv` has no quoting rules, so `toCsv` throws on values containing
+  commas/quotes/newlines rather than emitting a file the app's own parser cannot read.
+  Download uses a Blob object URL — no network request, preserving the no-egress
+  invariant.
 
 ## Testing
 
