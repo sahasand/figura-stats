@@ -1,15 +1,12 @@
 const { test, expect } = require("@playwright/test");
 
-test("forest plot renders an SVG end to end", async ({ page }) => {
+// Boot check only: the guided specs cover full webR renders. This guards the
+// trimmed nav — exactly the two guided analyses, in order, plus the empty state.
+test("app boots with exactly the two guided analyses", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /forest/i }).click();
-  await page.getByLabel(/effect label/i).fill("Hazard Ratio");
-  await page.getByRole("button", { name: /add row/i }).click();
-  await page.getByLabel(/label/i).first().fill("Overall");
-  await page.getByLabel(/estimate/i).first().fill("0.72");
-  await page.getByLabel(/lower/i).first().fill("0.55");
-  await page.getByLabel(/upper/i).first().fill("0.94");
-  await page.getByRole("button", { name: /render/i }).click();
-  // First run downloads the webR runtime + packages, so allow plenty of time.
-  await expect(page.locator("#preview svg")).toBeVisible({ timeout: 200000 });
+  const nav = page.locator("nav button[data-figure]");
+  await expect(nav).toHaveCount(2);
+  await expect(nav.nth(0)).toHaveText("Summary statistics");
+  await expect(nav.nth(1)).toHaveText("Kaplan-Meier");
+  await expect(page.getByText("Select an analysis on the left to begin.")).toBeVisible();
 });

@@ -1,19 +1,21 @@
 # Clinical Manuscript Figures
 
-Free, open-source, browser-based clinical figures for journal manuscripts —
-forest plots, CONSORT diagrams, Table 1, and Kaplan-Meier curves — rendered by
-real R (ggplot2, survival, knitr, pROC, gtsummary) via
+Free, open-source, browser-based clinical analyses for journal manuscripts,
+rendered by real R (ggplot2, survival, cowplot) via
 [webR](https://docs.r-wasm.org/webr/).
 
-It also runs a set of statistical analyses on your own data: **group
-comparison** (box/violin plot with a t-test/ANOVA or Mann-Whitney/
-Kruskal-Wallis test), **correlation** (scatter plot with Pearson or Spearman
-r), **ROC/AUC** (via pROC, with a Youden-optimal cutoff), and a
-**regression table** (univariable + multivariable logistic, Cox, or linear regression via
-gtsummary — Table 2 style). Unlike the summary-number figures above, these
-take an **uploaded CSV**: pick the file, then map its columns to each
-analysis's roles (group, value, predictor, outcome, covariates, ...) with an
-in-browser column picker.
+Two **guided analyses**, each a three-stage flow — Understand / Try an
+Example / Analyze Your Data — with teaching content and a frozen synthetic
+demo dataset:
+
+- **Summary statistics** (the baseline "Table 1"): upload a CSV and tick
+  variables; R assesses each continuous variable's normality (Shapiro-Wilk /
+  skewness, within study groups) and reports mean ± SD or median (IQR)
+  accordingly, with distribution plots (histogram + density, grouped box
+  plots, optional Q-Q panels), honest missing-data denominators, no baseline
+  p-values, and a copy-pasteable methods sentence.
+- **Kaplan-Meier**: survival curves with a number-at-risk table, log-rank
+  test, and median survival, from a time/event/group CSV.
 
 **Your data never leaves your browser.** There is no server; all computation
 runs client-side in WebAssembly.
