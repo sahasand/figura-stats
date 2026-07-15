@@ -27,7 +27,7 @@ commented-out blocks) is kept for resurrection.
 | R sources | `R/forest.R`, `R/consort.R`, `R/groupcompare.R`, `R/correlation.R`, `R/roc.R`, `R/regression.R`; their entries in the `render_figure` switch (`R/dispatch.R`) | `dispatch.R`, `km.R`, `summarize.R`, and `themes.R` (**stays** — `R/km.R:59` calls `.fig_theme`) |
 | Worker (`web/worker.js`) | Deleted files from the boot fetch list; `roc`/`regression` entries in `EXTRA_PACKAGES`; `knitr` from the boot package set (no `knitr::` call exists in `R/`) | `km: ["survival", "cowplot"]`; boot set `ggplot2, svglite, jsonlite` |
 | `DESCRIPTION` | `pROC, gtsummary, broom, broom.helpers, knitr` from Imports | `ggplot2, survival, cowplot, svglite, jsonlite, grDevices, stats` |
-| R tests | `test-forest.R`, `test-consort.R`, `test-groupcompare.R`, `test-correlation.R`, `test-roc.R`, `test-regression.R` | `test-summarize.R`, `test-km*.R`, dispatch/theme tests as applicable |
+| R tests | `test-forest.R`, `test-consort.R`, `test-groupcompare.R`, `test-correlation.R`, `test-roc.R`, `test-regression.R` | `test-summarize.R`, `test-summary-demo.R`, `test-km.R`, `test-km-demo.R`, `test-dispatch.R` (exercises only `summary` + the error contract), `test-themes.R` |
 | E2E | `tests/e2e/analysis.spec.js` (covers removed analyses); `smoke.spec.js` rewritten — its forest end-to-end becomes a minimal boot check (page loads, nav shows exactly the two guided analyses); webR end-to-end coverage already lives in `km-guided` / `summary-guided` specs | `km.spec.js`, `km-guided.spec.js`, `summary-guided.spec.js` |
 | Fixtures | `tests/e2e/fixtures/groupcompare.csv` | `km.csv`, testthat fixtures used by keepers |
 
