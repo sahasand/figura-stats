@@ -79,6 +79,6 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
       b.classList.toggle("active", b === btn));
     const container = document.getElementById("form");
     container.innerHTML = "";
-    (forms[kind] || (() => {}))(container, render, runFigure);
+    (forms[kind] || (() => {}))(container, render, runFigure, setStatus);
   });
 });

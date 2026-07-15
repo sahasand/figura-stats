@@ -16,7 +16,8 @@ const CONTEXT_FOR_STAGE = { understand: null, example: "demo", analyze: "user" }
 // within the tab (PRD story 3/4); page reload starts clean by construction.
 let session = null;
 
-export function renderGuidedKm(container, onSubmit, runFigure) {
+export function renderGuidedKm(container, onSubmit, runFigure, setStatus) {
+  const status = setStatus || (() => {});
   session = session || createKmSession();
   // URL hash carries analysis+stage ONLY — never inputs, filenames, results.
   const fromHash = (location.hash.match(/^#km\/(\w+)$/) || [])[1];
@@ -40,10 +41,14 @@ export function renderGuidedKm(container, onSubmit, runFigure) {
     preview.innerHTML = "Rendering… (first run downloads R packages)";
     stats.textContent = "";
     stats.classList.remove("error");
+    status("busy", "R: working…");
     // Snapshot the demo generation so a Reset Example landing mid-run can be
     // detected on resolve and the stale result fully dropped.
     const startGen = getDemoGeneration(session);
     return runFigure(spec).then((out) => {
+      // The chip reports the R session's state, not the visible pane's — set it
+      // on every completion, even for results that are dropped or not painted.
+      status(out.ok ? "ready" : "error", out.ok ? "R: ready" : "R: error");
       // Reset-mid-run: a demo run invalidated by Reset Example neither stores nor paints.
       if (context === "demo" && !isDemoGenerationCurrent(session, startGen)) return out;
       // Tab-switch-mid-run: paint only when this context is still the one the
