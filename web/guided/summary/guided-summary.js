@@ -30,7 +30,7 @@ function renderSummaryExperiments(panel, ctx, rerun) {
 }
 
 export const renderGuidedSummary = createGuidedShell({
-  title: "Table 1 — Summary statistics",
+  title: "Summary statistics",
   hashPrefix: "summary",
   renderUnderstand,
   exampleIntroHtml: EXAMPLE_INTRO_HTML,

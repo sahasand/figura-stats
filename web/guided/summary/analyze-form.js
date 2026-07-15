@@ -117,7 +117,7 @@ export function renderSummaryForm(container, onSubmit, doc = globalThis.document
     config.appendChild(plotsLabel);
 
     const btn = doc.createElement("button");
-    btn.type = "button"; btn.id = "render"; btn.textContent = "Render Table 1";
+    btn.type = "button"; btn.id = "render"; btn.textContent = "Render summary table";
     btn.onclick = () => {
       const selected = table.columns.filter((c) => boxes[c].checked && c !== groupChoice.group);
       onSubmit(buildSummarySpec(table, {

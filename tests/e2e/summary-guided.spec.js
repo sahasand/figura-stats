@@ -4,7 +4,7 @@ const path = require("path");
 
 test("guided summary shows three tabs, syncs the hash, starts on Understand", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await expect(page.getByRole("tab", { name: "Understand" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Try an Example" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Analyze Your Data" })).toBeVisible();
@@ -16,7 +16,7 @@ test("guided summary shows three tabs, syncs the hash, starts on Understand", as
 
 test("Understand teaches the Table 1 fallacy and mean-vs-median", async ({ page }) => {
   await page.goto("/#summary/understand");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await expect(page.getByRole("heading", { name: /Mean .* median/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: /no p-values/i })).toBeVisible();
   await expect(page.getByText("SD, never SEM")).toBeVisible();
@@ -24,7 +24,7 @@ test("Understand teaches the Table 1 fallacy and mean-vs-median", async ({ page 
 
 test("Analyze tab is progressive: no checklist or Render before a file is chosen", async ({ page }) => {
   await page.goto("/#summary/analyze");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await expect(page.locator("#csv")).toBeVisible();
   await expect(page.locator("#summary-vars")).toBeHidden();
   await expect(page.locator("#render")).toBeHidden();
@@ -32,7 +32,7 @@ test("Analyze tab is progressive: no checklist or Render before a file is chosen
 
 test("malformed CSV shows a styled error and keeps the form pre-upload", async ({ page }) => {
   await page.goto("/#summary/analyze");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await page.locator("#csv").setInputFiles({
     name: "bad.csv", mimeType: "text/csv",
     buffer: Buffer.from("a,b\n1,2,3\n"),   // row wider than header -> parseCsv throws
@@ -44,7 +44,7 @@ test("malformed CSV shows a styled error and keeps the form pre-upload", async (
 test("Run Example computes the real Table 1 with the right decisions, plot, and legend", async ({ page }) => {
   test.setTimeout(360000);
   await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await expect(page.getByText("Synthetic demonstration data — not for clinical use.")).toBeVisible();
   await expect(page.locator("#preview table")).toHaveCount(0);
   await page.getByRole("button", { name: "Run Example Analysis" }).click();
@@ -61,7 +61,7 @@ test("Run Example computes the real Table 1 with the right decisions, plot, and 
 test("Force mean ± SD experiment rewrites the skewed row", async ({ page }) => {
   test.setTimeout(360000);
   await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await page.getByRole("button", { name: "Run Example Analysis" }).click();
   await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
   await page.locator("#exp-forcemean").check();
@@ -73,7 +73,7 @@ test("Force mean ± SD experiment rewrites the skewed row", async ({ page }) => 
 test("demo and user results are separate contexts; checklist controls the table", async ({ page }) => {
   test.setTimeout(360000);
   await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /table 1/i }).click();
+  await page.getByRole("button", { name: /summary statistics/i }).click();
   await page.getByRole("button", { name: "Run Example Analysis" }).click();
   await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
   await page.getByRole("tab", { name: "Analyze Your Data" }).click();

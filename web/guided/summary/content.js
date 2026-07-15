@@ -2,7 +2,7 @@
 // Teaching copy for the guided Summary (Table 1) analysis. Each section maps to a
 // documented descriptive-statistics reporting error.
 const SECTIONS = [
-  { title: "What a Table 1 is for", html: `
+  { title: "What this table (a clinical “Table 1”) is for", html: `
     <p>A baseline characteristics table (“Table 1”) describes who was in the study:
     the distribution of each variable, overall and — when relevant — by study group. It is a
     <em>description</em>, not a hypothesis test.</p>` },
