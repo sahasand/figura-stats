@@ -1,5 +1,16 @@
-import { parseCsv } from "../../lib/csv.js";
+import { parseCsv, toCsv } from "../../lib/csv.js";
 import { renderColumnPicker } from "../../lib/columnpicker.js";
+import { SUMMARY_DEMO } from "./demo-data.js";
+
+let exampleCsvUrl = null;
+function getExampleCsvUrl() {
+  if (!exampleCsvUrl) {
+    const blob = new Blob([toCsv(SUMMARY_DEMO.rows, SUMMARY_DEMO.columns)],
+      { type: "text/csv" });
+    exampleCsvUrl = URL.createObjectURL(blob);
+  }
+  return exampleCsvUrl;
+}
 
 // Pure: classify every column and flag ones that should start unticked.
 //   kinds: numeric with <=5 distinct non-missing values -> "categorical"
@@ -60,9 +71,22 @@ export function renderSummaryForm(container, onSubmit, doc = globalThis.document
   container.innerHTML = `
     <h2>Analyze your data</h2>
     <p>Your file is read locally in this browser and never uploaded.</p>
+    <details class="csv-help">
+      <summary>What your CSV should look like</summary>
+      <ul>
+        <li>One row per participant, one column per variable.</li>
+        <li>The first row holds the column names.</li>
+        <li>Leave a cell empty when a value is missing.</li>
+        <li>To compare groups, include a column naming each participant’s group or arm.</li>
+        <li>Keep numbers plain — no units, no thousands separators.</li>
+      </ul>
+      <p><a id="example-csv" download="example-baseline.csv" href="#">Download an example CSV</a>
+        — the synthetic teaching dataset from the Example tab.</p>
+    </details>
     <label for="csv">CSV file</label>
     <input type="file" id="csv" accept=".csv" />
     <div id="summary-config" hidden></div>`;
+  container.querySelector("#example-csv").href = getExampleCsvUrl();
   const config = container.querySelector("#summary-config");
   let table = null;
 
