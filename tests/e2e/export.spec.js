@@ -76,4 +76,11 @@ test("journal-grade exports: 600dpi-stamped PNG, stitched SVG, per-panel row, ts
   await expect(page.locator("#export-feedback-console")).toHaveText("Copied");
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   expect(clip).toMatch(/^Characteristic\t/);
+
+  // Switching analyses clears the shared output — a stale figure must never
+  // export under the new analysis's filename (journal correctness).
+  await page.getByRole("button", { name: /kaplan-meier/i }).click();
+  await expect(page.locator("#preview svg")).toHaveCount(0);
+  await expect(page.locator("#export-png")).toBeDisabled();
+  await expect(page.locator("#export-tsv")).toBeDisabled();
 });

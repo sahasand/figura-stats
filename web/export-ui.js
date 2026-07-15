@@ -55,10 +55,18 @@ export function initExportUI(getFigureKey) {
       label.textContent = `panel ${i}`;
       const png = document.createElement("button");
       png.textContent = "PNG";
-      png.addEventListener("click", () => exportPng(collectSvgPanels(preview)[i - 1].svg, i));
+      png.setAttribute("aria-label", `Download panel ${i} as PNG`);
+      png.addEventListener("click", () => {
+        const p = collectSvgPanels(preview)[i - 1];
+        if (p) exportPng(p.svg, i);
+      });
       const svg = document.createElement("button");
       svg.textContent = "SVG";
-      svg.addEventListener("click", () => exportSvg(collectSvgPanels(preview)[i - 1].svg, i));
+      svg.setAttribute("aria-label", `Download panel ${i} as SVG`);
+      svg.addEventListener("click", () => {
+        const p = collectSvgPanels(preview)[i - 1];
+        if (p) exportSvg(p.svg, i);
+      });
       panelsRow.append(label, png, svg);
     }
   }

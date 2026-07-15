@@ -73,6 +73,10 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const kind = btn.dataset.figure;
     currentFigure = kind;
+    document.getElementById("preview").innerHTML = "";
+    const stats = document.getElementById("stats");
+    stats.textContent = "";
+    stats.classList.remove("error");
     document.querySelectorAll("[data-figure]").forEach((b) =>
       { b.classList.toggle("active", b === btn);
         // Expose the selection to assistive tech, matching the guided
