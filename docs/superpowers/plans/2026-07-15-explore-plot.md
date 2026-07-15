@@ -1,0 +1,1689 @@
+# Explore Plot (interactive ggplot2 builder) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** A third guided analysis, `explore`, where the user maps CSV columns to aesthetics, picks one of six geoms, tweaks options with debounced live re-rendering via webR, and gets the exact reproducible ggplot2 code in the text pane.
+
+**Architecture:** `fig_explore(spec)` builds the ggplot **expression programmatically** (never string interpolation), evaluates it, and deparses the same expression components for the code pane. The UI is a `createGuidedShell` config plus a new opt-in `liveRender` shell mode (one render in flight + newest-pending coalescing). Text export becomes analysis-aware (`.R` for explore, `.tsv` default).
+
+**Tech Stack:** R (ggplot2 only — no new packages), vanilla ES modules, plain-Node unit tests, Playwright e2e.
+
+**Spec:** `docs/superpowers/specs/2026-07-15-explore-plot-design.md` — read it first.
+
+## Global Constraints
+
+- R tests: `Rscript -e 'devtools::test(filter = "explore")'` — never `testthat::test_file()`. `[ FAIL 0 | WARN 0 ]` is a hard gate.
+- ggplot2 4.x: `linewidth` not `size` for lines; no deprecated geoms/args.
+- Spec option keys are **snake_case** (`point_size`, `show_points`); tagged union — send only the active geom's options plus shared ones.
+- No new packages: `DESCRIPTION` and `EXTRA_PACKAGES` untouched. No network calls, no fonts/CDNs, no localStorage.
+- Emitted R code must run standalone with only `library(ggplot2)` — never reference `.km_palette()` / `.fig_theme()` or other internals.
+- All CSV-derived strings are DOM-built, never `innerHTML` (matches `analyze-form.js`).
+- E2E prep: `rm -rf web/R && cp -R R web/R` before `npm run test:e2e` or `npm run serve`.
+- JS unit runner: each new `*.test.mjs` must be appended to the `test:unit` chain in `package.json`.
+
+---
+
+### Task 1: Frozen demo dataset (generator + artifacts + tests)
+
+**Files:**
+- Create: `data-raw/explore-demo-generator.R`
+- Create (generated): `tests/testthat/fixtures/explore-demo.csv`, `web/guided/explore/demo-data.js`
+- Create: `tests/testthat/test-explore-demo.R`, `web/guided/explore/demo-data.test.mjs`
+- Modify: `package.json` (append unit test)
+
+**Interfaces:**
+- Produces: `EXPLORE_DEMO = { version, label, columns, rows }` from `web/guided/explore/demo-data.js`. Columns exactly: `patient_id, visit_month, age, bmi, biomarker, arm, sex, ecog`. 120 rows (40 patients × 3 visits); `bmi` is `null` in 5 fixed rows; `ecog` is a numeric-coded 0/1/2 category; `visit_month` ∈ {0, 3, 6}.
+
+- [ ] **Step 1: Write the generator**
+
+```r
+# data-raw/explore-demo-generator.R
+# Deterministic generator for the frozen Explore-plot demonstration dataset.
+# Long format (one row per patient-visit) so the line geom's group role has
+# repeated-measures data to bite on. ecog is DELIBERATELY numeric-coded (0/1/2)
+# to exercise numeric-as-categorical handling; bmi has 5 fixed missing cells to
+# exercise the complete-cases exclusion. Rerunning MUST reproduce the committed
+# artifacts byte-for-byte; if you change anything, bump EXPLORE_DEMO.version.
+set.seed(73)
+n_pat <- 40
+patient_id <- sprintf("P%02d", seq_len(n_pat))
+arm <- rep(c("Control", "Treatment"), each = n_pat / 2)
+sex <- sample(c("Female", "Male"), n_pat, replace = TRUE)
+age <- round(rnorm(n_pat, mean = 62, sd = 10))
+ecog <- sample(0:2, n_pat, replace = TRUE, prob = c(0.5, 0.35, 0.15))
+bmi <- round(rnorm(n_pat, mean = 27, sd = 4), 1)
+visits <- c(0, 3, 6)
+base <- rlnorm(n_pat, meanlog = 3, sdlog = 0.4)
+slope <- ifelse(arm == "Treatment", -0.18, -0.04)   # treatment lowers biomarker
+
+idx <- rep(seq_len(n_pat), each = length(visits))
+visit_month <- rep(visits, times = n_pat)
+noise <- rlnorm(n_pat * length(visits), meanlog = 0, sdlog = 0.15)
+biomarker <- round(base[idx] * exp(slope[idx] * visit_month) * noise, 1)
+
+bmi_long <- bmi[idx]
+miss_rows <- c(7, 31, 58, 84, 112)                  # fixed missing bmi cells
+bmi_chr <- format(bmi_long, trim = TRUE)
+bmi_chr[miss_rows] <- ""
+
+out <- data.frame(
+  patient_id = patient_id[idx], visit_month = visit_month,
+  age = age[idx], bmi = bmi_chr, biomarker = biomarker,
+  arm = arm[idx], sex = sex[idx], ecog = ecog[idx],
+  stringsAsFactors = FALSE)
+write.csv(out, "tests/testthat/fixtures/explore-demo.csv", row.names = FALSE, quote = FALSE)
+
+rows_list <- lapply(seq_len(nrow(out)), function(i) {
+  list(patient_id = out$patient_id[i], visit_month = out$visit_month[i],
+       age = out$age[i], bmi = if (bmi_chr[i] == "") NA else bmi_long[i],
+       biomarker = out$biomarker[i], arm = out$arm[i], sex = out$sex[i],
+       ecog = out$ecog[i])
+})
+rows_json <- jsonlite::toJSON(rows_list, auto_unbox = TRUE, na = "null", digits = NA)
+js <- paste0(
+  "// GENERATED by data-raw/explore-demo-generator.R — do not hand-edit.\n",
+  "export const EXPLORE_DEMO = {\n",
+  '  version: "1.0.0",\n',
+  '  label: "Synthetic demonstration data \\u2014 not for clinical use.",\n',
+  '  columns: ["patient_id", "visit_month", "age", "bmi", "biomarker", "arm", "sex", "ecog"],\n',
+  "  rows: ", rows_json, "\n};\n")
+writeLines(js, "web/guided/explore/demo-data.js")
+cat("md5(csv):", unname(tools::md5sum("tests/testthat/fixtures/explore-demo.csv")), "\n")
+```
+
+- [ ] **Step 2: Run the generator**
+
+Run: `mkdir -p web/guided/explore && Rscript data-raw/explore-demo-generator.R`
+Expected: prints `md5(csv): <hash>`; both artifacts exist.
+
+- [ ] **Step 3: Write the R frozen-properties test**
+
+```r
+# tests/testthat/test-explore-demo.R
+test_that("explore demo fixture has the frozen teaching properties", {
+  csv <- read.csv(test_path("fixtures", "explore-demo.csv"),
+                  stringsAsFactors = FALSE)
+  expect_equal(nrow(csv), 120)
+  expect_equal(names(csv), c("patient_id", "visit_month", "age", "bmi",
+                             "biomarker", "arm", "sex", "ecog"))
+  expect_equal(sort(unique(csv$visit_month)), c(0, 3, 6))
+  expect_equal(length(unique(csv$patient_id)), 40)
+  expect_equal(sum(is.na(csv$bmi)), 5)          # blank cells read as NA
+  expect_true(all(csv$ecog %in% 0:2))           # numeric-coded category
+  expect_equal(sort(unique(csv$arm)), c("Control", "Treatment"))
+})
+```
+
+- [ ] **Step 4: Run it**
+
+Run: `Rscript -e 'devtools::test(filter = "explore-demo")'`
+Expected: `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 7 ]`
+
+- [ ] **Step 5: Write the JS frozen-artifact test**
+
+```js
+// web/guided/explore/demo-data.test.mjs
+import assert from "node:assert/strict";
+import { EXPLORE_DEMO } from "./demo-data.js";
+
+assert.equal(EXPLORE_DEMO.rows.length, 120);
+assert.deepEqual(EXPLORE_DEMO.columns,
+  ["patient_id", "visit_month", "age", "bmi", "biomarker", "arm", "sex", "ecog"]);
+assert.equal(EXPLORE_DEMO.rows.filter((r) => r.bmi === null).length, 5);
+assert.ok(EXPLORE_DEMO.label.includes("not for clinical use"));
+assert.ok(EXPLORE_DEMO.rows.every((r) => [0, 3, 6].includes(r.visit_month)));
+assert.ok(EXPLORE_DEMO.rows.every((r) => [0, 1, 2].includes(r.ecog)));
+console.log("demo-data.test.mjs OK");
+```
+
+- [ ] **Step 6: Register in package.json and run**
+
+In `package.json`, append to the `test:unit` chain:
+`&& node web/guided/explore/demo-data.test.mjs`
+
+Run: `npm run test:unit`
+Expected: all suites pass, ends with `demo-data.test.mjs OK`.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add data-raw/explore-demo-generator.R tests/testthat/fixtures/explore-demo.csv \
+  web/guided/explore/demo-data.js web/guided/explore/demo-data.test.mjs \
+  tests/testthat/test-explore-demo.R package.json
+git commit -m "feat(explore): frozen synthetic demo dataset + generator"
+```
+
+---
+
+### Task 2: R expression core — `fig_explore` with scatter, dispatch registration
+
+**Files:**
+- Create: `R/explore.R`
+- Modify: `R/dispatch.R` (switch)
+- Create: `tests/testthat/test-explore.R`
+
+**Interfaces:**
+- Consumes: `.svg_string(plot, w, h)`, `%||%` from `R/dispatch.R`; `.numeric_col(rows, colname)`, `.char_col(rows, colname)` from `R/summarize.R`; `.km_palette(n)` from `R/km.R` (values inlined into emitted code, never referenced by name there).
+- Produces: `fig_explore(spec)` → `list(svg = <character>, text = <character>)`. Spec: `figure="explore"`, `data=[rows]`, `roles={x, y, color, facet, group}` (unused = NULL), `options={geom, ...}`.
+
+- [ ] **Step 1: Write failing tests for scatter + validation + adversarial names**
+
+```r
+# tests/testthat/test-explore.R
+rows_xy <- lapply(1:30, function(i)
+  list(age = 40 + i, bmi = 20 + (i %% 7) + i / 10,
+       arm = if (i %% 2) "Control" else "Treatment"))
+
+test_that("scatter renders and emits matching standalone code", {
+  out <- fig_explore(list(
+    data = rows_xy,
+    roles = list(x = "age", y = "bmi", color = "arm"),
+    options = list(geom = "scatter", point_size = 2, alpha = 0.8,
+                   smoother = "lm", se = TRUE)))
+  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$text, "library\\(ggplot2\\)")
+  expect_match(out$text, "geom_point", fixed = TRUE)
+  expect_match(out$text, "geom_smooth", fixed = TRUE)
+  expect_match(out$text, 'aes(x = .data[["age"]]', fixed = TRUE)
+  expect_match(out$text, "scale_colour_manual", fixed = TRUE)
+  expect_match(out$text, "#4477AA", fixed = TRUE)      # palette inlined
+  expect_no_match(out$text, "km_palette")              # never internals
+  expect_no_match(out$text, "fig_theme")
+})
+
+test_that("adversarial column names and labels survive", {
+  rows <- lapply(1:20, function(i)
+    list(`age (years)` = 40 + i, `BMI, kg/m²` = 22 + i / 5))
+  out <- fig_explore(list(
+    data = rows,
+    roles = list(x = "age (years)", y = "BMI, kg/m²"),
+    options = list(geom = "scatter",
+                   title = 'He said "wow"\nline two')))
+  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$text, '.data[["age (years)"]]', fixed = TRUE)
+  expect_match(out$text, '\\"wow\\"', fixed = TRUE)    # deparse-escaped quote
+})
+
+test_that("NA rows are excluded with a visible filter line", {
+  rows <- c(rows_xy, list(list(age = 99, bmi = NULL, arm = "Control")))
+  out <- fig_explore(list(
+    data = rows, roles = list(x = "age", y = "bmi"),
+    options = list(geom = "scatter")))
+  expect_match(out$text, "complete.cases", fixed = TRUE)
+  expect_match(out$text, "1 row")
+})
+
+test_that("readable errors: unknown geom, missing role, non-numeric column", {
+  expect_error(fig_explore(list(data = rows_xy, roles = list(x = "age"),
+    options = list(geom = "pie"))), "Unknown chart type")
+  expect_error(fig_explore(list(data = rows_xy, roles = list(x = "age"),
+    options = list(geom = "scatter"))), "y")
+  expect_error(fig_explore(list(data = rows_xy,
+    roles = list(x = "arm", y = "bmi"),
+    options = list(geom = "scatter"))), "must be numeric")
+  expect_error(fig_explore(list(data = rows_xy,
+    roles = list(x = "nope", y = "bmi"),
+    options = list(geom = "scatter"))), "not found")
+})
+
+test_that("dispatch routes explore", {
+  json <- jsonlite::toJSON(list(figure = "explore",
+    data = rows_xy, roles = list(x = "age", y = "bmi"),
+    options = list(geom = "scatter")), auto_unbox = TRUE)
+  res <- jsonlite::fromJSON(render_figure(json))
+  expect_true(res$ok)
+  expect_true(startsWith(res$svg, "<svg"))
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `Rscript -e 'devtools::test(filter = "^explore$")'`
+Expected: FAIL — `could not find function "fig_explore"`.
+
+- [ ] **Step 3: Implement `R/explore.R` (core + scatter)**
+
+```r
+# R/explore.R
+# Explore-plot figure: an interactive ggplot2 builder. The plot is built as an
+# R EXPRESSION (base call() construction — never string interpolation), then
+# evaluated; the SAME components are deparsed for the copy-pasteable code pane,
+# so the displayed code is what ran. Column names, titles, and labels are
+# arbitrary user strings; .data[["col"]] mappings and deparse() escaping keep
+# any of them safe.
+
+.EXPLORE_GEOMS <- c("scatter", "line", "boxplot", "violin", "bar", "histogram")
+.EXPLORE_BLUE <- "#4477AA"   # first Tol colour, for un-mapped fills
+
+# .data[["col"]] pronoun call — safe for any column name.
+.aes_col <- function(col) call("[[", quote(.data), col)
+
+# Read a column as numeric when every non-blank cell parses, else character.
+# Categorical roles accept numeric-coded columns (0/1/2 arms); the numeric
+# result is factor()-wrapped in the aes by the caller.
+.flex_col <- function(rows, colname) {
+  raw <- .char_col(rows, colname)
+  raw[!is.na(raw) & raw == ""] <- NA
+  num <- suppressWarnings(as.numeric(raw))
+  if (any(!is.na(raw) & is.na(num))) raw else num
+}
+
+# The emitted code assumes an interactive session (library(ggplot2) attached,
+# stats in the search path). Evaluation here happens inside the package, where
+# neither is guaranteed — so the eval env parents the ggplot2 namespace (all
+# ggplot2 functions resolve) and binds complete.cases explicitly.
+.explore_eval_env <- function(df) {
+  e <- new.env(parent = getNamespace("ggplot2"))
+  e$df <- df
+  e$complete.cases <- stats::complete.cases
+  e
+}
+
+fig_explore <- function(spec) {
+  rows <- spec$data
+  if (is.null(rows) || length(rows) == 0) stop("No data rows provided.")
+  roles <- spec$roles %||% list()
+  opt <- spec$options %||% list()
+  geom <- as.character(opt$geom %||% "")
+  if (!(geom %in% .EXPLORE_GEOMS))
+    stop(sprintf("Unknown chart type: '%s'.", geom))
+
+  needs_y <- geom %in% c("scatter", "line", "boxplot", "violin")
+  if (is.null(roles$x)) stop("Choose a column for the x axis.")
+  if (needs_y && is.null(roles$y)) stop("This chart type needs a y column.")
+
+  used <- Filter(Negate(is.null),
+    list(x = roles$x, y = if (needs_y) roles$y else NULL,
+         color = roles$color, facet = roles$facet,
+         group = if (geom == "line") roles$group else NULL))
+  have <- names(rows[[1]])
+  absent <- setdiff(unique(unlist(used)), have)
+  if (length(absent) > 0)
+    stop(sprintf("Column '%s' not found in the data.", absent[[1]]))
+
+  numeric_roles <- switch(geom,
+    scatter = c("x", "y"), line = c("x", "y"),
+    boxplot = "y", violin = "y", histogram = "x", bar = character(0))
+  df <- list()
+  for (rname in names(used)) {
+    col <- used[[rname]]
+    df[[col]] <- if (rname %in% numeric_roles) .numeric_col(rows, col)
+                 else .flex_col(rows, col)
+  }
+  df <- as.data.frame(df, check.names = FALSE, stringsAsFactors = FALSE)
+
+  n_drop <- nrow(df) - sum(stats::complete.cases(df))
+  if (n_drop == nrow(df)) stop("All rows have missing values in the selected columns.")
+  prep_expr <- NULL
+  if (n_drop > 0) {
+    cols_call <- as.call(c(quote(c), as.list(names(df))))
+    prep_expr <- bquote(df <- df[complete.cases(df[, .(cols_call)]), ])
+  }
+
+  # factor()-wrap numeric columns used in categorical positions.
+  wrap_cat <- function(col)
+    if (is.numeric(df[[col]])) call("factor", .aes_col(col)) else .aes_col(col)
+
+  aes_args <- list()
+  aes_args$x <- if (geom %in% c("boxplot", "violin", "bar")) wrap_cat(roles$x)
+                else .aes_col(roles$x)
+  if (needs_y) aes_args$y <- .aes_col(roles$y)
+  color_aes <- if (geom %in% c("scatter", "line")) "colour" else "fill"
+  if (!is.null(roles$color)) aes_args[[color_aes]] <- wrap_cat(roles$color)
+  if (!is.null(used$group)) aes_args$group <- wrap_cat(roles$group)
+  base_call <- call("ggplot", quote(df), as.call(c(quote(aes), aes_args)))
+
+  num1 <- function(v, d) { v <- suppressWarnings(as.numeric(v %||% d))
+                           if (length(v) != 1 || !is.finite(v)) d else v }
+  layers <- .explore_layers(geom, opt, roles)
+
+  scale_call <- NULL
+  if (!is.null(roles$color)) {
+    v <- df[[roles$color]]
+    pal <- .km_palette(length(unique(v[!is.na(v)])))
+    fun <- if (color_aes == "colour") "scale_colour_manual" else "scale_fill_manual"
+    scale_call <- as.call(list(as.name(fun),
+      values = as.call(c(quote(c), as.list(pal)))))
+  }
+  facet_call <- if (!is.null(roles$facet))
+    as.call(list(quote(facet_wrap), as.call(list(quote(vars), wrap_cat(roles$facet)))))
+
+  chr1 <- function(v) { v <- as.character(v %||% "")
+                        if (length(v) == 1 && nzchar(v)) v else NULL }
+  default_y <- switch(geom,
+    bar = if (isTRUE(opt$prop) && !is.null(roles$color))
+            sprintf("proportion within %s", roles$x)
+          else if (isTRUE(opt$prop)) "proportion of total" else "count",
+    histogram = if (isTRUE(opt$density)) "density" else "count",
+    roles$y)
+  labs_args <- list(x = chr1(opt$xlab) %||% roles$x,
+                    y = chr1(opt$ylab) %||% default_y)
+  if (!is.null(roles$color)) labs_args[[color_aes]] <- roles$color
+  if (!is.null(chr1(opt$title))) labs_args$title <- chr1(opt$title)
+  if (!is.null(chr1(opt$caption))) labs_args$caption <- chr1(opt$caption)
+
+  components <- c(list(base_call), layers,
+    if (!is.null(scale_call)) list(scale_call),
+    if (!is.null(facet_call)) list(facet_call),
+    list(as.call(c(quote(labs), labs_args)),
+         quote(theme_minimal(base_size = 12))))
+
+  env <- .explore_eval_env(df)
+  if (!is.null(prep_expr)) eval(prep_expr, env)
+  p <- eval(Reduce(function(a, b) call("+", a, b), components), env)
+
+  dep <- function(e) paste(deparse(e, width.cutoff = 60L), collapse = "\n    ")
+  code <- c("library(ggplot2)", "",
+    "# Load your data (edit the path):",
+    '# df <- read.csv("your-data.csv")', "")
+  if (!is.null(prep_expr)) code <- c(code,
+    sprintf("# %d row%s with missing values in the selected columns excluded:",
+            n_drop, if (n_drop == 1) "" else "s"),
+    dep(prep_expr), "")
+  code <- c(code, paste(vapply(components, dep, character(1)),
+                        collapse = " +\n  "))
+  list(svg = .svg_string(p, width = 7, height = 4.5),
+       text = paste(code, collapse = "\n"))
+}
+
+# One list of geom-layer calls per chart type. Kept separate from fig_explore
+# so each geom's options stay readable. Task 3 fills in the non-scatter geoms.
+.explore_layers <- function(geom, opt, roles) {
+  num1 <- function(v, d) { v <- suppressWarnings(as.numeric(v %||% d))
+                           if (length(v) != 1 || !is.finite(v)) d else v }
+  switch(geom,
+    scatter = {
+      l <- list(as.call(list(quote(geom_point),
+        size = num1(opt$point_size, 2), alpha = num1(opt$alpha, 0.8))))
+      sm <- as.character(opt$smoother %||% "none")
+      if (sm %in% c("lm", "loess"))
+        l <- c(l, list(as.call(list(quote(geom_smooth), method = sm,
+          formula = quote(y ~ x), se = isTRUE(opt$se %||% TRUE)))))
+      l
+    },
+    stop(sprintf("Unknown chart type: '%s'.", geom))
+  )
+}
+```
+
+Note `%||%` evaluates its right side lazily, but `opt$se %||% TRUE` is fine either way.
+
+- [ ] **Step 4: Register in the dispatch switch**
+
+In `R/dispatch.R`, change the switch to:
+
+```r
+    out <- switch(as.character(fig),
+      summary = fig_summary(spec),
+      km      = fig_km(spec),
+      explore = fig_explore(spec),
+      stop(sprintf("Unknown figure: %s", fig))
+    )
+```
+
+- [ ] **Step 5: Run tests to verify pass**
+
+Run: `Rscript -e 'devtools::test(filter = "^explore$")'`
+Expected: `[ FAIL 0 | WARN 0 | ... ]`. If a WARN leaks, fix it at the source (Global Constraints) — do not suppress your own code.
+
+- [ ] **Step 6: Run the full R suite (no regressions)**
+
+Run: `Rscript -e 'devtools::test()'`
+Expected: `[ FAIL 0 | WARN 0 | ... ]`
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add R/explore.R R/dispatch.R tests/testthat/test-explore.R
+git commit -m "feat(explore): expression-first fig_explore core with scatter geom"
+```
+
+---
+
+### Task 3: R — the five remaining geoms
+
+**Files:**
+- Modify: `R/explore.R` (`.explore_layers`)
+- Modify: `tests/testthat/test-explore.R` (append)
+
+**Interfaces:**
+- Consumes: Task 2's `fig_explore` / `.explore_layers` skeleton.
+- Produces: all six geoms render. Options honored — line: `linewidth`, `show_points`; boxplot: `jitter`, `notch`; violin: `inner_box`, `trim`; bar: `prop`, `position` ("dodge"/"stack"); histogram: `bins`, `density`.
+
+- [ ] **Step 1: Write failing tests for the five geoms**
+
+Append to `tests/testthat/test-explore.R`:
+
+```r
+demo_rows <- {
+  csv <- read.csv(test_path("fixtures", "explore-demo.csv"),
+                  stringsAsFactors = FALSE)
+  lapply(seq_len(nrow(csv)), function(i) as.list(csv[i, , drop = FALSE]))
+}
+
+test_that("line draws per-subject trajectories via the group role", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "visit_month", y = "biomarker",
+                 color = "arm", group = "patient_id"),
+    options = list(geom = "line", linewidth = 0.8, show_points = TRUE)))
+  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$text, "geom_line(linewidth = 0.8)", fixed = TRUE)
+  expect_match(out$text, 'group = .data[["patient_id"]]', fixed = TRUE)
+  expect_match(out$text, "geom_point", fixed = TRUE)
+})
+
+test_that("boxplot factor()-wraps a numeric-coded x and supports jitter", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "ecog", y = "biomarker"),
+    options = list(geom = "boxplot", jitter = TRUE, notch = FALSE)))
+  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$text, 'factor(.data[["ecog"]])', fixed = TRUE)
+  expect_match(out$text, "geom_jitter", fixed = TRUE)
+})
+
+test_that("violin renders with inner box", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "arm", y = "biomarker"),
+    options = list(geom = "violin", inner_box = TRUE, trim = FALSE)))
+  expect_true(startsWith(out$svg, "<svg"))
+  expect_match(out$text, "geom_violin", fixed = TRUE)
+  expect_match(out$text, "geom_boxplot(width = 0.15", fixed = TRUE)
+})
+
+test_that("bar proportions use the specced denominators", {
+  no_col <- fig_explore(list(data = demo_rows, roles = list(x = "sex"),
+    options = list(geom = "bar", prop = TRUE)))
+  expect_match(no_col$text, "after_stat(count/sum(count))", fixed = TRUE)
+  expect_match(no_col$text, "proportion of total", fixed = TRUE)
+  with_col <- fig_explore(list(data = demo_rows,
+    roles = list(x = "sex", color = "arm"),
+    options = list(geom = "bar", prop = TRUE)))
+  expect_match(with_col$text, 'position = "fill"', fixed = TRUE)
+  expect_match(with_col$text, "proportion within sex", fixed = TRUE)
+  dodged <- fig_explore(list(data = demo_rows,
+    roles = list(x = "sex", color = "arm"),
+    options = list(geom = "bar", prop = FALSE, position = "dodge")))
+  expect_match(dodged$text, 'position = "dodge"', fixed = TRUE)
+  expect_match(dodged$text, "scale_fill_manual", fixed = TRUE)
+})
+
+test_that("histogram honours bins and the density toggle", {
+  h <- fig_explore(list(data = demo_rows, roles = list(x = "biomarker"),
+    options = list(geom = "histogram", bins = 15)))
+  expect_match(h$text, "geom_histogram(bins = 15", fixed = TRUE)
+  d <- fig_explore(list(data = demo_rows, roles = list(x = "biomarker"),
+    options = list(geom = "histogram", density = TRUE)))
+  expect_match(d$text, "geom_density", fixed = TRUE)
+})
+
+test_that("facet emits facet_wrap(vars(...)) and renders", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "age", y = "biomarker", facet = "sex"),
+    options = list(geom = "scatter")))
+  expect_match(out$text, 'facet_wrap(vars(.data[["sex"]]))', fixed = TRUE)
+  expect_true(startsWith(out$svg, "<svg"))
+})
+```
+
+- [ ] **Step 2: Run to verify the new tests fail**
+
+Run: `Rscript -e 'devtools::test(filter = "^explore$")'`
+Expected: FAIL on each new geom ("Unknown chart type: 'line'").
+
+- [ ] **Step 3: Implement the remaining geoms**
+
+Replace `.explore_layers`'s `switch` body so all six branches exist:
+
+```r
+.explore_layers <- function(geom, opt, roles) {
+  num1 <- function(v, d) { v <- suppressWarnings(as.numeric(v %||% d))
+                           if (length(v) != 1 || !is.finite(v)) d else v }
+  has_col <- !is.null(roles$color)
+  switch(geom,
+    scatter = {
+      l <- list(as.call(list(quote(geom_point),
+        size = num1(opt$point_size, 2), alpha = num1(opt$alpha, 0.8))))
+      sm <- as.character(opt$smoother %||% "none")
+      if (sm %in% c("lm", "loess"))
+        l <- c(l, list(as.call(list(quote(geom_smooth), method = sm,
+          formula = quote(y ~ x), se = isTRUE(opt$se %||% TRUE)))))
+      l
+    },
+    line = {
+      l <- list(as.call(list(quote(geom_line),
+        linewidth = num1(opt$linewidth, 0.8))))
+      if (isTRUE(opt$show_points))
+        l <- c(l, list(as.call(list(quote(geom_point), size = 1.5))))
+      l
+    },
+    boxplot = {
+      l <- list(as.call(list(quote(geom_boxplot), notch = isTRUE(opt$notch))))
+      if (isTRUE(opt$jitter))
+        l <- c(l, list(as.call(list(quote(geom_jitter),
+          width = 0.2, size = 1, alpha = 0.5))))
+      l
+    },
+    violin = {
+      l <- list(as.call(list(quote(geom_violin), trim = isTRUE(opt$trim))))
+      if (isTRUE(opt$inner_box))
+        l <- c(l, list(as.call(list(quote(geom_boxplot),
+          width = 0.15, outlier.size = 0.8))))
+      l
+    },
+    bar = {
+      prop <- isTRUE(opt$prop)
+      if (prop && has_col)
+        list(as.call(list(quote(geom_bar), position = "fill")))
+      else if (prop)
+        list(as.call(list(quote(geom_bar), mapping = as.call(list(quote(aes),
+          y = quote(after_stat(count / sum(count))))))))
+      else if (has_col) {
+        pos <- as.character(opt$position %||% "dodge")
+        if (!pos %in% c("dodge", "stack")) pos <- "dodge"
+        list(as.call(list(quote(geom_bar), position = pos)))
+      } else
+        list(as.call(list(quote(geom_bar), fill = .EXPLORE_BLUE)))
+    },
+    histogram = {
+      if (isTRUE(opt$density)) {
+        if (has_col) list(as.call(list(quote(geom_density), alpha = 0.6)))
+        else list(as.call(list(quote(geom_density),
+          fill = .EXPLORE_BLUE, alpha = 0.6)))
+      } else {
+        b <- as.integer(num1(opt$bins, 30)); if (b < 1) b <- 30
+        if (has_col) list(as.call(list(quote(geom_histogram),
+          bins = b, position = "identity", alpha = 0.7)))
+        else list(as.call(list(quote(geom_histogram),
+          bins = b, fill = .EXPLORE_BLUE, colour = "white")))
+      }
+    },
+    stop(sprintf("Unknown chart type: '%s'.", geom))
+  )
+}
+```
+
+Note: notched boxplots on small groups warn (`notch went outside hinges`) — that is a data-dependent runtime warning, acceptable in the browser but the *tests* must not trigger it, which is why the boxplot test uses `notch = FALSE`. Do not add a notch-on test with tiny groups.
+
+- [ ] **Step 4: Run tests, then the full suite**
+
+Run: `Rscript -e 'devtools::test(filter = "^explore$")'` then `Rscript -e 'devtools::test()'`
+Expected: both `[ FAIL 0 | WARN 0 | ... ]`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add R/explore.R tests/testthat/test-explore.R
+git commit -m "feat(explore): line, boxplot, violin, bar, histogram geoms"
+```
+
+---
+
+### Task 4: Analysis-aware text export (`.R` for explore)
+
+**Files:**
+- Modify: `web/lib/export.js` (add `textExportDescriptor`)
+- Modify: `web/lib/export.test.mjs` (append)
+- Modify: `web/export-ui.js`
+
+**Interfaces:**
+- Produces: `textExportDescriptor(figureKey)` → `{ buttonLabel, copyLabel, ext, mime, downloadTitle, copyTitle }`. `export-ui.js` re-reads it on every `sync()` and at click time.
+
+- [ ] **Step 1: Write the failing unit test**
+
+Append to `web/lib/export.test.mjs` (follow the file's existing assert style):
+
+```js
+import { textExportDescriptor } from "./export.js";   // merge with existing imports
+
+{
+  const r = textExportDescriptor("explore");
+  assert.equal(r.ext, "R");
+  assert.equal(r.mime, "text/plain");
+  assert.equal(r.buttonLabel, ".R");
+  assert.equal(r.copyLabel, "Copy R code");
+  const d = textExportDescriptor("summary");
+  assert.equal(d.ext, "tsv");
+  assert.equal(d.mime, "text/tab-separated-values");
+  assert.equal(textExportDescriptor(undefined).ext, "tsv");
+}
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `node web/lib/export.test.mjs`
+Expected: FAIL — `textExportDescriptor` is not exported.
+
+- [ ] **Step 3: Implement the descriptor**
+
+Add to `web/lib/export.js`:
+
+```js
+// Per-analysis text-pane export. Explore's text pane holds R code, not a
+// table — journals get tables as .tsv, scripts as .R. Default covers every
+// other analysis so adding one never touches this file unless its text pane
+// is not tabular.
+export function textExportDescriptor(figureKey) {
+  if (figureKey === "explore") {
+    return { buttonLabel: ".R", copyLabel: "Copy R code", ext: "R",
+      mime: "text/plain",
+      copyTitle: "Copy the ggplot2 code — paste into your own R script",
+      downloadTitle: "Download the ggplot2 code as an .R script" };
+  }
+  return { buttonLabel: ".tsv", copyLabel: "Copy", ext: "tsv",
+    mime: "text/tab-separated-values",
+    copyTitle: "Copy the table and methods text — journals want tables as editable text, paste into Word or Excel",
+    downloadTitle: "Download the table and methods text as .tsv" };
+}
+```
+
+- [ ] **Step 4: Wire it into `web/export-ui.js`**
+
+Import it, make the download/copy handlers read it at click time, and refresh the button labels inside `sync()` (figure switches clear the panes, so the MutationObserver already fires `sync()` at the right moment):
+
+```js
+import { collectSvgPanels, combineSvgs, svgToPngBlob, downloadBlob, exportFilename,
+  textExportDescriptor } from "./lib/export.js";
+```
+
+Replace the `tsvBtn` click handler:
+
+```js
+  tsvBtn.addEventListener("click", () => {
+    const d = textExportDescriptor(getFigureKey());
+    downloadBlob(new Blob([stats.textContent], { type: d.mime }),
+      exportFilename(getFigureKey(), d.ext, {}));
+  });
+```
+
+Inside `sync()`, before the disabled-state lines, add:
+
+```js
+    const d = textExportDescriptor(getFigureKey());
+    tsvBtn.textContent = d.buttonLabel;
+    tsvBtn.title = d.downloadTitle;
+    copyBtn.textContent = d.copyLabel;
+    copyBtn.title = d.copyTitle;
+```
+
+At the end of `initExportUI` (after the existing `sync();` line), add a nav-click
+refresh — switching analyses with both panes already empty produces no DOM
+mutation, so the observer alone would leave the previous analysis's labels up:
+
+```js
+  // app.js registers its nav handlers before initExportUI runs, so by the time
+  // this listener fires getFigureKey() already reflects the new selection.
+  document.querySelectorAll("[data-figure]").forEach((b) =>
+    b.addEventListener("click", sync));
+```
+
+- [ ] **Step 5: Run unit tests**
+
+Run: `npm run test:unit`
+Expected: all pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add web/lib/export.js web/lib/export.test.mjs web/export-ui.js
+git commit -m "feat(export): analysis-aware text export — .R for explore, .tsv default"
+```
+
+---
+
+### Task 5: Column picker — numeric columns in categorical roles
+
+**Files:**
+- Modify: `web/lib/columnpicker.js`
+- Modify: `web/lib/columnpicker.test.mjs` (append)
+
+**Interfaces:**
+- Produces: role `type: "categorical+"` — lists categorical columns first, then numeric columns with the visible label `col + " (as categories)"` (option **value** stays the bare column name). Existing types unchanged.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `web/lib/columnpicker.test.mjs`, reusing the file's existing fake-DOM helpers:
+
+```js
+{
+  const table = { columns: ["age", "arm", "ecog"], rows: [],
+    types: { age: "numeric", arm: "categorical", ecog: "numeric" } };
+  const c = makeContainer();          // the file's existing fake-DOM factory
+  let got = null;
+  renderColumnPicker(c, [{ key: "x", label: "X", type: "categorical+" }],
+    table, (v) => { got = v; }, fakeDoc);
+  const opts = c.children[1].options.map((o) => [o.value, o.textContent]);
+  // blank, then categoricals, then numerics with the hint suffix
+  assert.deepEqual(opts.slice(1),
+    [["arm", "arm"], ["age", "age (as categories)"], ["ecog", "ecog (as categories)"]]);
+}
+```
+
+(Adapt `makeContainer`/`fakeDoc` names to whatever the existing tests in that file actually use — extend, don't fork, their helpers.)
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `node web/lib/columnpicker.test.mjs`
+Expected: FAIL — "categorical+" matches no columns.
+
+- [ ] **Step 3: Implement**
+
+In `web/lib/columnpicker.js`, replace the `compatible` helper and the option loop:
+
+```js
+  // "categorical+" also admits numeric columns (0/1/2-coded groups are common
+  // in clinical data), listed after true categoricals with a visible hint.
+  // The option VALUE is always the bare column name.
+  const compatible = (role) => {
+    if (role.type === "any") return table.columns.map((c) => [c, c]);
+    const match = table.columns.filter((c) => table.types[c] === role.type.replace("+", ""))
+      .map((c) => [c, c]);
+    if (!role.type.endsWith("+")) return match;
+    const extra = table.columns.filter((c) => table.types[c] === "numeric")
+      .map((c) => [c, c + " (as categories)"]);
+    return [...match, ...extra];
+  };
+```
+
+and in the option loop:
+
+```js
+    for (const [col, text] of compatible(role)) {
+      const opt = doc.createElement("option");
+      opt.value = col; opt.textContent = text;
+      sel.add ? sel.add(opt) : sel.appendChild(opt);
+    }
+```
+
+- [ ] **Step 4: Run unit tests (including regressions)**
+
+Run: `npm run test:unit`
+Expected: all pass (summary's `categorical` group picker must be unaffected).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add web/lib/columnpicker.js web/lib/columnpicker.test.mjs
+git commit -m "feat(columnpicker): categorical+ role type admits numeric-coded columns"
+```
+
+---
+
+### Task 6: Live-render plumbing — debounce + coalescer + shell `liveRender`
+
+**Files:**
+- Create: `web/guided/live-run.js`, `web/guided/live-run.test.mjs`
+- Modify: `web/guided/shell.js`, `web/styles.css`, `package.json` (append unit test)
+
+**Interfaces:**
+- Produces: `createCoalescer(run)` → `{ submit(spec) }` — at most one `run` in flight; a submit during flight overwrites the single pending spec; on settle the pending spec runs immediately. `debounce(fn, ms)` → debounced fn. Shell config gains `liveRender: true`: experiment controls stay enabled during runs, demo runs route through a coalescer, and re-renders keep the previous SVG visible under a `busy` class instead of blanking the pane.
+
+- [ ] **Step 1: Write failing unit tests**
+
+```js
+// web/guided/live-run.test.mjs
+import assert from "node:assert/strict";
+import { createCoalescer, debounce } from "./live-run.js";
+
+// Coalescer: rapid submits collapse to first + last.
+{
+  const ran = [];
+  let release;
+  const gate = () => new Promise((r) => { release = r; });
+  const c = createCoalescer(async (spec) => { ran.push(spec); await gate(); });
+  c.submit("a");                    // starts immediately
+  c.submit("b");                    // pending
+  c.submit("c");                    // overwrites b
+  assert.deepEqual(ran, ["a"]);
+  const r1 = release; r1();         // settle "a"
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(ran, ["a", "c"]);   // b never ran
+  release();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(ran, ["a", "c"]);
+}
+
+// Coalescer: a rejecting run must not wedge the pipeline.
+{
+  const ran = [];
+  const c = createCoalescer(async (spec) => {
+    ran.push(spec);
+    if (spec === "boom") throw new Error("x");
+  });
+  c.submit("boom");
+  await new Promise((r) => setTimeout(r, 0));
+  c.submit("next");
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(ran, ["boom", "next"]);
+}
+
+// Debounce: only the last call within the window fires.
+{
+  const got = [];
+  const d = debounce((v) => got.push(v), 20);
+  d(1); d(2); d(3);
+  await new Promise((r) => setTimeout(r, 60));
+  d(4);
+  await new Promise((r) => setTimeout(r, 60));
+  assert.deepEqual(got, [3, 4]);
+}
+console.log("live-run.test.mjs OK");
+```
+
+Wrap the file body in a top-level `await`-capable structure (`.mjs` supports top-level await; keep as written).
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `node web/guided/live-run.test.mjs`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement `web/guided/live-run.js`**
+
+```js
+// web/guided/live-run.js
+// Live-render plumbing for builder-style analyses. A running R eval in the
+// webR worker cannot be aborted, so "cancellation" is coalescing: at most one
+// render in flight, and only the NEWEST waiting spec runs next — intermediate
+// specs are dropped, so slow renders can never queue up.
+export function createCoalescer(run) {
+  let inFlight = false;
+  let pending = null;                 // newest spec submitted during flight
+  async function submit(spec) {
+    if (inFlight) { pending = spec; return; }
+    inFlight = true;
+    try { await run(spec); }
+    catch (_) { /* run() surfaces its own errors; keep the pipeline alive */ }
+    finally {
+      inFlight = false;
+      if (pending !== null) { const next = pending; pending = null; submit(next); }
+    }
+  }
+  return { submit };
+}
+
+export function debounce(fn, ms) {
+  let t = null;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+```
+
+- [ ] **Step 4: Register and run the unit test**
+
+Append `&& node web/guided/live-run.test.mjs` to `test:unit` in `package.json`.
+Run: `npm run test:unit` — Expected: all pass.
+
+- [ ] **Step 5: Add `liveRender` to the shell**
+
+In `web/guided/shell.js`:
+
+(a) In `runAndShow`, replace the unconditional blanking (lines 41–45) with:
+
+```js
+      const preview = document.getElementById("preview");
+      const stats = document.getElementById("stats");
+      // liveRender keeps the previous figure visible under a busy overlay;
+      // the classic path blanks the panes. First-ever render (empty pane)
+      // still shows the boot message either way.
+      if (cfg.liveRender && preview.querySelector("svg")) {
+        preview.classList.add("busy");
+      } else {
+        preview.innerHTML = "Rendering… (first run downloads R packages)";
+        stats.textContent = "";
+        stats.classList.remove("error");
+      }
+      status("busy", "R: working…");
+```
+
+and clear the class on every completion path — first line inside `.then((out) => {`:
+
+```js
+        preview.classList.remove("busy");
+```
+
+(b) In `renderExample`, route runs through a coalescer and keep controls live. Add near the top of `renderExample`:
+
+```js
+    // liveRender: builder controls stay enabled; overlapping requests are
+    // coalesced (one in flight, newest pending) instead of control-freezing.
+    const coalescer = cfg.liveRender
+      ? createCoalescer((spec) => ctx.runAndShow(spec, "demo"))
+      : null;
+```
+
+and change `runDemo` to:
+
+```js
+    async function runDemo() {
+      if (cfg.liveRender) {
+        return coalescer.submit(cfg.buildDemoSpec(ctx.getSession().demoOptions));
+      }
+      const controls = inFlightControls();
+      controls.forEach((el) => { el.disabled = true; });
+      try { await ctx.runAndShow(cfg.buildDemoSpec(ctx.getSession().demoOptions), "demo"); }
+      finally { controls.forEach((el) => { el.disabled = false; }); }
+    }
+```
+
+(c) Import at the top: `import { createCoalescer } from "./live-run.js";`
+
+(d) Expose a coalesced user-context runner so analyze forms share the same
+semantics — extend `ctx`:
+
+```js
+    const userCoalescer = cfg.liveRender
+      ? createCoalescer((spec) => runAndShow(spec, "user")) : null;
+    const ctx = { onSubmit, runAndShow,
+      runUser: (spec) => userCoalescer ? userCoalescer.submit(spec)
+                                       : runAndShow(spec, "user"),
+      getSession: () => session,
+      patchDemoOptions: (patch) => { session = setDemoOptions(session, patch); },
+      resetDemoState: () => { session = resetDemo(session); showStored("demo"); } };
+```
+
+and pass the analyze form `ctx.runUser` instead of the raw lambda:
+
+```js
+    cfg.renderAnalyzeForm(analyzePanel, (spec) => ctx.runUser(spec));
+```
+
+(e) `web/styles.css` — busy overlay, after the `.empty` rules:
+
+```css
+/* Live-render busy state: keep the previous figure visible, dimmed, with a
+   quiet corner chip — never blank the pane mid-exploration. */
+#preview.busy { position: relative; opacity: 0.55; }
+#preview.busy::after {
+  content: "Updating…";
+  position: absolute; top: 0.5rem; right: 0.75rem;
+  font-size: 0.8rem; color: var(--accent);
+}
+```
+
+- [ ] **Step 6: Verify no regressions (KM + Summary untouched behavior)**
+
+Run: `npm run test:unit`
+Expected: pass. (`liveRender` is absent from both existing configs, so all new paths are dormant; e2e confirms in Task 8.)
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add web/guided/live-run.js web/guided/live-run.test.mjs web/guided/shell.js \
+  web/styles.css package.json
+git commit -m "feat(shell): opt-in liveRender — coalesced runs, busy overlay, live controls"
+```
+
+---
+
+### Task 7: Explore builder — controls, spec builder, demo builder (pure logic + tests)
+
+**Files:**
+- Create: `web/guided/explore/builder-controls.js`, `web/guided/explore/builder-controls.test.mjs`
+- Create: `web/guided/explore/demo.js`, `web/guided/explore/demo.test.mjs`
+- Modify: `package.json` (append both tests)
+
+**Interfaces:**
+- Consumes: `renderColumnPicker` (Task 5's `categorical+`), `EXPLORE_DEMO` (Task 1).
+- Produces:
+  - `GEOM_ROLES(geom)` → array of columnpicker role descriptors.
+  - `defaultOptions(geom)` → fresh options object (includes `geom`).
+  - `buildExploreSpec(table, roles, options, caption)` → full spec; **projects rows to used columns only**; options are the tagged union (active geom's keys + `title/xlab/ylab` + optional `caption`).
+  - `renderBuilderControls(container, table, state, onChange, doc)` → renders geom select, role pickers, option inputs; calls `onChange({ roles, options })` with **replaced** (never mutated) objects.
+  - `buildExploreDemoSpec(demoOptions)` from `demo.js`, where `demoOptions = { roles, options }`.
+
+- [ ] **Step 1: Write failing tests for the pure logic**
+
+```js
+// web/guided/explore/builder-controls.test.mjs
+import assert from "node:assert/strict";
+import { GEOM_ROLES, defaultOptions, buildExploreSpec } from "./builder-controls.js";
+
+const table = {
+  columns: ["age", "bmi", "arm", "ecog"],
+  types: { age: "numeric", bmi: "numeric", arm: "categorical", ecog: "numeric" },
+  rows: [
+    { age: 61, bmi: 24.1, arm: "Control", ecog: 0 },
+    { age: 55, bmi: 27.9, arm: "Treatment", ecog: 1 },
+  ],
+};
+
+// Roles per geom: scatter needs numeric x/y; boxplot categorical+ x.
+{
+  const s = GEOM_ROLES("scatter");
+  assert.deepEqual(s.map((r) => [r.key, r.type, !!r.optional]), [
+    ["x", "numeric", false], ["y", "numeric", false],
+    ["color", "categorical+", true], ["facet", "categorical+", true]]);
+  const l = GEOM_ROLES("line").map((r) => r.key);
+  assert.deepEqual(l, ["x", "y", "color", "group", "facet"]);
+  const b = GEOM_ROLES("bar");
+  assert.equal(b.find((r) => r.key === "x").type, "categorical+");
+  assert.ok(!b.some((r) => r.key === "y"));
+}
+
+// Tagged union: only the active geom's option keys + shared keys are sent.
+{
+  const spec = buildExploreSpec(table,
+    { x: "age", y: "bmi", color: "arm", facet: null },
+    { ...defaultOptions("scatter"), title: "T" });
+  assert.equal(spec.figure, "explore");
+  assert.deepEqual(Object.keys(spec.options).sort(),
+    ["alpha", "geom", "point_size", "se", "smoother", "title", "xlab", "ylab"]);
+  assert.equal(spec.options.geom, "scatter");
+  // Rows are projected to used columns only — unmapped data never crosses.
+  assert.deepEqual(Object.keys(spec.data[0]).sort(), ["age", "arm", "bmi"]);
+  assert.equal(spec.roles.facet, null);
+}
+
+// Caption rides along when provided (demo path).
+{
+  const spec = buildExploreSpec(table, { x: "ecog" },
+    defaultOptions("bar"), "Synthetic demo");
+  assert.equal(spec.options.caption, "Synthetic demo");
+  assert.deepEqual(Object.keys(spec.data[0]), ["ecog"]);
+}
+console.log("builder-controls.test.mjs OK");
+```
+
+```js
+// web/guided/explore/demo.test.mjs
+import assert from "node:assert/strict";
+import { buildExploreDemoSpec, DEFAULT_DEMO_STATE } from "./demo.js";
+import { EXPLORE_DEMO } from "./demo-data.js";
+
+const spec = buildExploreDemoSpec(DEFAULT_DEMO_STATE());
+assert.equal(spec.figure, "explore");
+assert.equal(spec.options.geom, "scatter");
+assert.equal(spec.roles.x, "age");
+assert.equal(spec.roles.y, "biomarker");
+assert.equal(spec.roles.color, "arm");
+assert.equal(spec.options.caption, EXPLORE_DEMO.label);   // label baked into figure
+assert.equal(spec.data.length, EXPLORE_DEMO.rows.length);
+// Fresh objects each call — session-state must never share nested references.
+const a = DEFAULT_DEMO_STATE(), b = DEFAULT_DEMO_STATE();
+assert.notEqual(a.roles, b.roles);
+assert.notEqual(a.options, b.options);
+console.log("demo.test.mjs OK");
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `node web/guided/explore/builder-controls.test.mjs`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement `builder-controls.js`**
+
+```js
+// web/guided/explore/builder-controls.js
+// Pure descriptors + spec assembly for the ggplot2 builder, plus the DOM
+// control panel shared by the demo and analyze stages. All user strings are
+// DOM-built (textContent/value) — never innerHTML.
+import { renderColumnPicker } from "../../lib/columnpicker.js";
+
+const COLOR = { key: "color", label: "Color by (optional)", type: "categorical+", optional: true };
+const FACET = { key: "facet", label: "Facet by (optional)", type: "categorical+", optional: true };
+
+export function GEOM_ROLES(geom) {
+  switch (geom) {
+    case "scatter": return [
+      { key: "x", label: "X axis", type: "numeric" },
+      { key: "y", label: "Y axis", type: "numeric" }, COLOR, FACET];
+    case "line": return [
+      { key: "x", label: "X axis", type: "numeric" },
+      { key: "y", label: "Y axis", type: "numeric" }, COLOR,
+      { key: "group", label: "Line per (e.g. patient ID)", type: "categorical+", optional: true },
+      FACET];
+    case "boxplot": case "violin": return [
+      { key: "x", label: "Groups (x axis)", type: "categorical+" },
+      { key: "y", label: "Value (y axis)", type: "numeric" }, COLOR, FACET];
+    case "bar": return [
+      { key: "x", label: "Category (x axis)", type: "categorical+" }, COLOR, FACET];
+    case "histogram": return [
+      { key: "x", label: "Value (x axis)", type: "numeric" }, COLOR, FACET];
+    default: throw new Error("Unknown geom: " + geom);
+  }
+}
+
+const GEOM_OPTION_KEYS = {
+  scatter: ["point_size", "alpha", "smoother", "se"],
+  line: ["linewidth", "show_points"],
+  boxplot: ["jitter", "notch"],
+  violin: ["inner_box", "trim"],
+  bar: ["prop", "position"],
+  histogram: ["bins", "density"],
+};
+const SHARED_KEYS = ["title", "xlab", "ylab"];
+
+export function defaultOptions(geom) {
+  const d = { geom, title: "", xlab: "", ylab: "" };
+  const per = {
+    scatter: { point_size: 2, alpha: 0.8, smoother: "none", se: true },
+    line: { linewidth: 0.8, show_points: false },
+    boxplot: { jitter: false, notch: false },
+    violin: { inner_box: true, trim: false },
+    bar: { prop: false, position: "dodge" },
+    histogram: { bins: 30, density: false },
+  }[geom];
+  if (!per) throw new Error("Unknown geom: " + geom);
+  return { ...d, ...per };
+}
+
+// Tagged union: only the active geom's keys plus shared labels (and the demo
+// caption) cross to R; rows are projected to used columns only.
+export function buildExploreSpec(table, roles, options, caption) {
+  const geom = options.geom;
+  const roleKeys = GEOM_ROLES(geom).map((r) => r.key);
+  const outRoles = {};
+  for (const k of roleKeys) outRoles[k] = roles[k] ?? null;
+  const used = [...new Set(Object.values(outRoles).filter(Boolean))];
+  const data = table.rows.map((r) =>
+    Object.fromEntries(used.map((c) => [c, r[c]])));
+  const opts = { geom };
+  for (const k of [...GEOM_OPTION_KEYS[geom], ...SHARED_KEYS]) opts[k] = options[k];
+  if (caption) opts.caption = caption;
+  return { figure: "explore", data, roles: outRoles, options: opts };
+}
+
+const GEOM_LABELS = { scatter: "Scatter", line: "Line", boxplot: "Boxplot",
+  violin: "Violin", bar: "Bar", histogram: "Histogram / density" };
+
+// Per-geom option inputs: [key, label, kind, extra]
+const OPTION_CONTROLS = {
+  scatter: [["point_size", "Point size", "number", { min: 0.5, max: 6, step: 0.5 }],
+            ["alpha", "Opacity", "number", { min: 0.1, max: 1, step: 0.1 }],
+            ["smoother", "Trend line", "select", { choices: ["none", "lm", "loess"] }],
+            ["se", "Confidence band", "checkbox", {}]],
+  line: [["linewidth", "Line width", "number", { min: 0.2, max: 3, step: 0.2 }],
+         ["show_points", "Show points", "checkbox", {}]],
+  boxplot: [["jitter", "Show raw points", "checkbox", {}],
+            ["notch", "Notches", "checkbox", {}]],
+  violin: [["inner_box", "Inner boxplot", "checkbox", {}],
+           ["trim", "Trim tails", "checkbox", {}]],
+  bar: [["prop", "Show proportions", "checkbox", {}],
+        ["position", "Grouped bars", "select", { choices: ["dodge", "stack"] }]],
+  histogram: [["bins", "Bins", "number", { min: 5, max: 100, step: 1 }],
+              ["density", "Density curve instead", "checkbox", {}]],
+};
+
+// Renders geom select + role pickers + option inputs into container.
+// state = { roles, options }; onChange receives REPLACED objects (session-state
+// contract: never mutate nested demoOptions in place).
+export function renderBuilderControls(container, table, state, onChange, doc = globalThis.document) {
+  container.innerHTML = "";
+
+  const geomLabel = doc.createElement("label");
+  geomLabel.textContent = "Chart type";
+  const geomSel = doc.createElement("select");
+  geomSel.id = "explore-geom";
+  geomLabel.htmlFor = geomSel.id;
+  for (const g of Object.keys(GEOM_LABELS)) {
+    const o = doc.createElement("option");
+    o.value = g; o.textContent = GEOM_LABELS[g];
+    geomSel.add ? geomSel.add(o) : geomSel.appendChild(o);
+  }
+  geomSel.value = state.options.geom;
+  container.append(geomLabel, geomSel);
+
+  const rolesWrap = doc.createElement("div");
+  rolesWrap.className = "explore-roles";
+  const optsWrap = doc.createElement("div");
+  optsWrap.className = "explore-options";
+  const labelsWrap = doc.createElement("div");
+  labelsWrap.className = "explore-labels";
+  container.append(rolesWrap, optsWrap, labelsWrap);
+
+  let roles = { ...state.roles };
+  let options = { ...state.options };
+  const emit = () => onChange({ roles: { ...roles }, options: { ...options } });
+
+  geomSel.onchange = () => {
+    const geom = geomSel.value;
+    const keep = GEOM_ROLES(geom).map((r) => r.key);
+    // Keep still-compatible selections; drop the rest. Type compatibility is
+    // re-checked by the pickers below (a numeric y stays numeric everywhere).
+    roles = Object.fromEntries(keep.map((k) => [k, roles[k] ?? null]));
+    options = { ...defaultOptions(geom),
+      title: options.title, xlab: options.xlab, ylab: options.ylab };
+    buildRoles(); buildOptions();
+    emit();
+  };
+
+  function readSelects() {
+    return Object.fromEntries(GEOM_ROLES(options.geom).map((r) => {
+      const sel = rolesWrap.querySelector("#cp_" + r.key);
+      return [r.key, sel && sel.value ? sel.value : null];
+    }));
+  }
+
+  function buildRoles() {
+    // renderColumnPicker fires onReady synchronously at build time, BEFORE the
+    // saved selections are restored below — that call must not clobber `roles`.
+    let ready = false;
+    renderColumnPicker(rolesWrap, GEOM_ROLES(options.geom), table, (v) => {
+      if (!ready) return;
+      // v is null while a required role is unset; individual selections still
+      // exist in the DOM, so read them directly to keep partial state.
+      roles = v || readSelects();
+      emit();
+    }, doc);
+    // Restore prior selections where the column still exists in the picker.
+    for (const r of GEOM_ROLES(options.geom)) {
+      const sel = rolesWrap.querySelector("#cp_" + r.key);
+      if (sel && roles[r.key]) sel.value = roles[r.key];
+    }
+    ready = true;
+  }
+
+  function buildOptions() {
+    optsWrap.innerHTML = "";
+    for (const [key, label, kind, extra] of OPTION_CONTROLS[options.geom]) {
+      const wrap = doc.createElement("label");
+      wrap.textContent = label + " ";
+      let input;
+      if (kind === "select") {
+        input = doc.createElement("select");
+        for (const c of extra.choices) {
+          const o = doc.createElement("option");
+          o.value = c; o.textContent = c;
+          input.add ? input.add(o) : input.appendChild(o);
+        }
+        input.value = String(options[key]);
+        input.onchange = () => { options = { ...options, [key]: input.value }; emit(); };
+      } else if (kind === "checkbox") {
+        input = doc.createElement("input");
+        input.type = "checkbox"; input.checked = !!options[key];
+        input.onchange = () => { options = { ...options, [key]: input.checked }; emit(); };
+      } else {
+        input = doc.createElement("input");
+        input.type = "number";
+        input.min = extra.min; input.max = extra.max; input.step = extra.step;
+        input.value = options[key];
+        input.onchange = () => {
+          const v = Number(input.value);
+          options = { ...options, [key]: Number.isFinite(v) ? v : options[key] };
+          emit();
+        };
+      }
+      input.id = "opt-" + key;
+      wrap.htmlFor = input.id;
+      wrap.appendChild(input);
+      optsWrap.appendChild(wrap);
+    }
+    labelsWrap.innerHTML = "";
+    for (const [key, label] of [["title", "Title"], ["xlab", "X label"], ["ylab", "Y label"]]) {
+      const wrap = doc.createElement("label");
+      wrap.textContent = label + " ";
+      const input = doc.createElement("input");
+      input.type = "text"; input.value = options[key]; input.id = "lab-" + key;
+      wrap.htmlFor = input.id;
+      input.oninput = () => { options = { ...options, [key]: input.value }; emit(); };
+      wrap.appendChild(input);
+      labelsWrap.appendChild(wrap);
+    }
+  }
+
+  buildRoles(); buildOptions();
+}
+```
+
+- [ ] **Step 4: Implement `demo.js`**
+
+```js
+// web/guided/explore/demo.js
+import { EXPLORE_DEMO } from "./demo-data.js";
+import { buildExploreSpec, defaultOptions } from "./builder-controls.js";
+
+// The demo table in csv.js shape, so the builder controls work identically
+// on the demo and on uploaded data.
+export const DEMO_TABLE = {
+  columns: EXPLORE_DEMO.columns,
+  rows: EXPLORE_DEMO.rows,
+  types: { patient_id: "categorical", visit_month: "numeric", age: "numeric",
+           bmi: "numeric", biomarker: "numeric", arm: "categorical",
+           sex: "categorical", ecog: "numeric" },
+};
+
+// Fresh nested objects on every call — session-state resets by shallow copy.
+export function DEFAULT_DEMO_STATE() {
+  return {
+    roles: { x: "age", y: "biomarker", color: "arm", facet: null },
+    options: defaultOptions("scatter"),
+  };
+}
+
+// Same request path as user data; the synthetic label is baked INTO the
+// rendered figure via options.caption (mirrors the Summary demo).
+export function buildExploreDemoSpec(demoState) {
+  return buildExploreSpec(DEMO_TABLE, demoState.roles, demoState.options,
+    EXPLORE_DEMO.label);
+}
+```
+
+- [ ] **Step 5: Register both tests and run**
+
+Append to `test:unit`: `&& node web/guided/explore/builder-controls.test.mjs && node web/guided/explore/demo.test.mjs`
+
+Run: `npm run test:unit`
+Expected: all pass.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add web/guided/explore/builder-controls.js web/guided/explore/builder-controls.test.mjs \
+  web/guided/explore/demo.js web/guided/explore/demo.test.mjs package.json
+git commit -m "feat(explore): builder controls, tagged-union spec builder, demo spec"
+```
+
+---
+
+### Task 8: Wire the guided analysis — content, config, analyze form, registration
+
+**Files:**
+- Create: `web/guided/explore/content.js`, `web/guided/explore/analyze-form.js`, `web/guided/explore/guided-explore.js`
+- Modify: `web/app.js`, `web/index.html`, `web/worker.js`
+
+**Interfaces:**
+- Consumes: `createGuidedShell` + `liveRender` + `ctx.runUser` (Task 6), builder controls + demo builders (Task 7), `debounce`/`createCoalescer` via shell, `parseCsv`/`toCsv`.
+- Produces: `renderGuidedExplore(container, onSubmit, runFigure, setStatus)` registered as `explore` in the `forms` map; nav button; worker fetches `explore.R`.
+
+- [ ] **Step 1: `content.js` (Understand stage + example intro + demo label)**
+
+```js
+// web/guided/explore/content.js
+export function renderUnderstand(panel) {
+  panel.innerHTML = `
+    <h3>Map columns to a picture</h3>
+    <p>Every ggplot2 chart answers one question: <em>which column goes where?</em>
+      The x and y positions, the colors, and the small-multiple panels (facets)
+      are each fed by one column of your data. That mapping — not the chart
+      type — is the core idea.</p>
+    <h3>Six chart types cover most manuscripts</h3>
+    <ul>
+      <li><strong>Scatter</strong> — two numeric measures per participant.</li>
+      <li><strong>Line</strong> — a measure over time; one line per participant
+        needs a <em>Line per</em> column (usually the patient ID).</li>
+      <li><strong>Boxplot / Violin</strong> — a numeric measure compared across groups.</li>
+      <li><strong>Bar</strong> — counts or proportions of a category.</li>
+      <li><strong>Histogram</strong> — the shape of one numeric measure.</li>
+    </ul>
+    <h3>The code pane is yours to keep</h3>
+    <p>Every plot comes with the exact ggplot2 code that drew it. Paste it into
+      your own R session with your CSV and you get the same figure — the
+      explorer doubles as a ggplot2 tutor.</p>`;
+}
+
+export const EXAMPLE_INTRO_HTML = `
+  <p>This synthetic trial follows 40 patients over three visits
+    (months 0, 3, 6) with a biomarker, age, BMI, ECOG status, and study arm.
+    Change anything below — the plot redraws as you explore.</p>`;
+```
+
+- [ ] **Step 2: `analyze-form.js` (upload + live builder)**
+
+```js
+// web/guided/explore/analyze-form.js
+import { parseCsv, toCsv } from "../../lib/csv.js";
+import { renderBuilderControls, buildExploreSpec, defaultOptions }
+  from "./builder-controls.js";
+import { debounce } from "../live-run.js";
+import { EXPLORE_DEMO } from "./demo-data.js";
+
+let exampleCsvUrl = null;
+function getExampleCsvUrl() {
+  if (!exampleCsvUrl) {
+    const blob = new Blob([toCsv(EXPLORE_DEMO.rows, EXPLORE_DEMO.columns)],
+      { type: "text/csv" });
+    exampleCsvUrl = URL.createObjectURL(blob);
+  }
+  return exampleCsvUrl;
+}
+
+// Progressive disclosure like the Summary form: file input only, then the
+// builder appears after a successful parse. Every control change re-renders,
+// debounced; coalescing lives in the shell's runUser path (onSubmit).
+export function renderExploreForm(container, onSubmit, doc = globalThis.document) {
+  container.innerHTML = `
+    <h2>Analyze your data</h2>
+    <p>Your file is read locally in this browser and never uploaded.</p>
+    <details class="csv-help">
+      <summary>What your CSV should look like</summary>
+      <ul>
+        <li>One row per observation, one column per variable.</li>
+        <li>The first row holds the column names.</li>
+        <li>Leave a cell empty when a value is missing.</li>
+        <li>For repeated measures, include an ID column and a time column.</li>
+      </ul>
+      <p><a id="example-csv" download="example-explore.csv" href="#">Download an example CSV</a>
+        — the synthetic teaching dataset from the Example tab.</p>
+    </details>
+    <label for="csv">CSV file</label>
+    <input type="file" id="csv" accept=".csv" />
+    <div id="explore-config" hidden></div>`;
+  container.querySelector("#example-csv").href = getExampleCsvUrl();
+  const config = container.querySelector("#explore-config");
+  let table = null;
+
+  function showError(message) {
+    const stats = doc.getElementById("stats");
+    stats.textContent = "Error: " + message;
+    stats.classList.add("error");
+  }
+
+  const submitDebounced = debounce((state) => {
+    if (!state.roles.x) return;                      // incomplete mapping: wait
+    const need_y = ["scatter", "line", "boxplot", "violin"]
+      .includes(state.options.geom);
+    if (need_y && !state.roles.y) return;
+    onSubmit(buildExploreSpec(table, state.roles, state.options));
+  }, 400);
+
+  container.querySelector("#csv").onchange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        table = parseCsv(reader.result);
+        config.hidden = false;
+        doc.getElementById("stats").classList.remove("error");
+        const state = { roles: {}, options: defaultOptions("scatter") };
+        renderBuilderControls(config, table, state, submitDebounced, doc);
+      } catch (err) {
+        table = null;
+        config.hidden = true;
+        config.innerHTML = "";
+        showError(err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+}
+```
+
+- [ ] **Step 3: `guided-explore.js` (the shell config)**
+
+```js
+// web/guided/explore/guided-explore.js
+import { createGuidedShell } from "../shell.js";
+import { renderUnderstand, EXAMPLE_INTRO_HTML } from "./content.js";
+import { buildExploreDemoSpec, DEFAULT_DEMO_STATE, DEMO_TABLE } from "./demo.js";
+import { EXPLORE_DEMO } from "./demo-data.js";
+import { renderBuilderControls } from "./builder-controls.js";
+import { debounce } from "../live-run.js";
+import { renderExploreForm } from "./analyze-form.js";
+
+// The "experiments" for this analysis ARE the builder. Changes patch the demo
+// state and rerun (debounced); the shell's liveRender coalescer guarantees at
+// most one render in flight with only the newest pending spec queued.
+function renderExploreExperiments(panel, ctx, rerun) {
+  const host = panel.querySelector("#demo-experiments");
+  host.innerHTML = "";
+  const rerunDebounced = debounce(rerun, 400);
+  renderBuilderControls(host, DEMO_TABLE, ctx.getSession().demoOptions, (state) => {
+    ctx.patchDemoOptions(state);
+    rerunDebounced();
+  });
+}
+
+export const renderGuidedExplore = createGuidedShell({
+  title: "Explore plot",
+  hashPrefix: "explore",
+  liveRender: true,
+  renderUnderstand,
+  exampleIntroHtml: EXAMPLE_INTRO_HTML,
+  demoLabel: EXPLORE_DEMO.label,
+  buildDemoSpec: buildExploreDemoSpec,
+  defaultDemoOptions: DEFAULT_DEMO_STATE,
+  experimentControlsSelector: "#demo-experiments select, #demo-experiments input",
+  renderExperiments: renderExploreExperiments,
+  renderAnalyzeForm: renderExploreForm,
+});
+```
+
+Note `patchDemoOptions(state)` receives `{ roles, options }` whole-object patches — `setDemoOptions` shallow-merges, and the builder always passes fresh nested objects (Task 7 contract), so `_demoDefaults` never gets corrupted. `DEFAULT_DEMO_STATE` must remain a function returning fresh objects for the same reason.
+
+- [ ] **Step 4: Register everywhere (app.js, index.html, worker.js)**
+
+`web/app.js` — extend the import block and registry:
+
+```js
+import { renderGuidedExplore } from "./guided/explore/guided-explore.js";
+const forms = { summary: renderGuidedSummary, km: renderGuidedKm,
+                explore: renderGuidedExplore };
+```
+
+`web/index.html` — add inside the nav, after the KM button:
+
+```html
+        <button data-figure="explore">Explore plot</button>
+```
+
+`web/worker.js` — extend the boot fetch loop:
+
+```js
+  for (const f of ["dispatch.R", "summarize.R", "km.R", "themes.R", "explore.R"]) {
+```
+
+(No `EXTRA_PACKAGES` entry — explore uses only the boot set.)
+
+- [ ] **Step 5: Manual smoke check in the browser**
+
+```bash
+rm -rf web/R && cp -R R web/R && npm run serve
+```
+
+Visit http://localhost:8321 → Explore plot → Try an Example → Run Example Analysis. Verify: scatter renders with the demo caption; changing geom to Boxplot with x=arm re-renders without blanking; the code pane shows `library(ggplot2)` code; the console toolbar reads "Copy R code" / ".R".
+
+- [ ] **Step 6: Run all unit tests**
+
+Run: `npm run test:unit`
+Expected: all pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add web/guided/explore/ web/app.js web/index.html web/worker.js
+git commit -m "feat(explore): guided analysis — understand, live demo builder, analyze form"
+```
+
+---
+
+### Task 9: E2E tests, docs, full verification
+
+**Files:**
+- Create: `tests/e2e/explore-guided.spec.js`
+- Modify: `CLAUDE.md` (architecture notes)
+
+**Interfaces:**
+- Consumes: everything above, served with `web/R` copied.
+
+- [ ] **Step 1: Write the e2e spec**
+
+```js
+// tests/e2e/explore-guided.spec.js
+const { test, expect } = require("@playwright/test");
+
+test("explore shows three tabs and syncs the hash", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /explore plot/i }).click();
+  await expect(page.getByRole("tab", { name: "Understand" })).toBeVisible();
+  await page.getByRole("tab", { name: "Try an Example" }).click();
+  expect(page.url()).toContain("#explore/example");
+});
+
+test("demo renders live: geom switch re-renders and code follows", async ({ page }) => {
+  test.setTimeout(360000);
+  await page.goto("/#explore/example");
+  await page.getByRole("button", { name: /explore plot/i }).click();
+  await page.getByRole("button", { name: "Run Example Analysis" }).click();
+  await expect(page.locator("#preview svg")).toBeVisible({ timeout: 300000 });
+  await expect(page.locator("#stats")).toContainText("geom_point");
+  await expect(page.locator("#stats")).toContainText("library(ggplot2)");
+
+  // Switch to boxplot: controls stay enabled, plot + code update.
+  await page.locator("#explore-geom").selectOption("boxplot");
+  await page.locator("#cp_x").selectOption("arm");
+  await page.locator("#cp_y").selectOption("biomarker");
+  await expect(page.locator("#stats")).toContainText("geom_boxplot", { timeout: 120000 });
+  await expect(page.locator("#preview svg")).toBeVisible();
+
+  // Rapid-fire two option changes: final state matches the LAST change.
+  await page.locator("#opt-jitter").check();
+  await page.locator("#opt-notch").check();
+  await expect(page.locator("#stats")).toContainText("notch = TRUE", { timeout: 120000 });
+});
+
+test("text toolbar is R-aware on explore and tsv elsewhere", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /explore plot/i }).click();
+  await expect(page.locator("#export-tsv")).toHaveText(".R");
+  await expect(page.locator("#export-copy")).toHaveText("Copy R code");
+  await page.getByRole("button", { name: /summary statistics/i }).click();
+  await expect(page.locator("#export-tsv")).toHaveText(".tsv");
+  await expect(page.locator("#export-copy")).toHaveText("Copy");
+});
+
+test("analyze stage is progressive and renders an uploaded CSV live", async ({ page }) => {
+  test.setTimeout(360000);
+  await page.goto("/#explore/analyze");
+  await page.getByRole("button", { name: /explore plot/i }).click();
+  await expect(page.locator("#csv")).toBeVisible();
+  await expect(page.locator("#explore-config")).toBeHidden();
+  const csv = "age,bmi,arm\n" + Array.from({ length: 20 }, (_, i) =>
+    `${40 + i},${(22 + (i % 6)).toFixed(1)},${i % 2 ? "T" : "C"}`).join("\n");
+  await page.locator("#csv").setInputFiles({
+    name: "mini.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.locator("#explore-config")).toBeVisible();
+  await page.locator("#cp_x").selectOption("age");
+  await page.locator("#cp_y").selectOption("bmi");
+  await expect(page.locator("#preview svg")).toBeVisible({ timeout: 300000 });
+  await expect(page.locator("#stats")).toContainText('.data[["age"]]');
+});
+```
+
+- [ ] **Step 2: Run the e2e suite**
+
+```bash
+rm -rf web/R && cp -R R web/R && npm run test:e2e
+```
+
+Expected: all specs pass, including the pre-existing KM/Summary/export specs (regression gate for the shell and export changes).
+
+- [ ] **Step 3: Update CLAUDE.md**
+
+In the Architecture section: change "Kaplan–Meier **and** Table 1 (Summary) both route through a guided three-stage shell" to name all three analyses, and append two sentences: Explore (`R/explore.R`) builds its ggplot as an expression and deparses the same expression into the code pane (never string-built R); `createGuidedShell` supports `liveRender: true` (coalesced one-in-flight rendering, busy overlay) and `web/lib/export.js`'s `textExportDescriptor` makes the text toolbar `.R`-aware for explore.
+
+- [ ] **Step 4: Full verification sweep**
+
+```bash
+Rscript -e 'devtools::test()'      # [ FAIL 0 | WARN 0 ]
+npm run test:unit
+rm -rf web/R && cp -R R web/R && npm run test:e2e
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tests/e2e/explore-guided.spec.js CLAUDE.md
+git commit -m "test(explore): e2e — live demo builder, coalesced updates, R-aware export"
+```
