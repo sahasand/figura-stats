@@ -145,6 +145,7 @@ fig_explore <- function(spec) {
 .explore_layers <- function(geom, opt, roles) {
   num1 <- function(v, d) { v <- suppressWarnings(as.numeric(v %||% d))
                            if (length(v) != 1 || !is.finite(v)) d else v }
+  has_col <- !is.null(roles$color)
   switch(geom,
     scatter = {
       l <- list(as.call(list(quote(geom_point),
@@ -154,6 +155,54 @@ fig_explore <- function(spec) {
         l <- c(l, list(as.call(list(quote(geom_smooth), method = sm,
           formula = quote(y ~ x), se = isTRUE(opt$se %||% TRUE)))))
       l
+    },
+    line = {
+      l <- list(as.call(list(quote(geom_line),
+        linewidth = num1(opt$linewidth, 0.8))))
+      if (isTRUE(opt$show_points))
+        l <- c(l, list(as.call(list(quote(geom_point), size = 1.5))))
+      l
+    },
+    boxplot = {
+      l <- list(as.call(list(quote(geom_boxplot), notch = isTRUE(opt$notch))))
+      if (isTRUE(opt$jitter))
+        l <- c(l, list(as.call(list(quote(geom_jitter),
+          width = 0.2, size = 1, alpha = 0.5))))
+      l
+    },
+    violin = {
+      l <- list(as.call(list(quote(geom_violin), trim = isTRUE(opt$trim))))
+      if (isTRUE(opt$inner_box))
+        l <- c(l, list(as.call(list(quote(geom_boxplot),
+          width = 0.15, outlier.size = 0.8))))
+      l
+    },
+    bar = {
+      prop <- isTRUE(opt$prop)
+      if (prop && has_col)
+        list(as.call(list(quote(geom_bar), position = "fill")))
+      else if (prop)
+        list(as.call(list(quote(geom_bar), mapping = as.call(list(quote(aes),
+          y = quote(after_stat(count / sum(count))))))))
+      else if (has_col) {
+        pos <- as.character(opt$position %||% "dodge")
+        if (!pos %in% c("dodge", "stack")) pos <- "dodge"
+        list(as.call(list(quote(geom_bar), position = pos)))
+      } else
+        list(as.call(list(quote(geom_bar), fill = .EXPLORE_BLUE)))
+    },
+    histogram = {
+      if (isTRUE(opt$density)) {
+        if (has_col) list(as.call(list(quote(geom_density), alpha = 0.6)))
+        else list(as.call(list(quote(geom_density),
+          fill = .EXPLORE_BLUE, alpha = 0.6)))
+      } else {
+        b <- as.integer(num1(opt$bins, 30)); if (b < 1) b <- 30
+        if (has_col) list(as.call(list(quote(geom_histogram),
+          bins = b, position = "identity", alpha = 0.7)))
+        else list(as.call(list(quote(geom_histogram),
+          bins = b, fill = .EXPLORE_BLUE, colour = "white")))
+      }
     },
     stop(sprintf("Unknown chart type: '%s'.", geom))
   )

@@ -63,3 +63,72 @@ test_that("dispatch routes explore", {
   expect_true(res$ok)
   expect_match(res$svg, "<svg", fixed = TRUE)
 })
+
+demo_rows <- {
+  csv <- read.csv(test_path("fixtures", "explore-demo.csv"),
+                  stringsAsFactors = FALSE)
+  lapply(seq_len(nrow(csv)), function(i) as.list(csv[i, , drop = FALSE]))
+}
+
+test_that("line draws per-subject trajectories via the group role", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "visit_month", y = "biomarker",
+                 color = "arm", group = "patient_id"),
+    options = list(geom = "line", linewidth = 0.8, show_points = TRUE)))
+  expect_match(out$svg, "<svg", fixed = TRUE)
+  expect_match(out$text, "geom_line(linewidth = 0.8)", fixed = TRUE)
+  expect_match(out$text, 'group = .data[["patient_id"]]', fixed = TRUE)
+  expect_match(out$text, "geom_point", fixed = TRUE)
+})
+
+test_that("boxplot factor()-wraps a numeric-coded x and supports jitter", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "ecog", y = "biomarker"),
+    options = list(geom = "boxplot", jitter = TRUE, notch = FALSE)))
+  expect_match(out$svg, "<svg", fixed = TRUE)
+  expect_match(out$text, 'factor(.data[["ecog"]])', fixed = TRUE)
+  expect_match(out$text, "geom_jitter", fixed = TRUE)
+})
+
+test_that("violin renders with inner box", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "arm", y = "biomarker"),
+    options = list(geom = "violin", inner_box = TRUE, trim = FALSE)))
+  expect_match(out$svg, "<svg", fixed = TRUE)
+  expect_match(out$text, "geom_violin", fixed = TRUE)
+  expect_match(out$text, "geom_boxplot(width = 0.15", fixed = TRUE)
+})
+
+test_that("bar proportions use the specced denominators", {
+  no_col <- fig_explore(list(data = demo_rows, roles = list(x = "sex"),
+    options = list(geom = "bar", prop = TRUE)))
+  expect_match(no_col$text, "after_stat(count/sum(count))", fixed = TRUE)
+  expect_match(no_col$text, "proportion of total", fixed = TRUE)
+  with_col <- fig_explore(list(data = demo_rows,
+    roles = list(x = "sex", color = "arm"),
+    options = list(geom = "bar", prop = TRUE)))
+  expect_match(with_col$text, 'position = "fill"', fixed = TRUE)
+  expect_match(with_col$text, "proportion within sex", fixed = TRUE)
+  dodged <- fig_explore(list(data = demo_rows,
+    roles = list(x = "sex", color = "arm"),
+    options = list(geom = "bar", prop = FALSE, position = "dodge")))
+  expect_match(dodged$text, 'position = "dodge"', fixed = TRUE)
+  expect_match(dodged$text, "scale_fill_manual", fixed = TRUE)
+})
+
+test_that("histogram honours bins and the density toggle", {
+  h <- fig_explore(list(data = demo_rows, roles = list(x = "biomarker"),
+    options = list(geom = "histogram", bins = 15)))
+  expect_match(h$text, "geom_histogram(bins = 15", fixed = TRUE)
+  d <- fig_explore(list(data = demo_rows, roles = list(x = "biomarker"),
+    options = list(geom = "histogram", density = TRUE)))
+  expect_match(d$text, "geom_density", fixed = TRUE)
+})
+
+test_that("facet emits facet_wrap(vars(...)) and renders", {
+  out <- fig_explore(list(data = demo_rows,
+    roles = list(x = "age", y = "biomarker", facet = "sex"),
+    options = list(geom = "scatter")))
+  expect_match(out$text, 'facet_wrap(vars(.data[["sex"]]))', fixed = TRUE)
+  expect_match(out$svg, "<svg", fixed = TRUE)
+})
