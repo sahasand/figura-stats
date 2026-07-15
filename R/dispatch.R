@@ -7,6 +7,7 @@ render_figure <- function(json_string) {
     out <- switch(as.character(fig),
       summary = fig_summary(spec),
       km      = fig_km(spec),
+      explore = fig_explore(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
     list(ok = TRUE, svg = out$svg, text = out$text)
