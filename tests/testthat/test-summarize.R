@@ -191,3 +191,36 @@ test_that("a group with a single non-missing continuous value shows the bare val
   expect_match(out$svg, ">42<")
   expect_false(grepl("NA", out$svg, fixed = TRUE))
 })
+
+test_that("show_plots bundles a table AND an inline svg with the teaching legend", {
+  spec <- mk_summary_spec()
+  spec$options$show_plots <- TRUE
+  out <- fig_summary(spec)
+  expect_match(out$svg, "<table", fixed = TRUE)
+  expect_match(out$svg, "<svg", fixed = TRUE)
+  expect_match(out$svg, "plot-legend", fixed = TRUE)
+  expect_match(out$svg, "dashed = mean", fixed = TRUE)
+  expect_match(out$svg, "lines separate", fixed = TRUE)
+})
+
+test_that("caption is rendered when provided", {
+  spec <- mk_summary_spec()
+  spec$options$show_plots <- TRUE
+  spec$options$caption <- "Synthetic demonstration data — not for clinical use."
+  expect_match(fig_summary(spec)$svg, "Synthetic demonstration data", fixed = TRUE)
+})
+
+test_that("all-missing continuous values render the table with no figure", {
+  spec <- mk_summary_spec()
+  spec$options$show_plots <- TRUE
+  spec$options$continuous <- list("length_of_stay")
+  for (i in seq_along(spec$data)) spec$data[[i]]$length_of_stay <- NA
+  out <- fig_summary(spec)
+  expect_match(out$svg, "<table", fixed = TRUE)
+  expect_false(grepl("<figure", out$svg, fixed = TRUE))
+})
+
+test_that("plotting continuous data emits no ggplot warning", {
+  spec <- mk_summary_spec(); spec$options$show_plots <- TRUE
+  expect_no_warning(fig_summary(spec))
+})

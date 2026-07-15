@@ -114,6 +114,35 @@
          paste(body, collapse = ""), "</tbody></table>")
 }
 
+# Faceted distribution plot: one panel per continuous variable (pooled values),
+# with dashed mean and solid median reference lines so the reader sees why each
+# variable got its summary. The legend is emitted as HTML by fig_summary (a
+# styleable .plot-legend div), NOT as a ggplot caption. Returns an inline <svg>
+# string, or "" when nothing is plottable.
+.summary_plot_svg <- function(rows, continuous, labels) {
+  disp <- function(col) as.character((labels %||% list())[[col]] %||% col)
+  parts <- lapply(continuous, function(col) {
+    x <- .numeric_col(rows, col); x <- x[!is.na(x)]
+    if (length(x) == 0) return(NULL)
+    data.frame(variable = disp(col), value = x,
+               mean = mean(x), median = stats::median(x),
+               stringsAsFactors = FALSE)
+  })
+  df <- do.call(rbind, parts[!vapply(parts, is.null, logical(1))])
+  if (is.null(df) || nrow(df) == 0) return("")
+  refs <- unique(df[c("variable", "mean", "median")])
+  gg <- ggplot2::ggplot(df, ggplot2::aes(x = value)) +
+    ggplot2::geom_histogram(bins = 20, fill = "grey85", colour = "white", linewidth = 0.2) +
+    ggplot2::geom_vline(data = refs, ggplot2::aes(xintercept = mean),
+                        linetype = "dashed", linewidth = 0.5, colour = "#2b6cb0") +
+    ggplot2::geom_vline(data = refs, ggplot2::aes(xintercept = median),
+                        linetype = "solid", linewidth = 0.5, colour = "#c05621") +
+    ggplot2::facet_wrap(~ variable, scales = "free") +
+    ggplot2::labs(x = NULL, y = "Count") +
+    ggplot2::theme_minimal(base_size = 11)
+  .svg_string(gg, width = 7, height = 2.6 * ceiling(length(continuous) / 2))
+}
+
 #' Auto-computed Table 1 with normality-aware continuous summaries.
 fig_summary <- function(spec) {
   rows <- spec$data
@@ -210,10 +239,31 @@ fig_summary <- function(spec) {
   }
 
   table_html <- .summary_table_html(headers, out_rows)
+
+  # Optional faceted distribution plot bundled inside the same .summary-output
+  # wrapper. The teaching legend and synthetic caption are HTML (styleable),
+  # not ggplot in-SVG text. No <figure> at all when nothing is plottable.
+  figure_html <- ""
+  if (isTRUE(opt$show_plots) && length(continuous) > 0) {
+    plot_svg <- .summary_plot_svg(rows, continuous, labels)
+    if (nzchar(plot_svg)) {
+      legend_html <- paste0(
+        "<div class=\"plot-legend\">",
+        "<span class=\"mean-key\">dashed = mean</span> · ",
+        "<span class=\"median-key\">solid = median</span>",
+        " — when the lines separate, the variable is skewed</div>")
+      cap <- opt$caption %||% ""
+      cap_html <- if (nzchar(cap))
+        sprintf("<figcaption class=\"synthetic\">%s</figcaption>", .esc(cap)) else ""
+      figure_html <- sprintf("<figure class=\"dist-plot\">%s%s%s</figure>",
+                             plot_svg, legend_html, cap_html)
+    }
+  }
   # Scroll wrapper: on narrow viewports the table scrolls inside its own
   # container instead of clipping the pane (styles.css .table-scroll).
-  svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div></div>",
-                       table_html)
+  svg_field <- sprintf(
+    "<div class=\"summary-output\"><div class=\"table-scroll\">%s</div>%s</div>",
+    table_html, figure_html)
 
   # Copy-pasteable TSV of the same body, WITH a header row so pasted text is
   # self-describing, + an explicit methods sentence.
