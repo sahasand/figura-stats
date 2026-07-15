@@ -42,7 +42,8 @@ export const EXAMPLE_INTRO_HTML = `
 
 export const CALLOUTS = {
   groupBy: "Grouping splits each row into one column per arm. Percentages use the non-missing count within each arm as the denominator. Note there is still no p-value column — see “Why there are no p-values here.”",
-  showPlots: "The distribution panels show each continuous variable with a dashed mean and a solid median line. When the two lines separate, the variable is skewed and median (IQR) is the honest summary.",
+  showPlots: "The distribution panels show each continuous variable two ways: a histogram with a smoothed density curve (dashed mean, solid median — when the two lines separate, the variable is skewed and median (IQR) is the honest summary) and a box plot per group with every individual observation jittered on top.",
+  showQq: "A Q–Q plot compares your data against a perfect normal distribution, within each study group — exactly how this tool assesses normality. Points hugging the line support mean ± SD; a tail curving away supports median (IQR).",
   forceMean: "Forcing mean ± SD on every variable reproduces the most common Table 1 error. Watch the skewed variables: the mean is pulled toward the long tail and misrepresents a typical patient.",
 };
 

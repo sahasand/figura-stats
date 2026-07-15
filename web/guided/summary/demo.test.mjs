@@ -3,7 +3,7 @@ import { SUMMARY_DEMO } from "./demo-data.js";
 import assert from "node:assert";
 
 {
-  const spec = buildSummaryDemoSpec({ groupBy: "arm", showPlots: true, forceMean: false });
+  const spec = buildSummaryDemoSpec({ groupBy: "arm", showPlots: true, forceMean: false, showQq: true });
   assert.equal(spec.figure, "summary");
   assert.equal(spec.roles.group, "arm");
   assert.equal(spec.data.length, 120);
@@ -11,6 +11,7 @@ import assert from "node:assert";
   assert.deepEqual(spec.options.categorical, ["sex", "diabetes"]);
   assert.equal(spec.options.caption, SUMMARY_DEMO.label);
   assert.equal(spec.options.show_plots, true);
+  assert.equal(spec.options.show_qq, true);
   assert.ok(!spec.options.overrides || Object.keys(spec.options.overrides).length === 0);
 }
 {
@@ -19,5 +20,6 @@ import assert from "node:assert";
   assert.equal(spec.options.overrides.length_of_stay, "mean");
   assert.equal(spec.options.overrides.age, "mean");
   assert.equal(spec.options.show_plots, false);
+  assert.equal(spec.options.show_qq, false, "absent showQq must serialize as false, not undefined");
 }
 console.log("ok - buildSummaryDemoSpec");

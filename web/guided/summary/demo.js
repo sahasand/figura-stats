@@ -21,6 +21,7 @@ export function buildSummaryDemoSpec(demoOptions) {
       labels: LABELS,
       overrides,
       show_plots: demoOptions.showPlots,
+      show_qq: !!demoOptions.showQq,
       caption: SUMMARY_DEMO.label,
     },
   };

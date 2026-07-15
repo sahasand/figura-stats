@@ -15,6 +15,9 @@ function renderSummaryExperiments(panel, ctx, rerun) {
     <label><input type="checkbox" id="exp-plots" ${o.showPlots ? "checked" : ""}>
       Show distribution plots</label>
     <p class="callout">${CALLOUTS.showPlots}</p>
+    <label><input type="checkbox" id="exp-qq" ${o.showQq ? "checked" : ""}>
+      Show Q–Q normality panels</label>
+    <p class="callout">${CALLOUTS.showQq}</p>
     <label><input type="checkbox" id="exp-forcemean" ${o.forceMean ? "checked" : ""}>
       Force mean ± SD on every variable</label>
     <p class="callout">${CALLOUTS.forceMean}</p>`;
@@ -23,6 +26,9 @@ function renderSummaryExperiments(panel, ctx, rerun) {
   });
   panel.querySelector("#exp-plots").addEventListener("change", (e) => {
     ctx.patchDemoOptions({ showPlots: e.target.checked }); rerun();
+  });
+  panel.querySelector("#exp-qq").addEventListener("change", (e) => {
+    ctx.patchDemoOptions({ showQq: e.target.checked }); rerun();
   });
   panel.querySelector("#exp-forcemean").addEventListener("change", (e) => {
     ctx.patchDemoOptions({ forceMean: e.target.checked }); rerun();
@@ -36,8 +42,8 @@ export const renderGuidedSummary = createGuidedShell({
   exampleIntroHtml: EXAMPLE_INTRO_HTML,
   demoLabel: SUMMARY_DEMO.label,
   buildDemoSpec: buildSummaryDemoSpec,
-  defaultDemoOptions: () => ({ groupBy: "arm", showPlots: true, forceMean: false }),
-  experimentControlsSelector: "#exp-group, #exp-plots, #exp-forcemean",
+  defaultDemoOptions: () => ({ groupBy: "arm", showPlots: true, forceMean: false, showQq: false }),
+  experimentControlsSelector: "#exp-group, #exp-plots, #exp-qq, #exp-forcemean",
   renderExperiments: renderSummaryExperiments,
   renderAnalyzeForm: renderSummaryForm,
 });
