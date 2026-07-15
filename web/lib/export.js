@@ -54,9 +54,10 @@ export function combineSvgs(panels) {
 export function exportFilename(figureKey, kind, { dpi, panel } = {}) {
   const base = panel
     ? `${figureKey}-panel-${panel}`
-    : `${figureKey}-${kind === "tsv" ? "output" : "figure"}`;
+    : `${figureKey}-${kind === "tsv" || kind === "R" ? "output" : "figure"}`;
   if (kind === "png") return `${base}-${dpi}dpi.png`;
   if (kind === "svg") return `${base}.svg`;
+  if (kind === "R") return `${base}.R`;
   return `${base}.tsv`;
 }
 

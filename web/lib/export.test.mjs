@@ -29,6 +29,8 @@ assert.equal(exportFilename("summary", "png", { dpi: 300, panel: 2 }), "summary-
 assert.equal(exportFilename("km", "svg", {}), "km-figure.svg");
 assert.equal(exportFilename("km", "svg", { panel: 1 }), "km-panel-1.svg");
 assert.equal(exportFilename("km", "tsv", {}), "km-output.tsv");
+assert.equal(exportFilename("explore", "R", {}), "explore-output.R");
+assert.equal(exportFilename("summary", "tsv", {}), "summary-output.tsv");
 
 console.log("ok - export core (dimensions, stitching, filenames)");
 
