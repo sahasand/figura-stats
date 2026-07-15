@@ -31,3 +31,21 @@ export function parseCsv(text) {
   }
   return { columns, rows, types };
 }
+
+// Serialize row objects back to a CSV string for the given columns — the
+// inverse of parseCsv for the values it supports. parseCsv has no quoting
+// rules, so any column name or value containing a comma, double quote, or
+// line break is unrepresentable and throws rather than silently emitting a
+// file the app's own parser cannot read. null/undefined become empty cells.
+export function toCsv(rows, columns) {
+  const cell = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    if (/[",\r\n]/.test(s))
+      throw new Error(`Cannot write a CSV value containing a comma, quote, or line break: ${JSON.stringify(s)}.`);
+    return s;
+  };
+  const lines = [columns.map(cell).join(",")];
+  for (const r of rows) lines.push(columns.map((c) => cell(r[c])).join(","));
+  return lines.join("\n") + "\n";
+}
