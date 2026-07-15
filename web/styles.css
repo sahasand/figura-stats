@@ -119,25 +119,40 @@ body {
   font: .6875rem var(--mono);
   color: var(--slate);
   border: 1px solid var(--line-soft);
-  border-radius: 2px;
-  padding: 0 .375rem;
+  border-radius: 999px;
+  padding: .0625rem .5rem;
   align-self: center;
 }
 
-/* Session status chip: idle -> busy -> ready, like an R session indicator. */
+/* Session status chip: a pill with a state dot — idle -> busy -> ready. */
 .chip {
-  font: .6875rem var(--mono);
-  padding: .1875rem .5rem;
-  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: .4375rem;
+  font: 500 .6875rem var(--sans);
+  padding: .25rem .625rem;
+  border-radius: 999px;
   border: 1px solid var(--line);
   color: var(--slate);
-  background: var(--chrome);
+  background: var(--panel);
   white-space: nowrap;
 }
 
-.chip.busy  { color: var(--rblue-dark); border-color: var(--rblue); background: var(--sky); }
+.chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+
+.chip.busy  { color: var(--accent-dark); border-color: #b5d9d5; background: var(--accent-wash); }
+.chip.busy::before  { background: var(--accent); }
 .chip.ready { color: var(--ok); border-color: #bcd9c8; background: #eef7f1; }
+.chip.ready::before { background: var(--ok); }
 .chip.error { color: var(--error); border-color: #e0b9b5; background: #fbf0ef; }
+.chip.error::before { background: var(--error); }
 
 /* ---- Pane frame --------------------------------------------------------- */
 
