@@ -57,6 +57,12 @@ Two small toolbars, styled exclusively with existing CSS tokens:
 `<figure-key>-output.tsv`, where `<figure-key>` is the active analysis key from the
 nav state (`summary`, `km`, `forest`, …).
 
+**Journal framing is explicit in the UI copy** — this feature exists for journal
+submission and the interface says so: the figure toolbar is prefixed
+"Journal-ready download:", the DPI options are labeled `300 dpi`,
+`600 dpi · journal default`, `1200 dpi · line art`, and the button tooltips state that
+the PNG is stamped with the selected DPI to meet journal figure requirements.
+
 **Accessibility:** every control is a real `<button>`/`<select>` with a visible label
 or `aria-label`; the disabled state is the native `disabled` attribute; the "Copied"
 feedback is announced via an `aria-live="polite"` region.
