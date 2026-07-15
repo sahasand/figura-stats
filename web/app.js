@@ -65,12 +65,12 @@ async function render(spec) {
 import { renderForestForm } from "./forms/forest.js";
 import { renderConsortForm } from "./forms/consort.js";
 import { renderTable1Form } from "./forms/table1.js";
-import { renderKmForm } from "./forms/km.js";
 import { renderGroupCompareForm } from "./forms/groupcompare.js";
 import { renderCorrelationForm } from "./forms/correlation.js";
 import { renderRocForm } from "./forms/roc.js";
 import { renderRegressionForm } from "./forms/regression.js";
-const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderKmForm, groupcompare: renderGroupCompareForm, correlation: renderCorrelationForm, roc: renderRocForm, regression: renderRegressionForm };
+import { renderGuidedKm } from "./guided/guided-analysis.js";
+const forms = { forest: renderForestForm, consort: renderConsortForm, table1: renderTable1Form, km: renderGuidedKm, groupcompare: renderGroupCompareForm, correlation: renderCorrelationForm, roc: renderRocForm, regression: renderRegressionForm };
 
 document.querySelectorAll("[data-figure]").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -79,6 +79,6 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
       b.classList.toggle("active", b === btn));
     const container = document.getElementById("form");
     container.innerHTML = "";
-    (forms[kind] || (() => {}))(container, render);
+    (forms[kind] || (() => {}))(container, render, runFigure);
   });
 });

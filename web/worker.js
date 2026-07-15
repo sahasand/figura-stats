@@ -6,15 +6,15 @@ let webRReady;
 
 // Heavy, figure-specific packages are installed LAZILY the first time a figure
 // of that type is requested — not at boot — so a user who only makes a forest
-// plot never downloads survminer's large dependency tree. Boot installs only
+// plot never downloads the KM package tree. Boot installs only
 // the shared base below. See ensureExtraPackages().
-const EXTRA_PACKAGES = { km: ["survival", "survminer"], roc: ["pROC"], regression: ["gtsummary", "broom", "broom.helpers"] };
+const EXTRA_PACKAGES = { km: ["survival", "cowplot"], roc: ["pROC"], regression: ["gtsummary", "broom", "broom.helpers"] };
 const installedExtras = new Set();
 // Single-flight guard: figure type -> in-flight install Promise. Without this,
 // two concurrent requests for the same figure type (e.g. a double-click on
 // Render, which doesn't disable the button mid-render) would both see
 // installedExtras empty and both call webR.installPackages(), double-downloading
-// survminer's large dependency tree and racing webR's package-install state.
+// the KM package tree and racing webR's package-install state.
 // Mirrors the webRReady = webRReady || boot() single-flight pattern below.
 const pendingExtraInstalls = new Map();
 
@@ -22,7 +22,7 @@ async function boot() {
   const webR = new WebR();
   await webR.init();
   // Boot installs ONLY the packages shared by every figure. Heavy per-figure
-  // dependencies (e.g. survival + survminer for KM) are installed lazily on
+  // dependencies (e.g. survival + cowplot for KM) are installed lazily on
   // first use via ensureExtraPackages(), keeping first load fast for everyone.
   await webR.installPackages(["ggplot2", "svglite", "jsonlite", "knitr"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.

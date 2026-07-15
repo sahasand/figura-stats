@@ -289,6 +289,46 @@ input[type="file"]::file-selector-button {
   cursor: not-allowed;
 }
 
+/* ---- Guided stage tabs (Kaplan–Meier) ----------------------------------- */
+
+/* Scoped under #form to outrank the generic `#form button` rules above. */
+.stage-tabs {
+  display: flex;
+  gap: .25rem;
+  margin: 0 0 .75rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+#form .stage-tabs [role="tab"] {
+  font: 600 .8125rem var(--sans);
+  color: var(--slate);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: .4rem .8rem;
+  margin: 0 0 -1px;
+  cursor: pointer;
+}
+
+#form .stage-tabs [role="tab"]:hover { color: var(--ink); background: none; }
+
+#form .stage-tabs [role="tab"][aria-selected="true"] {
+  color: var(--rblue-dark);
+  border-bottom-color: var(--rblue);
+}
+
+/* Mandatory synthetic-data banner on the Try an Example stage. */
+.demo-banner {
+  background: #fff3e0;
+  border: 1px solid #e0a960;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  font-weight: 600;
+}
+.demo-actions { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; }
+.callout { color: #555; font-size: 0.85rem; margin: 0.15rem 0 0.6rem; }
+
 /* Forest-plot rows: label/input pairs flow into four aligned columns. */
 #rows > div {
   display: grid;
