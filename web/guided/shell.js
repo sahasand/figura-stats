@@ -5,6 +5,7 @@
 // guided analyses never share stage state.
 import { createSession, setStage, storeResult, getResult, setDemoOptions, resetDemo,
   getDemoGeneration, isDemoGenerationCurrent, STAGES } from "./session-state.js";
+import { createCoalescer } from "./live-run.js";
 
 const STAGE_LABELS = { understand: "Understand", example: "Try an Example", analyze: "Analyze Your Data" };
 // The result context each stage is allowed to paint into the shared #preview/#stats.
@@ -40,14 +41,22 @@ export function createGuidedShell(cfg) {
     function runAndShow(spec, context) {
       const preview = document.getElementById("preview");
       const stats = document.getElementById("stats");
-      preview.innerHTML = "Rendering… (first run downloads R packages)";
-      stats.textContent = "";
-      stats.classList.remove("error");
+      // liveRender keeps the previous figure visible under a busy overlay;
+      // the classic path blanks the panes. First-ever render (empty pane)
+      // still shows the boot message either way.
+      if (cfg.liveRender && preview.querySelector("svg")) {
+        preview.classList.add("busy");
+      } else {
+        preview.innerHTML = "Rendering… (first run downloads R packages)";
+        stats.textContent = "";
+        stats.classList.remove("error");
+      }
       status("busy", "R: working…");
       // Snapshot the demo generation so a Reset Example landing mid-run can be
       // detected on resolve and the stale result fully dropped.
       const startGen = getDemoGeneration(session);
       return runFigure(spec).then((out) => {
+        preview.classList.remove("busy");
         // The chip reports the R session's state, not the visible pane's — set it
         // on every completion, even for results that are dropped or not painted.
         status(out.ok ? "ready" : "error", out.ok ? "R: ready" : "R: error");
@@ -97,7 +106,11 @@ export function createGuidedShell(cfg) {
     container.querySelectorAll("[role=tab]").forEach((t) =>
       t.addEventListener("click", () => selectStage(t.dataset.stage)));
 
+    const userCoalescer = cfg.liveRender
+      ? createCoalescer((spec) => runAndShow(spec, "user")) : null;
     const ctx = { onSubmit, runAndShow,
+      runUser: (spec) => userCoalescer ? userCoalescer.submit(spec)
+                                       : runAndShow(spec, "user"),
       getSession: () => session,
       patchDemoOptions: (patch) => { session = setDemoOptions(session, patch); },
       resetDemoState: () => { session = resetDemo(session); showStored("demo"); } };
@@ -106,7 +119,7 @@ export function createGuidedShell(cfg) {
     renderExample(container.querySelector('[data-stage-panel="example"]'), ctx);
     const analyzePanel = container.querySelector('[data-stage-panel="analyze"]');
     analyzePanel.innerHTML = "";
-    cfg.renderAnalyzeForm(analyzePanel, (spec) => ctx.runAndShow(spec, "user"));
+    cfg.renderAnalyzeForm(analyzePanel, (spec) => ctx.runUser(spec));
     selectStage(session.stage);
   };
 
@@ -125,6 +138,12 @@ export function createGuidedShell(cfg) {
       <div id="demo-experiments"></div>`;
     const runBtn = panel.querySelector("#run-demo");
 
+    // liveRender: builder controls stay enabled; overlapping requests are
+    // coalesced (one in flight, newest pending) instead of control-freezing.
+    const coalescer = cfg.liveRender
+      ? createCoalescer((spec) => ctx.runAndShow(spec, "demo"))
+      : null;
+
     // Controls that must be frozen for the duration of a run: the Run and Reset
     // buttons plus the analysis's experiment inputs. Worker requests aren't
     // serialized, so toggling an experiment mid-run could let a stale response
@@ -139,6 +158,9 @@ export function createGuidedShell(cfg) {
     // Shared run path: the Run button always calls this, and the experiment
     // controls call it too (conditionally) so both go through one place.
     async function runDemo() {
+      if (cfg.liveRender) {
+        return coalescer.submit(cfg.buildDemoSpec(ctx.getSession().demoOptions));
+      }
       const controls = inFlightControls();
       controls.forEach((el) => { el.disabled = true; });   // no duplicate/overlapping runs
       try { await ctx.runAndShow(cfg.buildDemoSpec(ctx.getSession().demoOptions), "demo"); }

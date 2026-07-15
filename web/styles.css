@@ -501,6 +501,15 @@ input[type="file"]::file-selector-button {
 
 #preview .empty p { margin: 0; }
 
+/* Live-render busy state: keep the previous figure visible, dimmed, with a
+   quiet corner chip — never blank the pane mid-exploration. */
+#preview.busy { position: relative; opacity: 0.55; }
+#preview.busy::after {
+  content: "Updating…";
+  position: absolute; top: 0.5rem; right: 0.75rem;
+  font-size: 0.8rem; color: var(--accent);
+}
+
 /* ---- Output pane: Figure viewer + Console ------------------------------- */
 
 .output-pane {
