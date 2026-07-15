@@ -192,25 +192,25 @@ body {
 .nav-group:first-child { margin-top: .25rem; }
 
 .nav-pane nav button {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
+  min-height: 36px;
   text-align: left;
   font: inherit;
   color: var(--ink);
   background: none;
   border: none;
-  border-left: 2px solid transparent;
-  border-radius: 2px;
-  padding: .3125rem .625rem;
+  border-radius: var(--radius-ctl);
+  padding: .375rem .75rem;
   cursor: pointer;
 }
 
-.nav-pane nav button:hover { background: var(--sky); }
+.nav-pane nav button:hover { background: #f1f4f8; }
 
 .nav-pane nav button.active {
-  background: var(--sky);
-  border-left-color: var(--rblue);
-  color: var(--rblue-dark);
+  background: var(--accent-wash);
+  color: var(--accent-dark);
   font-weight: 600;
 }
 
@@ -525,8 +525,8 @@ input[type="file"]::file-selector-button {
     gap: .25rem;
     align-items: center;
   }
-  .nav-pane nav button { width: auto; border: 1px solid var(--line); }
-  .nav-pane nav button.active { border-color: var(--rblue); }
+  .nav-pane nav button { width: auto; min-height: 44px; border: 1px solid var(--line); }
+  .nav-pane nav button.active { border-color: var(--accent); }
   .nav-group { width: 100%; margin: .375rem .25rem .125rem; }
   #preview { min-height: 10rem; }
   #stats { min-height: 6rem; }
