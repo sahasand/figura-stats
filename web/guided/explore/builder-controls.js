@@ -155,6 +155,11 @@ export function renderBuilderControls(container, table, state, onChange, doc = g
       const sel = rolesWrap.querySelector("#cp_" + r.key);
       if (sel && roles[r.key]) sel.value = roles[r.key];
     }
+    // Reconcile in-memory state to what the pickers actually hold: assigning a
+    // value with no matching <option> coerces the select to "" (e.g. a
+    // categorical x carried into scatter's numeric picker), and the emitted
+    // roles must match the visible state — never a stale selection.
+    roles = readSelects();
     ready = true;
   }
 
@@ -183,6 +188,9 @@ export function renderBuilderControls(container, table, state, onChange, doc = g
         input.min = extra.min; input.max = extra.max; input.step = extra.step;
         input.value = options[key];
         input.onchange = () => {
+          // A cleared field would coerce to Number("") === 0 — restore the
+          // current value instead of shipping 0.
+          if (input.value === "") { input.value = options[key]; return; }
           const v = Number(input.value);
           options = { ...options, [key]: Number.isFinite(v) ? v : options[key] };
           emit();
