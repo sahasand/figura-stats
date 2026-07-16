@@ -11,7 +11,9 @@ render_figure <- function(json_string) {
       groupcompare = fig_groupcompare(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
-    list(ok = TRUE, svg = out$svg, text = out$text)
+    res <- list(ok = TRUE, svg = out$svg, text = out$text)
+    if (!is.null(out$code)) res$code <- out$code
+    res
   }, error = function(e) {
     list(ok = FALSE, error = conditionMessage(e))
   })

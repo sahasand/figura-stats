@@ -244,6 +244,7 @@ fig_summary <- function(spec) {
   }
 
   out_rows <- list()
+  cont_info <- list()
 
   for (col in continuous) {
     x <- .numeric_col(rows, col)
@@ -255,6 +256,7 @@ fig_summary <- function(spec) {
       sprintf("you selected %s; data suggested %s",
               if (kind == "mean") "mean ± SD" else "median (IQR)", d$reason)
     else d$reason
+    cont_info[[length(cont_info) + 1]] <- list(col = col, kind = kind, why = why)
     cells <- vapply(levels_g, function(g) {
       xg <- x[grp == g]; xg <- xg[!is.na(xg)]
       # sd(n=1) is NA, so a single-value group cannot form "M ± SD"; show the
@@ -349,5 +351,47 @@ fig_summary <- function(spec) {
     "per variable. No hypothesis tests are reported for baseline characteristics.")
   text <- paste0(paste(c(tsv_header, tsv_lines), collapse = "\n"), "\n\n", methods)
 
-  list(svg = svg_field, text = text)
+  list(svg = svg_field, text = text,
+       code = .summary_script(spec, cont_info, categorical, gcol))
+}
+
+# Downloadable R script for the Summary analysis: the per-variable decision is
+# carried as a comment (with its Shapiro/skewness evidence), and the chosen
+# summary is computed with plain tapply/table calls whose numbers match the
+# app's cells (same mean/sd/quantile type-7 calls). Results bind to s1..sN
+# (continuous) and t1..tM (categorical) so tests can assert on them.
+.summary_script <- function(spec, cont_info, categorical, gcol) {
+  qcol <- function(cl) sprintf('df[["%s"]]', gsub('"', '\\\\"', cl))
+  body <- c("# Grouping used by every summary below:",
+    if (is.null(gcol)) '.grp <- rep("Overall", nrow(df))'
+    else sprintf('.grp <- as.character(%s); .grp[is.na(.grp)] <- "(missing)"',
+                 qcol(gcol)),
+    "")
+  for (i in seq_along(cont_info)) {
+    info <- cont_info[[i]]
+    body <- c(body,
+      sprintf("# %s — %s: %s", info$col,
+              if (info$kind == "mean") "mean ± SD" else "median (IQR)", info$why),
+      if (info$kind == "mean")
+        sprintf(paste0("s%d <- tapply(%s, .grp, function(x) ",
+                       "c(mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE)))"),
+                i, qcol(info$col))
+      else
+        sprintf(paste0("s%d <- tapply(%s, .grp, function(x) ",
+                       "quantile(x, c(0.25, 0.5, 0.75), na.rm = TRUE, type = 7))"),
+                i, qcol(info$col)),
+      sprintf("s%d", i), "")
+  }
+  for (j in seq_along(categorical)) {
+    body <- c(body,
+      sprintf("# %s — n (%%), denominator = the non-missing count per group:",
+              categorical[[j]]),
+      sprintf("t%d <- table(%s, .grp)", j, qcol(categorical[[j]])),
+      sprintf("t%d", j),
+      sprintf("round(100 * prop.table(t%d, 2))", j), "")
+  }
+  .script_assemble("Summary statistics (Table 1)", spec,
+    unique(c(unlist(spec$options$continuous %||% list()),
+             unlist(spec$options$categorical %||% list()), gcol)),
+    character(0), body)
 }
