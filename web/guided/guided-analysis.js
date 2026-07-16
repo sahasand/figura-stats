@@ -6,7 +6,7 @@ import { createGuidedShell } from "./shell.js";
 import { renderUnderstand, EXAMPLE_INTRO_HTML, CALLOUTS } from "./km/content.js";
 import { buildDemoSpec } from "./km/demo.js";
 import { KM_DEMO } from "./km/demo-data.js";
-import { renderKmForm } from "../forms/km.js";
+import { renderKmAnalyzeForm } from "./km/analyze-form.js";
 
 function renderKmExperiments(panel, ctx, rerun) {
   const o = ctx.getSession().demoOptions;
@@ -45,5 +45,5 @@ export const renderGuidedKm = createGuidedShell({
   defaultDemoOptions: () => ({ conf_int: true, landmarks: [], horizon: null }),
   experimentControlsSelector: "#exp-ci, #exp-landmarks, #exp-horizon",
   renderExperiments: renderKmExperiments,
-  renderAnalyzeForm: renderKmForm,
+  renderAnalyzeForm: renderKmAnalyzeForm,
 });
