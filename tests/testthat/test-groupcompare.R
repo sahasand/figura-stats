@@ -72,3 +72,56 @@ test_that("dispatch routes groupcompare", {
   expect_true(res$ok)
   expect_match(res$svg, "<svg", fixed = TRUE)
 })
+
+mkrows2 <- function(out, g) Map(function(o, gi) list(out = o, grp = gi), out, g)
+sc2 <- function(rows) list(figure = "groupcompare", data = rows,
+  roles = list(group = "grp", outcome = "out"), options = list())
+
+test_that("categorical 2x2 outcome uses chi-square with Cramer's V and odds ratio", {
+  set.seed(21)
+  g <- rep(c("A", "B"), each = 60)
+  out <- c(sample(c("Yes","No"), 60, TRUE, c(0.3,0.7)),
+           sample(c("Yes","No"), 60, TRUE, c(0.6,0.4)))
+  res <- fig_groupcompare(sc2(mkrows2(out, g)))
+  expect_match(res$svg, "<svg", fixed = TRUE)
+  expect_match(res$text, "chi-square|χ²|Fisher", ignore.case = TRUE)
+  expect_match(res$text, "Cramér's V|Cramer's V", ignore.case = TRUE)
+  expect_match(res$text, "odds ratio", ignore.case = TRUE)
+})
+
+test_that("small expected counts fall back to Fisher", {
+  g <- rep(c("A", "B"), each = 6)
+  out <- c("Yes", rep("No", 5), rep("Yes", 5), "No")   # tiny cells
+  res <- fig_groupcompare(sc2(mkrows2(out, g)))
+  expect_match(res$text, "Fisher", ignore.case = TRUE)
+})
+
+test_that("3+ categorical outcome reports Cramer's V without odds ratio", {
+  set.seed(22)
+  g <- rep(c("A", "B", "C"), each = 40)
+  out <- sample(c("Mild","Moderate","Severe"), 120, TRUE)
+  res <- fig_groupcompare(sc2(mkrows2(out, g)))
+  expect_match(res$text, "Cramér's V|Cramer's V", ignore.case = TRUE)
+  expect_no_match(res$text, "odds ratio")
+})
+
+test_that("3-group significant ANOVA appends Tukey post-hoc", {
+  set.seed(23)
+  v <- c(rnorm(30, 10, 1.5), rnorm(30, 14, 1.5), rnorm(30, 18, 1.5))
+  g <- rep(c("A", "B", "C"), each = 30)
+  out <- fig_groupcompare(list(figure = "groupcompare",
+    data = mkrows(v, g), roles = list(group = "grp", outcome = "val"),
+    options = list(test = "parametric")))
+  expect_match(out$text, "Tukey", ignore.case = TRUE)
+})
+
+test_that("3-group significant Kruskal appends Dunn post-hoc", {
+  set.seed(24)
+  v <- c(rexp(30, 1), rexp(30, 0.4) + 3, rexp(30, 0.2) + 8)
+  g <- rep(c("A", "B", "C"), each = 30)
+  out <- fig_groupcompare(list(figure = "groupcompare",
+    data = mkrows(v, g), roles = list(group = "grp", outcome = "val"),
+    options = list(test = "nonparametric")))
+  expect_match(out$text, "Dunn", ignore.case = TRUE)
+  expect_match(out$text, "BH|Benjamini", ignore.case = TRUE)
+})

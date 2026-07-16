@@ -169,12 +169,89 @@
   list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt)
 }
 
-# Post-hoc sentence; filled in Task 3. Numeric-branch orchestrator calls it now
-# so the wiring exists; returns "" until 3+ group significant configs are handled.
-.gc_posthoc <- function(df, ng, nonpar, pv) ""
+# --- categorical branch: contingency table -> chi-square/Fisher + effect size ---
+.gc_categorical <- function(spec) {
+  gcol <- spec$roles$group; vcol <- spec$roles$outcome
+  rows <- spec$data
+  grp <- .char_col(rows, gcol); out <- .char_col(rows, vcol)
+  grp[!is.na(grp) & grp == ""] <- NA
+  out[!is.na(out) & out == ""] <- NA
+  keep <- !is.na(grp) & !is.na(out)
+  n_na <- sum(!keep)
+  grp <- grp[keep]; out <- out[keep]
+  if (length(unique(grp)) < 2) stop("Group comparison needs at least two groups.")
+  tab <- table(outcome = out, group = grp)
+  n <- sum(tab)
 
-# --- categorical branch; implemented in Task 3 ---
-.gc_categorical <- function(spec) stop("categorical outcome not yet implemented")
+  # Expected-count rule: any expected cell < 5 -> Fisher.
+  suppressWarnings({ chi <- stats::chisq.test(tab) })
+  use_fisher <- any(chi$expected < 5)
+  if (use_fisher) {
+    ht <- stats::fisher.test(tab); tname <- "Fisher's exact test"
+  } else {
+    ht <- chi; tname <- "Pearson chi-square test"
+  }
+  pv <- ht$p.value
+  pfmt <- if (pv < 0.001) "p < 0.001" else sprintf("p = %.3f", pv)
+
+  # Cramér's V from the (unconditional) chi-square statistic.
+  V <- sqrt(unname(chi$statistic) / (n * (min(dim(tab)) - 1)))
+  eff <- sprintf("Cramér's V = %s", .fmt_num(V))
+  # Odds ratio + CI only for 2x2.
+  if (all(dim(tab) == 2)) {
+    a <- tab[1,1]; b <- tab[1,2]; c <- tab[2,1]; d <- tab[2,2]
+    or <- (a * d) / (b * c)
+    se <- sqrt(1/a + 1/b + 1/c + 1/d)
+    lo <- exp(log(or) - 1.96 * se); hi <- exp(log(or) + 1.96 * se)
+    eff <- paste0(eff, "; ", .gc_ci_phrase(or, lo, hi, "odds ratio"))
+  }
+
+  # Proportion bar chart of the contingency table.
+  dfp <- as.data.frame(tab, stringsAsFactors = FALSE)  # cols: outcome, group, Freq
+  pal <- .km_palette(length(unique(dfp$outcome)))
+  gg <- ggplot2::ggplot(dfp,
+      ggplot2::aes(x = group, y = Freq, fill = outcome)) +
+    ggplot2::geom_col(position = "fill") +
+    ggplot2::scale_fill_manual(values = pal) +
+    ggplot2::labs(x = NULL, y = "proportion", fill = vcol) +
+    .fig_theme("generic")
+
+  notes <- if (n_na > 0) sprintf(" %d row(s) with missing values were excluded.", n_na) else ""
+  txt <- sprintf("%s by group (n = %d): %s: %s, %s.%s",
+    vcol, n, tname, pfmt, eff, notes)
+  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt)
+}
+
+# Post-hoc for 3+ groups when the omnibus test is significant (p < 0.05).
+# Parametric -> Tukey HSD; non-parametric -> hand-computed Dunn with BH adjust.
+.gc_posthoc <- function(df, ng, nonpar, pv) {
+  if (ng < 3 || pv >= 0.05) return("")
+  lv <- sort(unique(df$group))
+  if (!nonpar) {
+    tk <- stats::TukeyHSD(stats::aov(value ~ group, data = df))$group
+    sig <- rownames(tk)[tk[, "p adj"] < 0.05]
+    if (length(sig) == 0) return(" Tukey HSD: no pairwise differences at 0.05.")
+    return(sprintf(" Tukey HSD, significant pairs: %s.", paste(sig, collapse = ", ")))
+  }
+  # Dunn's test: pairwise rank-sum z from the SHARED overall ranking.
+  r <- rank(df$value); N <- nrow(df)
+  # tie correction for the variance term
+  ties <- table(df$value); tie_term <- sum(ties^3 - ties)
+  Rbar <- tapply(r, df$group, mean); nvec <- tapply(r, df$group, length)
+  pairs <- utils::combn(lv, 2, simplify = FALSE)
+  zp <- lapply(pairs, function(pr) {
+    i <- pr[1]; j <- pr[2]
+    sigma <- sqrt((N * (N + 1) / 12 - tie_term / (12 * (N - 1))) *
+                    (1 / nvec[[i]] + 1 / nvec[[j]]))
+    z <- (Rbar[[i]] - Rbar[[j]]) / sigma
+    list(pair = paste(i, j, sep = "-"), p = 2 * stats::pnorm(-abs(z)))
+  })
+  praw <- vapply(zp, function(x) x$p, numeric(1))
+  padj <- stats::p.adjust(praw, method = "BH")
+  sig <- vapply(zp, function(x) x$pair, character(1))[padj < 0.05]
+  if (length(sig) == 0) return(" Dunn's test (BH-adjusted): no pairwise differences at 0.05.")
+  sprintf(" Dunn's test (BH-adjusted), significant pairs: %s.", paste(sig, collapse = ", "))
+}
 
 fig_groupcompare <- function(spec) {
   rows <- spec$data
