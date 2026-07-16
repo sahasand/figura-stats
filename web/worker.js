@@ -75,9 +75,9 @@ self.onmessage = async (e) => {
       await webRReady;
       self.postMessage({ warmup: true, ready: true });
     } catch (_) {
-      // Swallow: a failed warmup must never break the app. The real Run
-      // will retry boot() and surface a genuine error through the normal
-      // render path's try/catch below.
+      // Swallow: a failed warmup must never break the app. A later Run awaits
+      // the same (already-rejected) webRReady promise and surfaces that cached
+      // failure through the normal render path's try/catch below.
       self.postMessage({ warmup: true, ready: false });
     }
     return;

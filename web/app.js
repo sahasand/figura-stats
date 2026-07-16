@@ -44,6 +44,9 @@ worker.onerror = () => {
   };
   for (const resolve of pending.values()) resolve(payload);
   pending.clear();
+  // A catastrophic worker/import failure never delivers a warmup or render
+  // reply, so correct the eager "warming up…" chip here — otherwise it sticks.
+  setStatus("idle", "R: offline");
 };
 
 // Warm the webR runtime as soon as the page loads, instead of waiting for the
