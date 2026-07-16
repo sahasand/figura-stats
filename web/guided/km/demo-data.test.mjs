@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { KM_DEMO } from "./demo-data.js";
 
 assert.equal(KM_DEMO.version, "1.0.0");
-assert.equal(KM_DEMO.label, "Synthetic demonstration data — not for clinical use.");
+assert.equal(KM_DEMO.label, "Synthetic demonstration data");
 assert.equal(KM_DEMO.rows.length, 120);
 assert.deepEqual(KM_DEMO.columns, ["participant_id", "followup_months", "status", "group"]);
 const groups = KM_DEMO.rows.reduce((m, r) => (m[r.group] = (m[r.group] || 0) + 1, m), {});

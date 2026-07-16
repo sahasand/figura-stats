@@ -46,7 +46,7 @@ test("Run Example computes the real Table 1 with the right decisions, plot, and 
   test.setTimeout(360000);
   await page.goto("/#summary/example");
   await page.getByRole("button", { name: /summary statistics/i }).click();
-  await expect(page.getByText("Synthetic demonstration data — not for clinical use.")).toBeVisible();
+  await expect(page.getByText("Synthetic demonstration data")).toBeVisible();
   await expect(page.locator("#preview table")).toHaveCount(0);
   await page.getByRole("button", { name: "Run Example Analysis" }).click();
   await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });

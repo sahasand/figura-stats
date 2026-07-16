@@ -442,15 +442,17 @@ input[type="file"]::file-selector-button {
   background: none;
 }
 
-/* Mandatory synthetic-data note on the Try an Example stage — one per analysis,
-   kept deliberately quiet: users already know the example is fictional. */
+/* Mandatory synthetic-data banner on the Try an Example stage — one per
+   analysis; short label, warn-box treatment. */
 .demo-banner {
   color: var(--warn-ink);
-  border-left: 3px solid var(--warn-border);
-  padding: .125rem .75rem;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-ctl);
+  padding: .5625rem .875rem;
   margin: .625rem 0;
-  font-size: .75rem;
-  font-weight: 500;
+  font-size: .8125rem;
+  font-weight: 600;
 }
 .demo-actions { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; }
 .callout {

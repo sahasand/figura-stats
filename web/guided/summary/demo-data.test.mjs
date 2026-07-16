@@ -4,7 +4,7 @@ import { parseCsv, toCsv } from "../../lib/csv.js";
 import assert from "node:assert";
 
 assert.equal(SUMMARY_DEMO.version, "1.0.0");
-assert.equal(SUMMARY_DEMO.label, "Synthetic demonstration data — not for clinical use.");
+assert.equal(SUMMARY_DEMO.label, "Synthetic demonstration data");
 assert.deepEqual(SUMMARY_DEMO.columns, ["age", "length_of_stay", "crp", "sex", "diabetes", "arm"]);
 assert.equal(SUMMARY_DEMO.rows.length, 120, "demo has 120 rows");
 const missing = SUMMARY_DEMO.rows.filter((r) => r.length_of_stay === null).length;

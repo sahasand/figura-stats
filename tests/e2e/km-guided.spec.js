@@ -30,7 +30,7 @@ test("Run Example Analysis computes the real pinned demo result", async ({ page 
   test.setTimeout(360000); // first run installs survival+cowplot in webR
   await page.goto("/#km/example");
   await page.getByRole("button", { name: /kaplan-meier/i }).click();
-  await expect(page.getByText("Synthetic demonstration data — not for clinical use.")).toBeVisible();
+  await expect(page.getByText("Synthetic demonstration data")).toBeVisible();
   await expect(page.locator("#preview svg")).toHaveCount(0);   // nothing before the click
   await page.getByRole("button", { name: "Run Example Analysis" }).click();
   await expect(page.locator("#preview svg")).toBeVisible({ timeout: 330000 });

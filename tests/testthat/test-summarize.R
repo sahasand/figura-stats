@@ -217,7 +217,7 @@ test_that("show_plots bundles a table AND an inline svg with the teaching legend
 test_that("caption is rendered when provided", {
   spec <- mk_summary_spec()
   spec$options$show_plots <- TRUE
-  spec$options$caption <- "Synthetic demonstration data — not for clinical use."
+  spec$options$caption <- "Synthetic demonstration data"
   expect_match(fig_summary(spec)$svg, "Synthetic demonstration data", fixed = TRUE)
 })
 
