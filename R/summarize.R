@@ -393,5 +393,8 @@ fig_summary <- function(spec) {
   .script_assemble("Summary statistics (Table 1)", spec,
     unique(c(unlist(spec$options$continuous %||% list()),
              unlist(spec$options$categorical %||% list()), gcol)),
-    character(0), body)
+    character(0), body,
+    honesty = c(
+      "# Computed with the same base-R calls the app used (mean/sd/quantile type 7);",
+      "# the per-variable normality decision is recorded in the comments below."))
 }

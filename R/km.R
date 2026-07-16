@@ -264,6 +264,9 @@ fig_km <- function(spec) {
     "  geom_text(size = 3.1) +",
     '  labs(title = "Number at risk", x = NULL, y = NULL) +',
     "  theme_minimal(base_size = 10)",
+    if (!is.null(opts$horizon))
+      sprintf("p_risk <- p_risk + coord_cartesian(xlim = c(0, %s))",
+              as.numeric(opts$horizon)),
     "# library(cowplot)",
     '# print(plot_grid(p_km, p_risk, ncol = 1, rel_heights = c(0.78, 0.22),',
     '#                 align = "v", axis = "lr"))')

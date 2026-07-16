@@ -49,6 +49,7 @@ export function createGuidedShell(cfg) {
       } else {
         preview.innerHTML = "Rendering… (first run downloads R packages)";
         stats.textContent = "";
+        delete stats.dataset.rCode;
         stats.classList.remove("error");
       }
       status("busy", "R: working…");

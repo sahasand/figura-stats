@@ -303,7 +303,7 @@ test_that("summary script reproduces the summaries from embedded data", {
   out <- fig_summary(sm_script_spec())
   expect_true(is.character(out$code) && nzchar(out$code))
   env <- new.env(parent = globalenv())
-  eval(parse(text = out$code), env)
+  capture.output(eval(parse(text = out$code), env))
   # 60 rows embedded, age numeric
   expect_equal(nrow(env$df), 60)
   # rnorm data is normal -> mean ± SD; s1 holds tapply(mean, sd) per arm

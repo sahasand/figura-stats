@@ -190,7 +190,7 @@ test_that("3-group significant Kruskal appends Dunn post-hoc", {
 
 eval_script <- function(code) {
   env <- new.env(parent = globalenv())
-  eval(parse(text = code), env)
+  capture.output(eval(parse(text = code), env))
   env
 }
 

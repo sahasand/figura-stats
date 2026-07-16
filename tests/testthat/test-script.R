@@ -28,6 +28,17 @@ test_that("source_filename switches to read.csv and embeds nothing", {
   expect_match(code, "# Data: my data.csv", fixed = TRUE)
 })
 
+test_that("source_filename with a double quote stays parseable and escaped", {
+  code <- .script_assemble("Test analysis",
+                           script_spec(source_filename = 'my "study".csv'),
+                           c("a", "b"), character(0), "nrow(df)")
+  # The read.csv line embeds the filename with the quote backslash-escaped, so
+  # the generated script parses instead of terminating the string early.
+  expect_match(code, 'read.csv("my \\"study\\".csv", check.names = FALSE)',
+               fixed = TRUE)
+  expect_silent(parse(text = code))
+})
+
 test_that("header lists package versions and .script_fun embeds source", {
   h <- .script_header("X", "y.csv", "ggplot2")
   expect_match(paste(h, collapse = "\n"),

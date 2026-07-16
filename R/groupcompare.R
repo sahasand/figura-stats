@@ -352,10 +352,10 @@ fig_groupcompare <- function(spec) {
 .gc_script_categorical <- function(spec, test_expr, tname, is_2x2) {
   or_lines <- if (is_2x2) c(
     "# Odds ratio (2x2 only; 0.5 added to every cell if any cell is zero):",
-    "a <- tab[1, 1]; b <- tab[1, 2]; c <- tab[2, 1]; d <- tab[2, 2]",
-    "if (any(c(a, b, c, d) == 0)) { a <- a + 0.5; b <- b + 0.5; c <- c + 0.5; d <- d + 0.5 }",
-    "or <- (a * d) / (b * c)",
-    "se <- sqrt(1/a + 1/b + 1/c + 1/d)",
+    "n11 <- tab[1, 1]; n12 <- tab[1, 2]; n21 <- tab[2, 1]; n22 <- tab[2, 2]",
+    "if (any(c(n11, n12, n21, n22) == 0)) { n11 <- n11 + 0.5; n12 <- n12 + 0.5; n21 <- n21 + 0.5; n22 <- n22 + 0.5 }",
+    "or <- (n11 * n22) / (n12 * n21)",
+    "se <- sqrt(1/n11 + 1/n12 + 1/n21 + 1/n22)",
     "c(or = or, lo = exp(log(or) - 1.96 * se), hi = exp(log(or) + 1.96 * se))", "")
     else character(0)
   body <- c(.gc_script_prep(spec, outcome_numeric = FALSE), "",

@@ -171,7 +171,7 @@ test_that("km script reproduces survfit, log-rank, and Cox HR", {
   expect_match(out$code, "survdiff(Surv(time, status) ~ group, data = dat)", fixed = TRUE)
   expect_match(out$code, "coxph(Surv(time, status) ~ group, data = dat)", fixed = TRUE)
   env <- new.env(parent = globalenv())
-  eval(parse(text = out$code), env)
+  capture.output(eval(parse(text = out$code), env))
   # script's log-rank p agrees with the app's text
   p <- 1 - stats::pchisq(env$lr$chisq, length(env$lr$n) - 1)
   if (p < 0.001) expect_match(out$text, "p < 0.001", fixed = TRUE)

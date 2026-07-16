@@ -82,6 +82,7 @@ async function render(spec) {
   preview.innerHTML = "Rendering… (first run downloads R, ~30s)";
   stats.textContent = "";
   stats.classList.remove("error");
+  delete stats.dataset.rCode;
   setStatus("busy", "R: working…");
   const out = await runFigure(spec);
   if (!out.ok) {
