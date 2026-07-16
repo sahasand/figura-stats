@@ -184,7 +184,7 @@
   n <- sum(tab)
 
   # Expected-count rule: any expected cell < 5 -> Fisher.
-  suppressWarnings({ chi <- stats::chisq.test(tab) })
+  suppressWarnings({ chi <- stats::chisq.test(tab, correct = FALSE) })
   use_fisher <- any(chi$expected < 5)
   if (use_fisher) {
     ht <- stats::fisher.test(tab); tname <- "Fisher's exact test"
