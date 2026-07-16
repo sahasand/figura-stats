@@ -32,6 +32,10 @@ assert.equal(exportFilename("km", "tsv", {}), "km-output.tsv");
 assert.equal(exportFilename("explore", "R", {}), "explore-output.R");
 assert.equal(exportFilename("summary", "tsv", {}), "summary-output.tsv");
 
+// Rscript kind names the script download
+assert.equal(exportFilename("km", "Rscript", {}), "km-script.R");
+assert.equal(exportFilename("summary", "Rscript", {}), "summary-script.R");
+
 console.log("ok - export core (dimensions, stitching, filenames)");
 
 // ---- PNG pHYs stamping --------------------------------------------------

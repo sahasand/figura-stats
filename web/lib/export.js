@@ -52,6 +52,7 @@ export function combineSvgs(panels) {
 // Journal-conventional filenames: summary-figure-600dpi.png, km-panel-2.svg,
 // km-output.tsv.
 export function exportFilename(figureKey, kind, { dpi, panel } = {}) {
+  if (kind === "Rscript") return `${figureKey}-script.R`;
   const base = panel
     ? `${figureKey}-panel-${panel}`
     : `${figureKey}-${kind === "tsv" || kind === "R" ? "output" : "figure"}`;
