@@ -200,7 +200,8 @@ test_that("km script prep honors source_roles from a mapped upload", {
     source_roles = list(time = "followup_months", status = "vital",
                         group = "arm", event = "Death")))
   expect_match(out$code, 'as.numeric(df[["followup_months"]])', fixed = TRUE)
-  expect_match(out$code, 'as.integer(df[["vital"]] == "Death")', fixed = TRUE)
+  expect_match(out$code, 'status_raw <- df[["vital"]]', fixed = TRUE)
+  expect_match(out$code, 'as.character(status_raw) == "Death"', fixed = TRUE)
   expect_match(out$code, 'as.character(df[["arm"]])', fixed = TRUE)
   expect_match(out$code, "every other value counts as censored", fixed = TRUE)
   expect_silent(parse(text = out$code))
@@ -210,4 +211,38 @@ test_that("km script without source_roles keeps the fixed prep", {
   out <- fig_km(km_script_spec())
   expect_match(out$code, "as.numeric(df$time)", fixed = TRUE)
   expect_false(grepl("source_roles", out$code, fixed = TRUE))
+})
+
+test_that("mapped-upload script reproduces events for decimal-coded status", {
+  csv <- tempfile(fileext = ".csv")
+  writeLines(c("followup_months,vital,arm",
+               "5.2,1.0,A", "8.1,0.0,A", "3.3,1.0,A",
+               "12.4,0.0,B", "9.9,1.0,B", "15.0,0.0,B"), csv)
+  # App-side coding (what the form does): status 1 iff raw string == "1.0"
+  spec <- list(figure = "km",
+    data = list(list(time = 5.2, status = 1L, group = "A"),
+                list(time = 8.1, status = 0L, group = "A"),
+                list(time = 3.3, status = 1L, group = "A"),
+                list(time = 12.4, status = 0L, group = "B"),
+                list(time = 9.9, status = 1L, group = "B"),
+                list(time = 15.0, status = 0L, group = "B")),
+    options = list(time_label = "Months", source_filename = csv,
+                   source_roles = list(time = "followup_months", status = "vital",
+                                       group = "arm", event = "1.0")))
+  out <- fig_km(spec)
+  env <- new.env(parent = globalenv())
+  # This tiny fixture triggers coxph complete-separation warnings from survival
+  # internals; suppress them here — the assertion is only about event coding.
+  suppressWarnings(capture.output(eval(parse(text = out$code), env)))
+  expect_equal(sum(env$dat$status), 3)   # script counts the same 3 events as the app
+})
+
+test_that("km script ignores source_roles when no source_filename (embedded data)", {
+  out <- fig_km(km_script_spec(
+    source_roles = list(time = "followup_months", status = "vital",
+                        group = "arm", event = "Death")))
+  # Embedded data is already time/status/group shape: fixed prep, no role remap.
+  expect_match(out$code, "as.numeric(df$time)", fixed = TRUE)
+  expect_false(grepl("followup_months", out$code, fixed = TRUE))
+  expect_silent(parse(text = out$code))
 })
