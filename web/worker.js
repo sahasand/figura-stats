@@ -9,6 +9,12 @@ let webRReady;
 // downloads the KM survival tree. Boot installs only the shared base below.
 // See ensureExtraPackages().
 const EXTRA_PACKAGES = { km: ["survival", "cowplot"] };
+// Human-friendly, per-figure wording for the one-time package download so the
+// figure pane reads like a sentence, not "Loading km packages". Shown while
+// ensureExtraPackages() installs — KM's survival tree is ~65MB, so warn.
+const EXTRA_PACKAGES_MESSAGE = {
+  km: "Downloading survival-analysis packages (survival + cowplot) — usually 20–30 seconds, first time only. Later runs are instant.",
+};
 const installedExtras = new Set();
 // Single-flight guard: figure type -> in-flight install Promise. Without this,
 // two concurrent requests for the same figure type (e.g. a double-click on
@@ -51,7 +57,8 @@ async function ensureExtraPackages(webR, figure, id) {
   // promise instead of starting a second webR.installPackages() call.
   let installPromise = pendingExtraInstalls.get(figure);
   if (!installPromise) {
-    self.postMessage({ id, progress: `Loading ${figure} packages (first time, this may take a minute)…` });
+    self.postMessage({ id, progress: EXTRA_PACKAGES_MESSAGE[figure]
+      || `Loading ${figure} packages (first time, this may take a minute)…` });
     installPromise = webR.installPackages(missing, { quiet: true }).then(() => {
       for (const p of missing) installedExtras.add(p);
     });

@@ -118,6 +118,51 @@ function makeDoc() {
   console.log("ok - builder-controls geom-switch reconcile");
 }
 
+// Switching to a grouped-x geom (boxplot/violin/bar) drops a carried numeric x
+// — which would draw one box per distinct value — and defaults to the first
+// genuinely categorical column so the first frame is sensible.
+{
+  const doc = makeDoc();
+  const container = doc.createElement("div");
+  let last = null;
+  renderBuilderControls(container, table,
+    { roles: { x: "age", y: "bmi", color: null, facet: null },
+      options: defaultOptions("scatter") },
+    (s) => { last = s; }, doc);
+  const geomSel = byId(container, "explore-geom");
+  geomSel.value = "boxplot";
+  geomSel.onchange();
+  assert.equal(last.options.geom, "boxplot");
+  assert.equal(last.roles.x, "arm", "numeric x replaced by first categorical for a grouped plot");
+  assert.equal(last.roles.y, "bmi", "numeric y carries over unchanged");
+  console.log("ok - builder-controls categorical-x default on geom switch");
+}
+
+// The categorical-x default must skip a high-cardinality ID column (one value
+// per row) and pick the low-cardinality grouping instead.
+{
+  const idTable = {
+    columns: ["pid", "age", "arm"],
+    types: { pid: "categorical", age: "numeric", arm: "categorical" },
+    rows: [
+      { pid: "P1", age: 61, arm: "Control" },
+      { pid: "P2", age: 55, arm: "Treatment" },
+      { pid: "P3", age: 70, arm: "Control" },
+    ],
+  };
+  const doc = makeDoc();
+  const container = doc.createElement("div");
+  let last = null;
+  renderBuilderControls(container, idTable,
+    { roles: { x: "age", color: null, facet: null }, options: defaultOptions("bar") },
+    (s) => { last = s; }, doc);
+  // already bar (categorical x); re-trigger a switch to force the default path
+  const geomSel = byId(container, "explore-geom");
+  geomSel.value = "boxplot"; geomSel.onchange();
+  assert.equal(last.roles.x, "arm", "picks low-cardinality grouping, not the per-row ID column");
+  console.log("ok - builder-controls skips ID column for categorical-x default");
+}
+
 // Clearing a number input must not emit 0 (Number("") === 0); the field is
 // restored and nothing is emitted. Real edits still work.
 {

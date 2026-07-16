@@ -50,13 +50,16 @@ export function renderGroupCompareExperiments(panel, ctx, rerun) {
     DEMO_TABLE, (v) => {
       if (!v) return;
       ctx.patchDemoOptions({ roles: { group: v.group, outcome: v.outcome } });
+      // A numeric<->categorical outcome switch flips the plot between
+      // box/violin and a bar chart, so re-render the Plot control to match.
+      renderPlotControl();
       rerun();
     });
   // preselect current roles
   const gsel = outWrap.querySelector("#cp_group"); if (gsel) gsel.value = state.roles.group;
   const osel = outWrap.querySelector("#cp_outcome"); if (osel) osel.value = state.roles.outcome;
 
-  const mk = (id, label, choices, cur, key) => {
+  const mk = (parent, id, label, choices, cur, key) => {
     const l = document.createElement("label"); l.textContent = label + " ";
     const s = document.createElement("select"); s.id = id;
     for (const [val, txt] of choices) {
@@ -71,10 +74,34 @@ export function renderGroupCompareExperiments(panel, ctx, rerun) {
       ctx.patchDemoOptions({ options: { ...now, [key]: s.value } });
       rerun();
     };
-    l.appendChild(s); host.appendChild(l);
+    l.appendChild(s); parent.appendChild(l);
   };
-  mk("demo-plot", "Plot", [["box", "Box"], ["violin", "Violin"]], state.options.plot, "plot");
-  mk("demo-test", "Test", [["auto", "Auto (by normality)"],
+
+  // A span host so the Plot control can re-render in place (on outcome change)
+  // without disturbing the Test control that follows it.
+  const plotWrap = document.createElement("span");
+  host.appendChild(plotWrap);
+
+  // A numeric outcome is drawn as box/violin; a categorical outcome always
+  // renders a stacked proportion bar chart (see R/groupcompare.R .gc_categorical),
+  // so show that instead of an inert Box/Violin picker that wouldn't match the
+  // figure. DEMO_TABLE.types mirrors R's numeric/categorical decision.
+  function renderPlotControl() {
+    plotWrap.innerHTML = "";
+    const outcome = ctx.getSession().demoOptions.roles.outcome;
+    if (DEMO_TABLE.types[outcome] === "numeric") {
+      mk(plotWrap, "demo-plot", "Plot", [["box", "Box"], ["violin", "Violin"]],
+        ctx.getSession().demoOptions.options.plot, "plot");
+    } else {
+      const l = document.createElement("label"); l.textContent = "Plot ";
+      const s = document.createElement("select"); s.id = "demo-plot"; s.disabled = true;
+      const o = document.createElement("option"); o.textContent = "Bar (proportions)";
+      s.appendChild(o); l.appendChild(s); plotWrap.appendChild(l);
+    }
+  }
+  renderPlotControl();
+
+  mk(host, "demo-test", "Test", [["auto", "Auto (by normality)"],
     ["parametric", "Parametric"], ["nonparametric", "Non-parametric"]],
     state.options.test, "test");
 }

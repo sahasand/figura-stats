@@ -131,12 +131,41 @@ export function renderBuilderControls(container, table, state, onChange, doc = g
   let options = { ...state.options };
   const emit = () => onChange({ roles: { ...roles }, options: { ...options } });
 
+  // A sensible default grouping column for a boxplot/violin/bar x axis: the
+  // categorical column with the FEWEST distinct values (a real grouping like
+  // arm/sex), never a high-cardinality ID column (patient_id has one value per
+  // row and would draw one box each). Null if none is a reasonable grouping,
+  // leaving the picker blank until the user chooses.
+  const MAX_GROUPING_LEVELS = 12;
+  const bestGroupingColumn = () => {
+    let best = null, bestN = Infinity;
+    for (const c of table.columns) {
+      if (table.types[c] !== "categorical") continue;
+      const n = new Set(table.rows
+        .map((r) => r[c])
+        .filter((v) => v !== null && v !== undefined && v !== "")).size;
+      if (n >= 2 && n < bestN) { best = c; bestN = n; }
+    }
+    return bestN <= MAX_GROUPING_LEVELS ? best : null;
+  };
+
   geomSel.onchange = () => {
     const geom = geomSel.value;
-    const keep = GEOM_ROLES(geom).map((r) => r.key);
     // Keep still-compatible selections; drop the rest. Type compatibility is
     // re-checked by the pickers below (a numeric y stays numeric everywhere).
-    roles = Object.fromEntries(keep.map((k) => [k, roles[k] ?? null]));
+    roles = Object.fromEntries(GEOM_ROLES(geom).map((r) => {
+      let val = roles[r.key] ?? null;
+      // Switching to a grouped-x geom (boxplot/violin/bar) carries a numeric x
+      // over — scatter and line always have a numeric x — which would draw one
+      // box/bar per distinct value (e.g. age → ~40 boxes). Default to the first
+      // genuinely categorical column instead; the user can still pick a numeric
+      // column "(as categories)" deliberately.
+      if (r.key === "x" && r.type === "categorical+"
+          && (!val || table.types[val] === "numeric")) {
+        val = bestGroupingColumn();
+      }
+      return [r.key, val];
+    }));
     options = { ...defaultOptions(geom),
       title: options.title, xlab: options.xlab, ylab: options.ylab };
     buildRoles(); buildOptions();
