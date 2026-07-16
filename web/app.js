@@ -3,6 +3,17 @@ const worker = new Worker("worker.js", { type: "module" });
 const pending = new Map();
 let nextId = 1;
 
+// Register the service worker for fast repeat visits. updateViaCache:"none"
+// keeps the SW script itself always-revalidated so a new version is never
+// stale-served — the key to clean invalidation. First visit is uncontrolled
+// (SW activates for subsequent loads); warm-on-load handles first-visit speed.
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+      .catch(() => { /* SW is a progressive enhancement; never block the app */ });
+  });
+}
+
 // Session status chip in the toolbar: idle -> busy -> ready/error.
 function setStatus(state, label) {
   const chip = document.getElementById("rstatus");
