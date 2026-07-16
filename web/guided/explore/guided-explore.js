@@ -13,13 +13,17 @@ import { renderExploreForm } from "./analyze-form.js";
 function renderExploreExperiments(panel, ctx, rerun) {
   const host = panel.querySelector("#demo-experiments");
   host.innerHTML = "";
-  const rerunDebounced = debounce(rerun, 400);
+  // The renderable check runs at debounce FIRE time against the live session,
+  // not at schedule time: a valid change followed <400ms later by a cross-type
+  // geom switch (which nulls x) must not let the surviving timer submit the
+  // doomed spec. Every change reschedules, so the timer always sees the newest
+  // state — mirroring the analyze form's guard placement.
+  const rerunDebounced = debounce(() => {
+    if (isRenderable(ctx.getSession().demoOptions)) rerun();
+  }, 400);
   renderBuilderControls(host, DEMO_TABLE, ctx.getSession().demoOptions, (state) => {
-    // Always persist the pending options (so a later valid change carries them),
-    // but only rerun once the roles form a renderable spec — a cross-type geom
-    // switch nulls x, and submitting that doomed spec would blank the preview.
-    ctx.patchDemoOptions(state);
-    if (isRenderable(state)) rerunDebounced();
+    ctx.patchDemoOptions(state);   // always persist, even mid-mapping
+    rerunDebounced();
   });
 }
 
