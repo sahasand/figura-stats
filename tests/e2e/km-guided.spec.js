@@ -65,8 +65,23 @@ test("demo and user results are separate contexts", async ({ page }) => {
   await page.getByRole("tab", { name: "Analyze Your Data" }).click();
   await expect(page.locator("#preview svg")).toHaveCount(0);   // user context empty
   await page.locator("#csv").setInputFiles(path.join(__dirname, "fixtures", "km.csv"));
+  await expect(page.locator("#km-config")).toBeVisible();       // progressive reveal
+  await page.locator("#cp_time").selectOption("followup_months");
+  await page.locator("#cp_status").selectOption("status");
+  await page.locator("#cp_group").selectOption("group");
+  await page.locator("#km-event").selectOption("Death");
   await page.getByRole("button", { name: /render/i }).click();
   await expect(page.locator("#preview svg")).toBeVisible({ timeout: 120000 });
   await page.getByRole("tab", { name: "Try an Example" }).click();
   await expect(page.locator("#stats")).toContainText("p = 0.108");  // demo restored
+});
+
+test("Analyze tab explains the CSV and offers the example download", async ({ page }) => {
+  await page.goto("/#km/analyze");
+  await page.getByRole("button", { name: /kaplan-meier/i }).click();
+  await expect(page.getByText("What your CSV should look like")).toBeVisible();
+  await expect(page.locator("#example-csv")).toHaveAttribute("download", "example-survival.csv");
+  const href = await page.locator("#example-csv").getAttribute("href");
+  expect(href).toMatch(/^blob:/);                     // client-side Blob — no egress
+  await expect(page.locator("#km-config")).toBeHidden();  // nothing before a file
 });

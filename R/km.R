@@ -203,11 +203,36 @@ fig_km <- function(spec) {
 .km_script <- function(spec, opts, n_groups, fit_expr, lr_expr, cox_expr) {
   qe <- function(s) gsub('"', '\\\\"', s)
   time_label <- qe(opts$time_label %||% "Time")
+  # Mapped uploads carry source_roles: the script must read the user's REAL
+  # column names and event coding, not the app-internal time/status/group.
+  # source_roles only applies to file-backed uploads; embedded example data is
+  # already time/status/group shape, so ignore roles when there is no filename.
+  sr <- if (nzchar(as.character(opts$source_filename %||% ""))) opts$source_roles else NULL
   prep <- c(
-    "dat <- data.frame(time = as.numeric(df$time),",
-    "                  status = as.integer(df$status),",
-    "                  group  = as.character(df$group),",
-    "                  stringsAsFactors = FALSE)",
+    if (!is.null(sr)) c(
+      sprintf('# Event coding confirmed in the app: %s == "%s" marks the event;',
+              qe(sr$status), qe(sr$event)),
+      "# every other value counts as censored. The app compared the raw CSV",
+      "# string to the event value, so match as strings; also accept numeric",
+      "# equality so a status column read.csv infers as numeric (e.g. 1.0/0.0)",
+      "# still counts events when the event literal is a number.",
+      sprintf('status_raw <- df[["%s"]]', qe(sr$status)),
+      sprintf(paste0('status <- as.integer(as.character(status_raw) == "%s" | ',
+                     '(is.numeric(status_raw) & ',
+                     '!is.na(suppressWarnings(as.numeric("%s"))) & ',
+                     'status_raw == suppressWarnings(as.numeric("%s"))))'),
+              qe(sr$event), qe(sr$event), qe(sr$event)),
+      sprintf('dat <- data.frame(time = as.numeric(df[["%s"]]),', qe(sr$time)),
+      "                  status = status,",
+      sprintf('                  group  = as.character(df[["%s"]]),', qe(sr$group)),
+      "                  stringsAsFactors = FALSE)",
+      "# blank cells were excluded in the app; NA rows are excluded here too",
+      "dat <- dat[!is.na(dat$time) & !is.na(dat$status) & !is.na(dat$group), ]"
+    ) else c(
+      "dat <- data.frame(time = as.numeric(df$time),",
+      "                  status = as.integer(df$status),",
+      "                  group  = as.character(df$group),",
+      "                  stringsAsFactors = FALSE)"),
     if (!is.null(opts$reference))
       sprintf('dat$group <- relevel(factor(dat$group), ref = "%s")',
               qe(opts$reference)),
