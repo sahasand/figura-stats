@@ -77,6 +77,11 @@ export function createGuidedShell(cfg) {
         session = storeResult(session, context, out);
         if (shouldPaint) showStored(context);
         return out;
+      }).finally(() => {
+        // Belt-and-suspenders: the resolve path already clears "busy" first
+        // (idempotent here), but if runFigure ever rejects the then never runs
+        // and the overlay would stick — clearing here covers that path too.
+        preview.classList.remove("busy");
       });
     }
 
@@ -169,6 +174,10 @@ export function createGuidedShell(cfg) {
 
     runBtn.addEventListener("click", runDemo);
     panel.querySelector("#reset-demo").addEventListener("click", () => {
+      // Drop any spec queued behind an in-flight run BEFORE resetting: a
+      // pre-reset pending spec would otherwise pass the generation check and
+      // paint a stale plot under the freshly restored default controls.
+      if (coalescer) coalescer.clear();
       ctx.resetDemoState();
       renderExample(panel, ctx);                    // clears result + restores default controls
     });

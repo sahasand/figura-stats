@@ -3,7 +3,7 @@ import { createGuidedShell } from "../shell.js";
 import { renderUnderstand, EXAMPLE_INTRO_HTML } from "./content.js";
 import { buildExploreDemoSpec, DEFAULT_DEMO_STATE, DEMO_TABLE } from "./demo.js";
 import { EXPLORE_DEMO } from "./demo-data.js";
-import { renderBuilderControls } from "./builder-controls.js";
+import { renderBuilderControls, isRenderable } from "./builder-controls.js";
 import { debounce } from "../live-run.js";
 import { renderExploreForm } from "./analyze-form.js";
 
@@ -15,8 +15,11 @@ function renderExploreExperiments(panel, ctx, rerun) {
   host.innerHTML = "";
   const rerunDebounced = debounce(rerun, 400);
   renderBuilderControls(host, DEMO_TABLE, ctx.getSession().demoOptions, (state) => {
+    // Always persist the pending options (so a later valid change carries them),
+    // but only rerun once the roles form a renderable spec — a cross-type geom
+    // switch nulls x, and submitting that doomed spec would blank the preview.
     ctx.patchDemoOptions(state);
-    rerunDebounced();
+    if (isRenderable(state)) rerunDebounced();
   });
 }
 

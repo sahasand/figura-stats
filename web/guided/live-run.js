@@ -16,7 +16,11 @@ export function createCoalescer(run) {
       if (pending !== null) { const next = pending; pending = null; submit(next); }
     }
   }
-  return { submit };
+  // Drop the queued spec without touching the in-flight run. Reset Example uses
+  // this so a pre-reset pending spec can't paint a stale plot under the freshly
+  // reset default controls after the in-flight run settles.
+  function clear() { pending = null; }
+  return { submit, clear };
 }
 
 export function debounce(fn, ms) {

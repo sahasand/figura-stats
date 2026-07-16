@@ -28,6 +28,17 @@ export function GEOM_ROLES(geom) {
   }
 }
 
+// A spec is renderable only once its required roles are set. Every geom needs
+// x; the two-axis geoms also need y. Submitting before these are chosen sends
+// roles.x=null, R errors, and the shell error path blanks the preview — so both
+// the demo experiments and the analyze form gate their debounced runs on this.
+export function isRenderable(state) {
+  if (!state.roles.x) return false;
+  if (["scatter", "line", "boxplot", "violin"].includes(state.options.geom)
+      && !state.roles.y) return false;
+  return true;
+}
+
 const GEOM_OPTION_KEYS = {
   scatter: ["point_size", "alpha", "smoother", "se"],
   line: ["linewidth", "show_points"],

@@ -1,6 +1,6 @@
 // web/guided/explore/builder-controls.test.mjs
 import assert from "node:assert/strict";
-import { GEOM_ROLES, defaultOptions, buildExploreSpec, renderBuilderControls } from "./builder-controls.js";
+import { GEOM_ROLES, defaultOptions, buildExploreSpec, renderBuilderControls, isRenderable } from "./builder-controls.js";
 
 const table = {
   columns: ["age", "bmi", "arm", "ecog"],
@@ -45,6 +45,21 @@ const table = {
   assert.equal(spec.options.caption, "Synthetic demo");
   assert.deepEqual(Object.keys(spec.data[0]), ["ecog"]);
 }
+// isRenderable: x is required for every geom; two-axis geoms also need y.
+{
+  assert.equal(isRenderable({ roles: { x: null }, options: { geom: "scatter" } }), false);
+  assert.equal(isRenderable({ roles: { x: "age" }, options: { geom: "scatter" } }), false,
+    "scatter needs y");
+  assert.equal(isRenderable({ roles: { x: "age", y: "bmi" }, options: { geom: "scatter" } }), true);
+  assert.equal(isRenderable({ roles: { x: "arm" }, options: { geom: "boxplot" } }), false,
+    "boxplot needs y");
+  // bar / histogram need only x.
+  assert.equal(isRenderable({ roles: { x: "sex" }, options: { geom: "bar" } }), true);
+  assert.equal(isRenderable({ roles: { x: "bmi" }, options: { geom: "histogram" } }), true);
+  assert.equal(isRenderable({ roles: { x: null }, options: { geom: "histogram" } }), false);
+  console.log("ok - isRenderable required-role gating");
+}
+
 // --- DOM control panel (fake DOM, same idiom as columnpicker.test.mjs) ---
 // Selects mirror the HTML spec: assigning a value with no matching <option>
 // coerces to "" (selectedIndex = -1) — the exact behavior the geom-switch

@@ -86,7 +86,9 @@ interpolates them into code text. Instead:
    both come from one expression object.
 
 The displayed code is standalone: `library(ggplot2)`, a
-`# df <- read.csv("your-data.csv")` header comment, then the deparsed plot
+`# df <- read.csv("your-data.csv", check.names = FALSE)` header comment
+(`check.names = FALSE` so non-syntactic column names like `age (years)` load
+unmangled and match the emitted `.data[["age (years)"]]`), then the deparsed plot
 code. **The expression must be self-contained in a plain R session**: the
 Tol palette values and theme are inlined as literal
 `scale_colour_manual(values = c(...))` / `theme_minimal()` + `theme(...)`

@@ -37,6 +37,11 @@ test("demo renders live: geom switch re-renders and code follows", async ({ page
   // scatter must reset #cp_x to "" and fire NO render until x is re-picked.
   await page.locator("#explore-geom").selectOption("scatter");
   await expect(page.locator("#cp_x")).toHaveValue("");
+  // No doomed render may fire while x is unset: give the debounce+coalescer
+  // ample time, then confirm the code pane still shows the PREVIOUS geom
+  // (geom_boxplot) — never an error, never a blanked preview.
+  await page.waitForTimeout(1500);
+  await expect(page.locator("#stats")).toContainText("geom_boxplot");
   await page.locator("#cp_x").selectOption("age");
   await page.locator("#cp_y").selectOption("biomarker");
   await expect(page.locator("#stats")).toContainText("geom_point", { timeout: 120000 });

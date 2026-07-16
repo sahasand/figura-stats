@@ -375,7 +375,7 @@ fig_explore <- function(spec) {
   dep <- function(e) paste(deparse(e, width.cutoff = 60L), collapse = "\n    ")
   code <- c("library(ggplot2)", "",
     "# Load your data (edit the path):",
-    '# df <- read.csv("your-data.csv")', "")
+    '# df <- read.csv("your-data.csv", check.names = FALSE)', "")
   if (!is.null(prep_expr)) code <- c(code,
     sprintf("# %d row%s with missing values in the selected columns excluded:",
             n_drop, if (n_drop == 1) "" else "s"),

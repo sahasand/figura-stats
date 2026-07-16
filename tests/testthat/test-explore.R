@@ -11,6 +11,8 @@ test_that("scatter renders and emits matching standalone code", {
                    smoother = "lm", se = TRUE)))
   expect_match(out$svg, "<svg", fixed = TRUE)
   expect_match(out$text, "library\\(ggplot2\\)")
+  # Standalone header must keep raw column names loadable in the user's session.
+  expect_match(out$text, "check.names = FALSE", fixed = TRUE)
   expect_match(out$text, "geom_point", fixed = TRUE)
   expect_match(out$text, "geom_smooth", fixed = TRUE)
   expect_match(out$text, 'aes(x = .data[["age"]]', fixed = TRUE)
@@ -119,7 +121,7 @@ test_that("bar proportions use the specced denominators", {
 test_that("histogram honours bins and the density toggle", {
   h <- fig_explore(list(data = demo_rows, roles = list(x = "biomarker"),
     options = list(geom = "histogram", bins = 15)))
-  expect_match(h$text, "geom_histogram(bins = 15", fixed = TRUE)
+  expect_match(h$text, "geom_histogram(bins = 15,", fixed = TRUE)  # plain numeric, not 15L
   d <- fig_explore(list(data = demo_rows, roles = list(x = "biomarker"),
     options = list(geom = "histogram", density = TRUE)))
   expect_match(d$text, "geom_density", fixed = TRUE)

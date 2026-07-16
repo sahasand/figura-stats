@@ -34,6 +34,21 @@ import { createCoalescer, debounce } from "./live-run.js";
   assert.deepEqual(ran, ["boom", "next"]);
 }
 
+// Coalescer clear(): a queued spec is dropped and never runs after release.
+{
+  const ran = [];
+  let release;
+  const gate = () => new Promise((r) => { release = r; });
+  const c = createCoalescer(async (spec) => { ran.push(spec); await gate(); });
+  c.submit("a");                    // starts immediately (gated in-flight)
+  c.submit("b");                    // pending
+  c.clear();                        // drop the pending "b"
+  assert.deepEqual(ran, ["a"]);
+  release();                        // settle "a"
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(ran, ["a"]);     // "b" never ran
+}
+
 // Debounce: only the last call within the window fires.
 {
   const got = [];

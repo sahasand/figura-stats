@@ -87,8 +87,6 @@ fig_explore <- function(spec) {
   if (!is.null(used$group)) aes_args$group <- wrap_cat(roles$group)
   base_call <- call("ggplot", quote(df), as.call(c(quote(aes), aes_args)))
 
-  num1 <- function(v, d) { v <- suppressWarnings(as.numeric(v %||% d))
-                           if (length(v) != 1 || !is.finite(v)) d else v }
   layers <- .explore_layers(geom, opt, roles)
 
   scale_call <- NULL
@@ -129,7 +127,7 @@ fig_explore <- function(spec) {
   dep <- function(e) paste(deparse(e, width.cutoff = 60L), collapse = "\n    ")
   code <- c("library(ggplot2)", "",
     "# Load your data (edit the path):",
-    '# df <- read.csv("your-data.csv")', "")
+    '# df <- read.csv("your-data.csv", check.names = FALSE)', "")
   if (!is.null(prep_expr)) code <- c(code,
     sprintf("# %d row%s with missing values in the selected columns excluded:",
             n_drop, if (n_drop == 1) "" else "s"),
@@ -141,7 +139,7 @@ fig_explore <- function(spec) {
 }
 
 # One list of geom-layer calls per chart type. Kept separate from fig_explore
-# so each geom's options stay readable. Task 3 fills in the non-scatter geoms.
+# so each geom's options stay readable.
 .explore_layers <- function(geom, opt, roles) {
   num1 <- function(v, d) { v <- suppressWarnings(as.numeric(v %||% d))
                            if (length(v) != 1 || !is.finite(v)) d else v }
@@ -198,6 +196,7 @@ fig_explore <- function(spec) {
           fill = .EXPLORE_BLUE, alpha = 0.6)))
       } else {
         b <- as.integer(num1(opt$bins, 30)); if (b < 1) b <- 30
+        b <- as.numeric(b)   # emit plain `bins = 15`, not `15L`, in teaching code
         if (has_col) list(as.call(list(quote(geom_histogram),
           bins = b, position = "identity", alpha = 0.7)))
         else list(as.call(list(quote(geom_histogram),

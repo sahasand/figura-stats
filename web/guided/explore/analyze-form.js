@@ -1,6 +1,6 @@
 // web/guided/explore/analyze-form.js
 import { parseCsv, toCsv } from "../../lib/csv.js";
-import { renderBuilderControls, buildExploreSpec, defaultOptions }
+import { renderBuilderControls, buildExploreSpec, defaultOptions, isRenderable }
   from "./builder-controls.js";
 import { debounce } from "../live-run.js";
 import { EXPLORE_DEMO } from "./demo-data.js";
@@ -48,10 +48,7 @@ export function renderExploreForm(container, onSubmit, doc = globalThis.document
 
   const submitDebounced = debounce((state) => {
     if (!table) return;                              // failed re-upload landed mid-debounce
-    if (!state.roles.x) return;                      // incomplete mapping: wait
-    const need_y = ["scatter", "line", "boxplot", "violin"]
-      .includes(state.options.geom);
-    if (need_y && !state.roles.y) return;
+    if (!isRenderable(state)) return;                // incomplete mapping: wait
     onSubmit(buildExploreSpec(table, state.roles, state.options));
   }, 400);
 
