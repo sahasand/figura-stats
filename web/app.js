@@ -65,9 +65,10 @@ async function render(spec) {
 import { renderGuidedSummary } from "./guided/summary/guided-summary.js";
 import { renderGuidedKm } from "./guided/guided-analysis.js";
 import { renderGuidedExplore } from "./guided/explore/guided-explore.js";
+import { renderGuidedGroupCompare } from "./guided/groupcompare/guided-groupcompare.js";
 import { initExportUI } from "./export-ui.js";
 const forms = { summary: renderGuidedSummary, km: renderGuidedKm,
-                explore: renderGuidedExplore };
+                explore: renderGuidedExplore, groupcompare: renderGuidedGroupCompare };
 
 let currentFigure = "figure";   // export filename stem before any selection
 
