@@ -20,10 +20,15 @@ const pendingExtraInstalls = new Map();
 
 async function boot() {
   const webR = new WebR();
+  // Coarse progress pings for the toolbar status chip (warmup UX only — the
+  // render path posts these too, but app.js only acts on warmup-shaped
+  // messages, so they're harmless there).
+  self.postMessage({ warmup: true, stage: "engine" });
   await webR.init();
   // Boot installs ONLY the packages shared by every figure. Heavy per-figure
   // dependencies (e.g. survival + cowplot for KM) are installed lazily on
   // first use via ensureExtraPackages(), keeping first load fast for everyone.
+  self.postMessage({ warmup: true, stage: "packages" });
   await webR.installPackages(["ggplot2", "svglite", "jsonlite"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.
   // Missing files 404, and the `resp.ok` guard skips them.
@@ -59,7 +64,24 @@ async function ensureExtraPackages(webR, figure, id) {
 }
 
 self.onmessage = async (e) => {
-  const { id, json } = e.data;
+  const { id, json, warmup } = e.data;
+  if (warmup) {
+    // Warm the runtime on page load without rendering anything. Reuses the
+    // same single-flight promise as the render path below, so whichever
+    // happens first (warmup or a real Run) wins the boot() call and the
+    // other awaits the same in-flight/settled promise — never a double boot.
+    try {
+      webRReady = webRReady || boot();
+      await webRReady;
+      self.postMessage({ warmup: true, ready: true });
+    } catch (_) {
+      // Swallow: a failed warmup must never break the app. The real Run
+      // will retry boot() and surface a genuine error through the normal
+      // render path's try/catch below.
+      self.postMessage({ warmup: true, ready: false });
+    }
+    return;
+  }
   try {
     webRReady = webRReady || boot();
     const webR = await webRReady;

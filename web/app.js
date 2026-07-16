@@ -12,7 +12,19 @@ function setStatus(state, label) {
 }
 
 worker.onmessage = (e) => {
-  const { id, result, progress } = e.data;
+  const { id, result, progress, warmup, ready, stage } = e.data;
+  // Warmup messages (page-load engine warm, or its progress/completion pings)
+  // only ever touch the status chip — never #preview/#stats, since the user
+  // may still be reading the Understand tab when this arrives. Branching on
+  // `warmup` first also means `pending.get(undefined)` below is never reached
+  // for these messages.
+  if (warmup) {
+    if (ready === true) setStatus("ready", "R: ready");
+    else if (ready === false) setStatus("idle", "R: offline");
+    else if (stage === "engine") setStatus("busy", "R: loading engine…");
+    else if (stage === "packages") setStatus("busy", "R: loading packages…");
+    return;
+  }
   // Progress pings (e.g. lazy package downloads) update the UI without
   // resolving the pending request; the final message carries `result`.
   if (progress !== undefined) {
@@ -33,6 +45,14 @@ worker.onerror = () => {
   for (const resolve of pending.values()) resolve(payload);
   pending.clear();
 };
+
+// Warm the webR runtime as soon as the page loads, instead of waiting for the
+// first Run click. This is a module script, so this fires once at load; the
+// worker's single-flight `webRReady = webRReady || boot()` guard means a
+// subsequent real Run reuses this same in-flight/settled promise rather than
+// booting twice.
+setStatus("busy", "R: warming up…");
+worker.postMessage({ warmup: true });
 
 export function runFigure(spec) {
   return new Promise((resolve) => {
