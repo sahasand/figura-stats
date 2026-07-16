@@ -18,6 +18,11 @@ export function renderUnderstand(panel) {
       <li><strong>A category</strong> (e.g. responder yes/no) uses a chi-square
         test, falling back to Fisher's exact when counts are small.</li>
     </ul>
+    <p class="callout">A yes/no outcome written as <code>0</code> and
+      <code>1</code> is read as a number, so it is compared with a t-test. To
+      get proportions, a chi-square test, and an odds ratio instead, write the
+      outcome as words — <code>Yes</code>/<code>No</code>,
+      <code>Responder</code>/<code>Non-responder</code>.</p>
     <h3>Report more than a p-value</h3>
     <p>A p-value tells you whether a difference is detectable, not how big it is.
       Every result here also reports an <strong>effect size with a 95% confidence

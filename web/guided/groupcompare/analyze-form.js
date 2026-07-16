@@ -25,6 +25,9 @@ export function renderGroupCompareForm(container, onSubmit, doc = globalThis.doc
         <li>A column naming each participant's group or arm.</li>
         <li>An outcome column — a number (e.g. a measurement) or a category
           (e.g. yes/no).</li>
+        <li>Write a yes/no outcome as words (<code>Yes</code>/<code>No</code>),
+          not <code>0</code>/<code>1</code> — a 0/1 column is read as a number
+          and compared with a t-test rather than a chi-square.</li>
         <li>Leave a cell empty when a value is missing.</li>
       </ul>
       <p><a id="example-csv" download="example-groups.csv" href="#">Download an example CSV</a>
