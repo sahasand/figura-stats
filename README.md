@@ -1,4 +1,6 @@
-# Clinical Manuscript Figures
+# Figura
+
+*Clinical manuscript figures & statistics, computed entirely in your browser.*
 
 Free, open-source, browser-based clinical analyses for journal manuscripts,
 rendered by real R (ggplot2, survival, cowplot) via
