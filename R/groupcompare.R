@@ -47,7 +47,9 @@
   sp <- sqrt(((n1 - 1) * stats::var(x1) + (n2 - 1) * stats::var(x2)) / (n1 + n2 - 2))
   d <- (mean(x2) - mean(x1)) / sp
   se <- sqrt((n1 + n2) / (n1 * n2) + d^2 / (2 * (n1 + n2)))
-  .gc_ci_phrase(d, d - 1.96 * se, d + 1.96 * se, "Cohen's d")
+  # Sign is (second sorted group - first); state the reference direction.
+  paste0(.gc_ci_phrase(d, d - 1.96 * se, d + 1.96 * se, "Cohen's d"),
+         sprintf(" (%s vs %s)", lv[2], lv[1]))
 }
 
 .gc_effect_wilcox <- function(df, U) {
@@ -57,15 +59,17 @@
   z <- atanh(max(min(r, 0.999999), -0.999999))
   se <- 1 / sqrt(n1 + n2 - 3)
   lo <- tanh(z - 1.96 * se); hi <- tanh(z + 1.96 * se)
-  .gc_ci_phrase(r, lo, hi, "rank-biserial r")
+  # Sign is (second sorted group - first); state the reference direction.
+  paste0(.gc_ci_phrase(r, lo, hi, "rank-biserial r"),
+         sprintf(" (%s vs %s)", lv[2], lv[1]))
 }
 
 .gc_effect_anova <- function(df) {
   fit <- stats::aov(value ~ group, data = df)
-  ss <- summary(fit)[[1]][, "Sum Sq"]
+  s <- summary(fit)[[1]]
+  ss <- s[, "Sum Sq"]
   eta <- ss[1] / sum(ss)                  # eta-squared
   # CI via noncentral-F (Steiger): invert F to a lambda CI, map to eta^2.
-  s <- summary(fit)[[1]]
   Fv <- s[1, "F value"]; df1 <- s[1, "Df"]; df2 <- s[2, "Df"]
   ci <- .gc_eta_ci(Fv, df1, df2)
   .gc_ci_phrase(eta, ci[1], ci[2], "eta-squared")
@@ -200,10 +204,18 @@
   # Odds ratio + CI only for 2x2.
   if (all(dim(tab) == 2)) {
     a <- tab[1,1]; b <- tab[1,2]; c <- tab[2,1]; d <- tab[2,2]
+    # Haldane-Anscombe: a zero cell makes OR/CI Inf/NaN; add 0.5 to all cells.
+    corrected <- any(c(a, b, c, d) == 0)
+    if (corrected) { a <- a + 0.5; b <- b + 0.5; c <- c + 0.5; d <- d + 0.5 }
     or <- (a * d) / (b * c)
     se <- sqrt(1/a + 1/b + 1/c + 1/d)
     lo <- exp(log(or) - 1.96 * se); hi <- exp(log(or) + 1.96 * se)
-    eff <- paste0(eff, "; ", .gc_ci_phrase(or, lo, hi, "odds ratio"))
+    # State the event level and reference group the OR is FOR (built from tab[1,1]).
+    or_name <- sprintf("odds ratio for %s=%s, %s vs %s",
+      vcol, rownames(tab)[1], colnames(tab)[1], colnames(tab)[2])
+    or_phrase <- .gc_ci_phrase(or, lo, hi, or_name)
+    if (corrected) or_phrase <- paste0(or_phrase, " (0.5 continuity correction applied)")
+    eff <- paste0(eff, "; ", or_phrase)
   }
 
   # Proportion bar chart of the contingency table.

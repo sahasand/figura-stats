@@ -14,6 +14,9 @@ sc <- function(rows, test = "auto", plot = "box")
   list(figure = "groupcompare", data = rows,
        roles = list(group = "grp", outcome = "val"),
        options = list(test = test, plot = plot))
+mkrows2 <- function(out, g) Map(function(o, gi) list(out = o, grp = gi), out, g)
+sc2 <- function(rows) list(figure = "groupcompare", data = rows,
+  roles = list(group = "grp", outcome = "out"), options = list())
 
 test_that("two-group normal auto-selects Welch t-test with d, CI, p, and SVG", {
   out <- fig_groupcompare(sc(two_norm))
@@ -49,6 +52,67 @@ test_that("Cohen's d value is correct within tolerance", {
   expect_true(d < -1.0 || d > 1.0)   # sign depends on factor order; magnitude large
 })
 
+# --- Fix 1: pin effect-size VALUES against hand-computed constants ---
+# Hand-derivation (same seeds/data as the fixtures above), verified via scratch R:
+#   set.seed(11); v<-c(rnorm(30,10,2),rnorm(30,13,2)); g<-rep(c("A","B"),each=30)
+#   x1<-v[g=="A"]; x2<-v[g=="B"]; n1<-n2<-30
+#   sp<-sqrt(((n1-1)*var(x1)+(n2-1)*var(x2))/(n1+n2-2)); d<-(mean(x2)-mean(x1))/sp -> 2.144568
+#   W<-wilcox.test(v~g)$statistic (= 68); r<-1-2*W/(n1*n2) -> 0.848889
+test_that("Cohen's d matches hand-computed pooled-SD value", {
+  out <- fig_groupcompare(sc(two_norm, test = "parametric"))
+  d <- as.numeric(sub(".*Cohen's d = (-?[0-9.]+).*", "\\1", out$text))
+  expect_equal(d, 2.144568, tolerance = 0.02)   # pooled-SD Cohen's d, (B - A)
+  expect_match(out$text, "(B vs A)", fixed = TRUE)  # direction label
+})
+
+test_that("rank-biserial r matches hand-computed 1 - 2W/(n1 n2)", {
+  out <- fig_groupcompare(sc(two_norm, test = "nonparametric"))
+  r <- as.numeric(sub(".*rank-biserial r = (-?[0-9.]+).*", "\\1", out$text))
+  expect_equal(r, 0.848889, tolerance = 0.02)   # W = 68, n1 = n2 = 30
+  expect_match(out$text, "(B vs A)", fixed = TRUE)
+})
+
+# Hand-derivation (three_norm, seed 12):
+#   fit<-aov(v~g); ss<-summary(fit)[[1]][,"Sum Sq"]; eta<-ss[1]/sum(ss) -> 0.6569501
+#   H<-kruskal.test(v~factor(g))$statistic (= 48.8116); eps<-H/(n-1), n=75 -> 0.6596165
+test_that("eta-squared matches SS_between/SS_total", {
+  out <- fig_groupcompare(sc(three_norm, test = "parametric"))
+  eta <- as.numeric(sub(".*eta-squared = (-?[0-9.]+).*", "\\1", out$text))
+  expect_equal(eta, 0.6569501, tolerance = 0.02)
+})
+
+test_that("epsilon-squared matches H/(n-1)", {
+  out <- fig_groupcompare(sc(three_norm, test = "nonparametric"))
+  eps <- as.numeric(sub(".*epsilon-squared = (-?[0-9]+\\.?[0-9]*).*", "\\1", out$text))
+  expect_equal(eps, 0.6596165, tolerance = 0.02)   # H = 48.8116, n = 75
+})
+
+# Hand-derivation (2x2, seed 21): tab = No/Yes x A/B = [[39,30],[21,30]], n = 120
+#   chisq (uncorrected) V = sqrt(chi^2/(n*(min(dim)-1))) -> 0.1517165
+#   OR = ad/bc = (39*30)/(30*21) -> 1.857143  (event = No, A vs B)
+test_that("Cramér's V and odds ratio match hand-computed 2x2 values", {
+  set.seed(21)
+  g <- rep(c("A", "B"), each = 60)
+  out <- c(sample(c("Yes","No"), 60, TRUE, c(0.3,0.7)),
+           sample(c("Yes","No"), 60, TRUE, c(0.6,0.4)))
+  res <- fig_groupcompare(sc2(mkrows2(out, g)))
+  V <- as.numeric(sub(".*Cramér's V = ([0-9.]+).*", "\\1", res$text))
+  expect_equal(V, 0.1517165, tolerance = 0.02)
+  or <- as.numeric(sub(".*odds ratio for.*= ([0-9.]+) \\(95%.*", "\\1", res$text))
+  expect_equal(or, 1.857143, tolerance = 0.02)
+  # direction: OR must name the event level and reference group
+  expect_match(res$text, "odds ratio for out=No, A vs B", fixed = TRUE)
+})
+
+test_that("zero-cell 2x2 gets Haldane-Anscombe correction with finite OR + note", {
+  g <- rep(c("A", "B"), each = 10)
+  out <- c(rep("No", 10), rep("No", 5), rep("Yes", 5))  # Yes,A cell is 0
+  res <- fig_groupcompare(sc2(mkrows2(out, g)))
+  or <- as.numeric(sub(".*odds ratio for.*= ([0-9.]+) \\(95%.*", "\\1", res$text))
+  expect_true(is.finite(or))
+  expect_match(res$text, "continuity correction applied", fixed = TRUE)
+})
+
 test_that("violin option renders", {
   out <- fig_groupcompare(sc(two_norm, plot = "violin"))
   expect_match(out$svg, "<svg", fixed = TRUE)
@@ -72,10 +136,6 @@ test_that("dispatch routes groupcompare", {
   expect_true(res$ok)
   expect_match(res$svg, "<svg", fixed = TRUE)
 })
-
-mkrows2 <- function(out, g) Map(function(o, gi) list(out = o, grp = gi), out, g)
-sc2 <- function(rows) list(figure = "groupcompare", data = rows,
-  roles = list(group = "grp", outcome = "out"), options = list())
 
 test_that("categorical 2x2 outcome uses chi-square with Cramer's V and odds ratio", {
   set.seed(21)
