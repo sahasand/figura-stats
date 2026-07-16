@@ -203,11 +203,26 @@ fig_km <- function(spec) {
 .km_script <- function(spec, opts, n_groups, fit_expr, lr_expr, cox_expr) {
   qe <- function(s) gsub('"', '\\\\"', s)
   time_label <- qe(opts$time_label %||% "Time")
+  # Mapped uploads carry source_roles: the script must read the user's REAL
+  # column names and event coding, not the app-internal time/status/group.
+  sr <- opts$source_roles
   prep <- c(
-    "dat <- data.frame(time = as.numeric(df$time),",
-    "                  status = as.integer(df$status),",
-    "                  group  = as.character(df$group),",
-    "                  stringsAsFactors = FALSE)",
+    if (!is.null(sr)) c(
+      sprintf('# Event coding confirmed in the app: %s == "%s" marks the event;',
+              qe(sr$status), qe(sr$event)),
+      "# every other value counts as censored.",
+      sprintf('dat <- data.frame(time = as.numeric(df[["%s"]]),', qe(sr$time)),
+      sprintf('                  status = as.integer(df[["%s"]] == "%s"),',
+              qe(sr$status), qe(sr$event)),
+      sprintf('                  group  = as.character(df[["%s"]]),', qe(sr$group)),
+      "                  stringsAsFactors = FALSE)",
+      "# blank cells were excluded in the app; NA rows are excluded here too",
+      "dat <- dat[!is.na(dat$time) & !is.na(dat$status) & !is.na(dat$group), ]"
+    ) else c(
+      "dat <- data.frame(time = as.numeric(df$time),",
+      "                  status = as.integer(df$status),",
+      "                  group  = as.character(df$group),",
+      "                  stringsAsFactors = FALSE)"),
     if (!is.null(opts$reference))
       sprintf('dat$group <- relevel(factor(dat$group), ref = "%s")',
               qe(opts$reference)),

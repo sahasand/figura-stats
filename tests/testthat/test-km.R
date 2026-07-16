@@ -193,3 +193,21 @@ test_that("km script honors source_filename", {
   expect_match(out$code, 'read.csv("survival.csv"', fixed = TRUE)
   expect_false(grepl("Example data embedded", out$code, fixed = TRUE))
 })
+
+test_that("km script prep honors source_roles from a mapped upload", {
+  out <- fig_km(km_script_spec(
+    source_filename = "trial.csv",
+    source_roles = list(time = "followup_months", status = "vital",
+                        group = "arm", event = "Death")))
+  expect_match(out$code, 'as.numeric(df[["followup_months"]])', fixed = TRUE)
+  expect_match(out$code, 'as.integer(df[["vital"]] == "Death")', fixed = TRUE)
+  expect_match(out$code, 'as.character(df[["arm"]])', fixed = TRUE)
+  expect_match(out$code, "every other value counts as censored", fixed = TRUE)
+  expect_silent(parse(text = out$code))
+})
+
+test_that("km script without source_roles keeps the fixed prep", {
+  out <- fig_km(km_script_spec())
+  expect_match(out$code, "as.numeric(df$time)", fixed = TRUE)
+  expect_false(grepl("source_roles", out$code, fixed = TRUE))
+})
