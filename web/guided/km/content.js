@@ -56,9 +56,7 @@ export const EXAMPLE_INTRO_HTML = `
   participants still alive at last contact or the data cutoff are censored.</p>
   <p>The result is intentionally uncertain. Use it to practice reading estimates, confidence
   intervals, censoring, and diminishing risk sets—not to discover whether a real
-  treatment works.</p>
-  <blockquote><strong>Synthetic teaching data—this is not evidence about a real
-  treatment.</strong></blockquote>`;
+  treatment works.</p>`;
 
 export const CALLOUTS = {
   confidenceBands: "The shaded 95% pointwise confidence bands show uncertainty around each curve. Wider bands mean less precise estimates; overlap alone does not decide whether groups differ.",
