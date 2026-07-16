@@ -27,11 +27,24 @@
     <aside class="pane nav-pane" aria-label="Analyses">
       <div class="pane-title">Analyses</div>
       <nav>
-        <p class="nav-group">Guided analyses</p>
-        <button data-figure="summary">Summary statistics</button>
-        <button data-figure="km">Kaplan-Meier</button>
-        <button data-figure="explore">Explore plot</button>
-        <button data-figure="groupcompare">Group comparison</button>
+        <p class="nav-group">Statistical analyses</p>
+        <button data-figure="summary">
+          <span class="nav-label">Summary statistics</span>
+          <span class="nav-desc">Table 1 with normality-aware mean/median</span>
+        </button>
+        <button data-figure="km">
+          <span class="nav-label">Kaplan-Meier</span>
+          <span class="nav-desc">Survival curves with number-at-risk table</span>
+        </button>
+        <button data-figure="groupcompare">
+          <span class="nav-label">Group comparison</span>
+          <span class="nav-desc">t-test, ANOVA, chi-square — auto-selected</span>
+        </button>
+        <p class="nav-group">Plot builder</p>
+        <button data-figure="explore">
+          <span class="nav-label">Explore plot</span>
+          <span class="nav-desc">Build a ggplot2 figure interactively</span>
+        </button>
       </nav>
     </aside>
 

@@ -206,9 +206,18 @@ body {
 
 .nav-group:first-child { margin-top: .25rem; }
 
+/* Groups after the first read as sections — a hairline divider, not just a gap. */
+.nav-group:not(:first-child) {
+  margin-top: .75rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--line);
+}
+
 .nav-pane nav button {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .125rem;
   width: 100%;
   min-height: 36px;
   text-align: left;
@@ -221,12 +230,25 @@ body {
   cursor: pointer;
 }
 
+.nav-desc {
+  font-size: .75rem;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--slate);
+}
+
 .nav-pane nav button:hover { background: #f1f4f8; }
 
 .nav-pane nav button.active {
   background: var(--accent-wash);
   color: var(--accent-dark);
-  font-weight: 600;
+}
+
+.nav-pane nav button.active .nav-label { font-weight: 600; }
+
+/* Keep the active description readable rather than full-strength accent. */
+.nav-pane nav button.active .nav-desc {
+  color: color-mix(in srgb, var(--accent-dark) 65%, var(--slate));
 }
 
 /* ---- Configuration pane (forms are generated markup; style by element) -- */
@@ -631,6 +653,7 @@ input[type="file"]::file-selector-button {
   }
   .nav-pane nav button { width: auto; min-height: 44px; border: 1px solid var(--line); }
   .nav-pane nav button.active { border-color: var(--accent); }
+  .nav-desc { display: none; }
   .nav-group { width: 100%; margin: .375rem .25rem .125rem; }
   #preview { min-height: 10rem; }
   #stats { min-height: 6rem; }
