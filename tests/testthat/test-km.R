@@ -152,3 +152,44 @@ test_that("conf_int, horizon, and caption affect the figure not the statistics",
   s4 <- s; s4$options$caption <- "Synthetic demonstration data"
   expect_match(fig_km(s4)$svg, "Synthetic demonstration data", fixed = TRUE)
 })
+
+# ---- downloadable R script (code field) ------------------------------------
+
+km_script_rows <- {
+  set.seed(31)
+  t1 <- rexp(30, 0.08); t2 <- rexp(30, 0.15)
+  Map(function(tt, g) list(time = round(tt, 1),
+                           status = as.integer(tt < 25), group = g),
+      c(pmin(t1, 25), pmin(t2, 25)), rep(c("A", "B"), each = 30))
+}
+km_script_spec <- function(...) list(figure = "km", data = km_script_rows,
+                                     options = list(time_label = "Months", ...))
+
+test_that("km script reproduces survfit, log-rank, and Cox HR", {
+  out <- fig_km(km_script_spec())
+  expect_match(out$code, "survfit(Surv(time, status) ~ group, data = dat)", fixed = TRUE)
+  expect_match(out$code, "survdiff(Surv(time, status) ~ group, data = dat)", fixed = TRUE)
+  expect_match(out$code, "coxph(Surv(time, status) ~ group, data = dat)", fixed = TRUE)
+  env <- new.env(parent = globalenv())
+  capture.output(eval(parse(text = out$code), env))
+  # script's log-rank p agrees with the app's text
+  p <- 1 - stats::pchisq(env$lr$chisq, length(env$lr$n) - 1)
+  if (p < 0.001) expect_match(out$text, "p < 0.001", fixed = TRUE)
+  else expect_match(out$text, sprintf("p = %.3f", p), fixed = TRUE)
+  # script's HR agrees with the app's text
+  expect_match(out$text, sprintf("HR %.2f", exp(stats::coef(env$cox))[1]), fixed = TRUE)
+  # figure objects build without printing
+  expect_s3_class(env$p_km, "ggplot")
+})
+
+test_that("km script includes landmarks and reference releveling when set", {
+  out <- fig_km(km_script_spec(landmarks = list(12, 24), reference = "B"))
+  expect_match(out$code, "summary(fit, times = c(12, 24), extend = TRUE)", fixed = TRUE)
+  expect_match(out$code, 'relevel(factor(dat$group), ref = "B")', fixed = TRUE)
+})
+
+test_that("km script honors source_filename", {
+  out <- fig_km(km_script_spec(source_filename = "survival.csv"))
+  expect_match(out$code, 'read.csv("survival.csv"', fixed = TRUE)
+  expect_false(grepl("Example data embedded", out$code, fixed = TRUE))
+})

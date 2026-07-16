@@ -22,7 +22,11 @@ fig_km <- function(spec) {
   }
   n_groups <- length(unique(df$group))
 
-  fit <- survival::survfit(survival::Surv(time, status) ~ group, data = df)
+  # Expression-first (the deparsed call in the script is the call that ran).
+  # Bindings are explicit so nothing depends on the search path.
+  fit_expr <- quote(survfit(Surv(time, status) ~ group, data = dat))
+  fit <- eval(fit_expr, list(dat = df, survfit = survival::survfit,
+                             Surv = survival::Surv))
   time_label <- opts$time_label %||% "Time"
 
   # Report a p-value without the impossible-looking "p = 0.000": show
@@ -88,9 +92,13 @@ fig_km <- function(spec) {
                                  rel_heights = c(0.78, 0.22),
                                  align = "v", axis = "lr")
 
+  lr_expr <- NULL
+  cox_expr <- NULL
   txt <- ""
   if (n_groups >= 2) {
-    lr <- survival::survdiff(survival::Surv(time, status) ~ group, data = df)
+    lr_expr <- quote(survdiff(Surv(time, status) ~ group, data = dat))
+    lr <- eval(lr_expr, list(dat = df, survdiff = survival::survdiff,
+                             Surv = survival::Surv))
     p  <- 1 - stats::pchisq(lr$chisq, length(lr$n) - 1)
     txt <- sprintf("Log-rank %s.", fmt_p(p))
   }
@@ -100,8 +108,10 @@ fig_km <- function(spec) {
     # suppresses warnings, so an unreliable HR would otherwise ship silently.
     # muffleWarning stops the captured warning from leaking to the WARN-0 gate.
     cox_warn <- NULL
+    cox_expr <- quote(coxph(Surv(time, status) ~ group, data = dat))
     cox <- withCallingHandlers(
-      survival::coxph(survival::Surv(time, status) ~ group, data = df),
+      eval(cox_expr, list(dat = df, coxph = survival::coxph,
+                          Surv = survival::Surv)),
       warning = function(w) {
         cox_warn <<- conditionMessage(w)
         invokeRestart("muffleWarning")
@@ -147,7 +157,8 @@ fig_km <- function(spec) {
     txt <- paste0(txt, " ", paste(lm_lines, collapse = "; "), ".")
   }
 
-  list(svg = .svg_string(plot_obj, width = 7, height = 6), text = txt)
+  list(svg = .svg_string(plot_obj, width = 7, height = 6), text = txt,
+       code = .km_script(spec, opts, n_groups, fit_expr, lr_expr, cox_expr))
 }
 
 # Rows of (time, surv, lower, upper, n.censor, group) per stratum, with a
@@ -183,4 +194,84 @@ fig_km <- function(spec) {
 .km_palette <- function(n) {
   tol <- c("#4477AA", "#CC6677", "#228833", "#CCBB44", "#66CCEE", "#AA3377")
   if (n <= length(tol)) tol[seq_len(n)] else grDevices::hcl.colors(n, "Dark 2")
+}
+
+# Downloadable R script: exact survfit/survdiff/coxph calls + a figure section
+# that embeds the app's own curve/step/palette helpers so the plotted curves
+# are built from the same transformations. The ggplot itself is a generated
+# equivalent, not the deparsed app plot (stated in the header).
+.km_script <- function(spec, opts, n_groups, fit_expr, lr_expr, cox_expr) {
+  qe <- function(s) gsub('"', '\\\\"', s)
+  time_label <- qe(opts$time_label %||% "Time")
+  prep <- c(
+    "dat <- data.frame(time = as.numeric(df$time),",
+    "                  status = as.integer(df$status),",
+    "                  group  = as.character(df$group),",
+    "                  stringsAsFactors = FALSE)",
+    if (!is.null(opts$reference))
+      sprintf('dat$group <- relevel(factor(dat$group), ref = "%s")',
+              qe(opts$reference)),
+    "")
+  stats_lines <- c(
+    "library(survival)",
+    paste0("fit <- ", .script_dep(fit_expr)),
+    "summary(fit)$table   # per-group median survival", "")
+  if (n_groups >= 2) stats_lines <- c(stats_lines,
+    paste0("lr <- ", .script_dep(lr_expr)),
+    "1 - pchisq(lr$chisq, length(lr$n) - 1)   # log-rank p", "")
+  if (n_groups == 2) stats_lines <- c(stats_lines,
+    paste0("cox <- ", .script_dep(cox_expr)),
+    "summary(cox)   # hazard ratio: non-reference vs reference level", "")
+  landmarks <- unlist(opts$landmarks %||% list())
+  if (length(landmarks) > 0) stats_lines <- c(stats_lines,
+    "# Landmark survival estimates:",
+    sprintf("summary(fit, times = c(%s), extend = TRUE)",
+            paste(as.numeric(landmarks), collapse = ", ")), "")
+  conf_int <- isTRUE(opts$conf_int %||% TRUE)
+  fig_lines <- c(
+    "# Equivalent figure (the app's own curve-building helpers, embedded):",
+    .script_fun(".km_curve_df", .km_curve_df),
+    .script_fun(".km_step_df", .km_step_df),
+    .script_fun(".km_palette", .km_palette),
+    "library(ggplot2)",
+    "curve_df <- .km_curve_df(fit)",
+    "step_df <- .km_step_df(curve_df)",
+    "censor_df <- curve_df[curve_df$n.censor > 0, , drop = FALSE]",
+    "pal <- .km_palette(length(unique(curve_df$group)))",
+    "p_km <- ggplot(curve_df, aes(time, surv, color = group, linetype = group)) +",
+    if (conf_int) c(
+      "  geom_ribbon(data = step_df[!is.na(step_df$lower), , drop = FALSE],",
+      "              aes(ymin = lower, ymax = upper, fill = group),",
+      "              alpha = 0.15, color = NA, show.legend = FALSE) +"),
+    "  geom_step(linewidth = 0.7) +",
+    "  geom_point(data = censor_df, shape = 3, size = 1.8, show.legend = FALSE) +",
+    "  scale_color_manual(values = pal) + scale_fill_manual(values = pal) +",
+    "  scale_y_continuous(limits = c(0, 1)) +",
+    sprintf('  labs(x = "%s", y = "Survival probability",', time_label),
+    '       color = "Group", linetype = "Group") +',
+    "  theme_minimal(base_size = 12)",
+    if (!is.null(opts$horizon))
+      sprintf("p_km <- p_km + coord_cartesian(xlim = c(0, %s))",
+              as.numeric(opts$horizon)),
+    "",
+    "# Number-at-risk table under the curves:",
+    "brk <- pretty(c(0, max(curve_df$time)), n = 6)",
+    "risk <- summary(fit, times = brk, extend = TRUE)",
+    "risk_df <- data.frame(time = risk$time, n.risk = risk$n.risk,",
+    '  group = if (is.null(risk$strata)) "All"',
+    '          else sub("^group=", "", as.character(risk$strata)))',
+    "p_risk <- ggplot(risk_df, aes(time, group, label = n.risk)) +",
+    "  geom_text(size = 3.1) +",
+    '  labs(title = "Number at risk", x = NULL, y = NULL) +',
+    "  theme_minimal(base_size = 10)",
+    if (!is.null(opts$horizon))
+      sprintf("p_risk <- p_risk + coord_cartesian(xlim = c(0, %s))",
+              as.numeric(opts$horizon)),
+    "# library(cowplot)",
+    '# print(plot_grid(p_km, p_risk, ncol = 1, rel_heights = c(0.78, 0.22),',
+    '#                 align = "v", axis = "lr"))')
+  .script_assemble("Kaplan–Meier survival analysis", spec,
+                   c("time", "status", "group"),
+                   c("survival", "ggplot2", "cowplot"),
+                   c(prep, stats_lines, fig_lines))
 }

@@ -37,8 +37,7 @@ export const EXAMPLE_INTRO_HTML = `
   <p>This teaching dataset contains 120 fictional participants in two arms. It deliberately mixes
   an approximately normal variable (age), two right-skewed variables (length of stay, CRP), two
   categorical variables (sex, diabetes), and some missing length-of-stay values — so you can watch
-  the tool pick mean ± SD for the normal variable and median (IQR) for the skewed ones.</p>
-  <blockquote><strong>Synthetic teaching data — this is not evidence about a real population.</strong></blockquote>`;
+  the tool pick mean ± SD for the normal variable and median (IQR) for the skewed ones.</p>`;
 
 export const CALLOUTS = {
   groupBy: "Grouping splits each row into one column per arm. Percentages use the non-missing count within each arm as the denominator. Note there is still no p-value column — see “Why there are no p-values here.”",

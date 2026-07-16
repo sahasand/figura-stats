@@ -49,6 +49,7 @@ export function createGuidedShell(cfg) {
       } else {
         preview.innerHTML = "Rendering… (first run downloads R packages)";
         stats.textContent = "";
+        delete stats.dataset.rCode;
         stats.classList.remove("error");
       }
       status("busy", "R: working…");
@@ -71,6 +72,7 @@ export function createGuidedShell(cfg) {
             preview.innerHTML = "";
             stats.textContent = "Error: " + out.error;
             stats.classList.add("error");
+            delete stats.dataset.rCode;
           }
           return out;
         }
@@ -89,10 +91,13 @@ export function createGuidedShell(cfg) {
       const out = getResult(session, context);
       const preview = document.getElementById("preview");
       const stats = document.getElementById("stats");
-      if (!out) { preview.innerHTML = ""; stats.textContent = ""; return; }
+      if (!out) { preview.innerHTML = ""; stats.textContent = "";
+                  delete stats.dataset.rCode; return; }
       preview.innerHTML = out.svg;
       stats.textContent = out.text;
       stats.classList.remove("error");
+      if (out.code) stats.dataset.rCode = out.code;
+      else delete stats.dataset.rCode;
     }
 
     function selectStage(stage) {

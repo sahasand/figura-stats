@@ -134,23 +134,26 @@
   }
 
   if (ng == 2) {
-    if (nonpar) {
-      ht <- suppressWarnings(stats::wilcox.test(value ~ group, data = df))
-      tname <- "Mann–Whitney U test"; eff <- .gc_effect_wilcox(df, unname(ht$statistic))
-    } else {
-      ht <- stats::t.test(value ~ group, data = df)
-      tname <- "Welch t-test"; eff <- .gc_effect_t(df)
-    }
+    if (nonpar) { test_expr <- quote(wilcox.test(value ~ group, data = dat))
+                  tname <- "Mann–Whitney U test" }
+    else        { test_expr <- quote(t.test(value ~ group, data = dat))
+                  tname <- "Welch t-test" }
   } else {
-    if (nonpar) {
-      ht <- stats::kruskal.test(value ~ group, data = df)
-      tname <- "Kruskal–Wallis test"
-      eff <- .gc_effect_kruskal(unname(ht$statistic), nrow(df))
-    } else {
-      ht <- stats::oneway.test(value ~ group, data = df)  # Welch ANOVA
-      tname <- "one-way ANOVA (Welch)"; eff <- .gc_effect_anova(df)
-    }
+    if (nonpar) { test_expr <- quote(kruskal.test(value ~ group, data = dat))
+                  tname <- "Kruskal–Wallis test" }
+    else        { test_expr <- quote(oneway.test(value ~ group, data = dat))
+                  tname <- "one-way ANOVA (Welch)" }
   }
+  # Evaluate the SAME expression the script will show. Bindings are explicit
+  # so nothing depends on the search path; suppressWarnings wraps only this
+  # library call (wilcox.test warns on ties).
+  ht <- suppressWarnings(eval(test_expr, list(dat = df,
+    t.test = stats::t.test, wilcox.test = stats::wilcox.test,
+    kruskal.test = stats::kruskal.test, oneway.test = stats::oneway.test)))
+  eff <- if (ng == 2 && !nonpar) .gc_effect_t(df)
+    else if (ng == 2) .gc_effect_wilcox(df, unname(ht$statistic))
+    else if (!nonpar) .gc_effect_anova(df)
+    else .gc_effect_kruskal(unname(ht$statistic), nrow(df))
   pv <- ht$p.value
   pfmt <- if (pv < 0.001) "p < 0.001" else sprintf("p = %.3f", pv)
 
@@ -170,7 +173,8 @@
   txt <- sprintf("%s across groups: %s. %s%s: %s, %s.%s%s",
     p$vcol, paste(summ, collapse = "; "), tname, reason, pfmt, eff, posthoc, notes)
   gg <- .gc_numeric_plot(df, p$vcol, spec$options$plot %||% "box")
-  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt)
+  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt,
+       code = .gc_script_numeric(spec, test_expr, tname, reason, nonpar, ng))
 }
 
 # --- categorical branch: contingency table -> chi-square/Fisher + effect size ---
@@ -191,8 +195,12 @@
   suppressWarnings({ chi <- stats::chisq.test(tab, correct = FALSE) })
   use_fisher <- any(chi$expected < 5)
   if (use_fisher) {
-    ht <- stats::fisher.test(tab); tname <- "Fisher's exact test"
+    test_expr <- quote(fisher.test(tab)); tname <- "Fisher's exact test"
+    ht <- eval(test_expr, list(tab = tab, fisher.test = stats::fisher.test))
   } else {
+    # chi was computed above with this exact call; the deparsed expression in
+    # the script is therefore still the call that ran.
+    test_expr <- quote(chisq.test(tab, correct = FALSE))
     ht <- chi; tname <- "Pearson chi-square test"
   }
   pv <- ht$p.value
@@ -231,7 +239,9 @@
   notes <- if (n_na > 0) sprintf(" %d row(s) with missing values were excluded.", n_na) else ""
   txt <- sprintf("%s by group (n = %d): %s: %s, %s.%s",
     vcol, n, tname, pfmt, eff, notes)
-  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt)
+  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt,
+       code = .gc_script_categorical(spec, test_expr, tname,
+                                     is_2x2 = all(dim(tab) == 2)))
 }
 
 # Post-hoc for 3+ groups when the omnibus test is significant (p < 0.05).
@@ -274,4 +284,100 @@ fig_groupcompare <- function(spec) {
   if (!(gcol %in% have)) stop(sprintf("Column '%s' not found in the data.", gcol))
   if (!(vcol %in% have)) stop(sprintf("Column '%s' not found in the data.", vcol))
   if (.gc_is_numeric_col(rows, vcol)) .gc_numeric(spec) else .gc_categorical(spec)
+}
+
+# --- downloadable R script builders ------------------------------------------
+
+# Prep lines shared by both branches: build `dat` from the role columns.
+.gc_script_prep <- function(spec, outcome_numeric) {
+  qe <- function(s) gsub('"', '\\\\"', s)
+  coerce <- if (outcome_numeric) "as.numeric" else "as.character"
+  c("# Prepare: outcome + group, drop rows with missing values",
+    sprintf('dat <- data.frame(value = %s(df[["%s"]]),',
+            coerce, qe(spec$roles$outcome)),
+    sprintf('                  group = as.character(df[["%s"]]),',
+            qe(spec$roles$group)),
+    "                  stringsAsFactors = FALSE)",
+    "dat <- dat[!is.na(dat$value) & !is.na(dat$group), ]")
+}
+
+.gc_script_numeric <- function(spec, test_expr, tname, reason, nonpar, ng) {
+  # Effect-size helpers embedded verbatim (dependency order matters).
+  helpers <- c(.script_fun(".fmt_num", .fmt_num),
+               .script_fun(".gc_ci_phrase", .gc_ci_phrase))
+  if (ng == 2 && !nonpar) {
+    helpers <- c(helpers, .script_fun(".gc_effect_t", .gc_effect_t))
+    eff_call <- ".gc_effect_t(dat)"
+  } else if (ng == 2) {
+    helpers <- c(helpers, .script_fun(".gc_effect_wilcox", .gc_effect_wilcox))
+    eff_call <- ".gc_effect_wilcox(dat, unname(ht$statistic))"
+  } else if (!nonpar) {
+    helpers <- c(helpers, .script_fun(".gc_eta_ci", .gc_eta_ci),
+                 .script_fun(".gc_effect_anova", .gc_effect_anova))
+    eff_call <- ".gc_effect_anova(dat)"
+  } else {
+    helpers <- c(helpers, .script_fun(".gc_effect_kruskal", .gc_effect_kruskal))
+    eff_call <- ".gc_effect_kruskal(unname(ht$statistic), nrow(dat))"
+  }
+  posthoc <- if (ng >= 3)
+    c(.script_fun(".gc_posthoc", .gc_posthoc),
+      sprintf("cat(.gc_posthoc(dat, %d, nonpar = %s, pv = ht$p.value), \"\\n\")",
+              ng, if (nonpar) "TRUE" else "FALSE"), "")
+    else character(0)
+  violin <- identical(spec$options$plot %||% "box", "violin")
+  qe <- function(s) gsub('"', '\\\\"', s)
+  body <- c(.gc_script_prep(spec, outcome_numeric = TRUE),
+    "# groups with fewer than 2 values cannot be compared",
+    "dat <- dat[dat$group %in% names(which(table(dat$group) >= 2)), ]", "",
+    sprintf("# %s%s", tname, reason),
+    paste0("ht <- ", .script_dep(test_expr)), "ht", "",
+    "# Effect size (the app's own computation, embedded verbatim):",
+    helpers,
+    paste0("cat(", eff_call, ", \"\\n\")"), "",
+    posthoc,
+    "# Equivalent figure:",
+    "library(ggplot2)",
+    "p <- ggplot(dat, aes(x = group, y = value, fill = group)) +",
+    if (violin) '  geom_violin(trim = FALSE, colour = "grey30") +'
+    else '  geom_boxplot(outlier.shape = NA, colour = "grey30") +',
+    "  geom_jitter(width = 0.15, alpha = 0.5, size = 1) +",
+    '  guides(fill = "none") +',
+    sprintf('  labs(x = NULL, y = "%s") +', qe(spec$roles$outcome)),
+    "  theme_minimal(base_size = 12)",
+    '# print(p)   # or: ggsave("comparison.pdf", p, width = 6, height = 4.5)')
+  .script_assemble("Group comparison", spec,
+                   c(spec$roles$group, spec$roles$outcome), "ggplot2", body)
+}
+
+.gc_script_categorical <- function(spec, test_expr, tname, is_2x2) {
+  or_lines <- if (is_2x2) c(
+    "# Odds ratio (2x2 only; 0.5 added to every cell if any cell is zero):",
+    "n11 <- tab[1, 1]; n12 <- tab[1, 2]; n21 <- tab[2, 1]; n22 <- tab[2, 2]",
+    "if (any(c(n11, n12, n21, n22) == 0)) { n11 <- n11 + 0.5; n12 <- n12 + 0.5; n21 <- n21 + 0.5; n22 <- n22 + 0.5 }",
+    "or <- (n11 * n22) / (n12 * n21)",
+    "se <- sqrt(1/n11 + 1/n12 + 1/n21 + 1/n22)",
+    "c(or = or, lo = exp(log(or) - 1.96 * se), hi = exp(log(or) + 1.96 * se))", "")
+    else character(0)
+  body <- c(.gc_script_prep(spec, outcome_numeric = FALSE), "",
+    "tab <- table(outcome = dat$value, group = dat$group)",
+    "tab", "",
+    "# Expected-count rule the app applied: any expected cell < 5 -> Fisher",
+    "suppressWarnings(chisq.test(tab, correct = FALSE))$expected", "",
+    sprintf("# %s", tname),
+    paste0("ht <- ", .script_dep(test_expr)), "ht", "",
+    "# Cramér's V from the (unconditional) chi-square statistic:",
+    "V <- sqrt(unname(suppressWarnings(chisq.test(tab, correct = FALSE))$statistic) /",
+    "  (sum(tab) * (min(dim(tab)) - 1)))",
+    "V", "",
+    or_lines,
+    "# Equivalent figure:",
+    "library(ggplot2)",
+    "dfp <- as.data.frame(tab, stringsAsFactors = FALSE)",
+    "p <- ggplot(dfp, aes(x = group, y = Freq, fill = outcome)) +",
+    '  geom_col(position = "fill") +',
+    '  labs(x = NULL, y = "proportion") +',
+    "  theme_minimal(base_size = 12)",
+    '# print(p)   # or: ggsave("comparison.pdf", p, width = 6, height = 4.5)')
+  .script_assemble("Group comparison", spec,
+                   c(spec$roles$group, spec$roles$outcome), "ggplot2", body)
 }

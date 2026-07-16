@@ -107,3 +107,21 @@ Explore is out of scope (already done) except that nothing here may regress its
 - Pixel-identical figure reproduction (explicitly traded away).
 - Embedding user data in scripts.
 - A visible in-app code pane for these analyses (may revisit after shipping).
+
+## Implementation deviations (2026-07-16)
+
+- **Script storage.** The generated script is stored on `#stats`'s `data-r-code`
+  attribute rather than in module state, matching the existing read-the-DOM-at-
+  click-time export idiom (the export toolbar already reads `#preview`/`#stats`
+  at click time). The panes are the single source of truth; a nav switch or a
+  re-run clears the attribute so a stale script can never download.
+- **Summary has no figure section.** The Summary script emits the statistics
+  (grouping + per-variable `tapply`/`table` calls) only; the distribution-plot
+  section was trimmed at planning and never generated.
+- **Summary is parallel-reconstruction, not deparsed calls.** Summary's
+  statistics section rebuilds the numbers with the same base-R calls the app
+  used (mean/sd/quantile type 7) rather than deparsing evaluated expressions,
+  with the per-variable normality decision carried as comments. The header
+  honesty line reflects this (per-analysis `honesty` argument on
+  `.script_header`/`.script_assemble`); Group comparison and KM keep the default
+  exact-calls wording.

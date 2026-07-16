@@ -185,3 +185,60 @@ test_that("3-group significant Kruskal appends Dunn post-hoc", {
   expect_match(out$text, "Dunn", ignore.case = TRUE)
   expect_match(out$text, "BH|Benjamini", ignore.case = TRUE)
 })
+
+# ---- downloadable R script (code field) ------------------------------------
+
+eval_script <- function(code) {
+  env <- new.env(parent = globalenv())
+  capture.output(eval(parse(text = code), env))
+  env
+}
+
+test_that("two-group parametric script reproduces the Welch t-test", {
+  out <- fig_groupcompare(sc(two_norm, test = "parametric"))
+  expect_match(out$code, "t.test(value ~ group, data = dat)", fixed = TRUE)
+  expect_match(out$code, ".gc_effect_t <- function", fixed = TRUE)
+  env <- eval_script(out$code)
+  expect_s3_class(env$ht, "htest")
+  # the app's text and the script agree on the p-value
+  if (env$ht$p.value < 0.001) expect_match(out$text, "p < 0.001", fixed = TRUE)
+  else expect_match(out$text, sprintf("p = %.3f", env$ht$p.value), fixed = TRUE)
+  # embedded effect-size helper gives the same Cohen's d phrase as the app
+  expect_match(out$text, env$.gc_effect_t(env$dat), fixed = TRUE)
+})
+
+test_that("nonparametric override script uses wilcox.test + rank-biserial", {
+  out <- fig_groupcompare(sc(two_norm, test = "nonparametric"))
+  expect_match(out$code, "wilcox.test(value ~ group, data = dat)", fixed = TRUE)
+  expect_match(out$code, ".gc_effect_wilcox <- function", fixed = TRUE)
+  env <- eval_script(out$code)
+  expect_match(out$text,
+               env$.gc_effect_wilcox(env$dat, unname(env$ht$statistic)),
+               fixed = TRUE)
+})
+
+test_that("three-group parametric script embeds the post-hoc the app ran", {
+  out <- fig_groupcompare(sc(three_norm, test = "parametric"))
+  expect_match(out$code, "oneway.test(value ~ group, data = dat)", fixed = TRUE)
+  expect_match(out$code, ".gc_posthoc <- function", fixed = TRUE)
+  env <- eval_script(out$code)
+  expect_s3_class(env$ht, "htest")
+})
+
+test_that("categorical script reproduces the chosen contingency test", {
+  rows <- mkrows2(rep(c("yes", "no"), c(40, 40)),
+                  rep(c("X", "Y"), 40))
+  out <- fig_groupcompare(sc2(rows))
+  expect_match(out$code, "table(", fixed = TRUE)
+  env <- eval_script(out$code)
+  expect_s3_class(env$ht, "htest")
+  if (env$ht$p.value < 0.001) expect_match(out$text, "p < 0.001", fixed = TRUE)
+  else expect_match(out$text, sprintf("p = %.3f", env$ht$p.value), fixed = TRUE)
+})
+
+test_that("groupcompare script honors source_filename", {
+  spec <- sc(two_norm)
+  spec$options$source_filename <- "trial.csv"
+  out <- fig_groupcompare(spec)
+  expect_match(out$code, 'read.csv("trial.csv"', fixed = TRUE)
+})

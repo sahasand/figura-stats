@@ -14,6 +14,7 @@ export function initExportUI(getFigureKey) {
   const dpiSel = document.getElementById("export-dpi");
   const copyBtn = document.getElementById("export-copy");
   const tsvBtn = document.getElementById("export-tsv");
+  const rBtn = document.getElementById("export-r");
   const panelsRow = document.getElementById("export-panels");
   const figNote = document.getElementById("export-feedback-figure");
   const conNote = document.getElementById("export-feedback-console");
@@ -45,6 +46,12 @@ export function initExportUI(getFigureKey) {
   copyBtn.addEventListener("click", () => navigator.clipboard.writeText(stats.textContent)
     .then(() => note(conNote, "Copied"))
     .catch(() => note(conNote, "Copy failed — select the text manually")));
+  rBtn.addEventListener("click", () => {
+    const code = stats.dataset.rCode || "";
+    if (!code) return;
+    downloadBlob(new Blob([code], { type: "text/plain" }),
+      exportFilename(getFigureKey(), "Rscript", {}));
+  });
 
   // Per-panel row: only when the figure holds >=2 svgs (journals often want
   // one file per figure — these buttons export each panel separately).
@@ -83,6 +90,10 @@ export function initExportUI(getFigureKey) {
     pngBtn.disabled = svgBtn.disabled = n === 0;
     const hasText = stats.textContent.trim() !== "" && !stats.classList.contains("error");
     copyBtn.disabled = tsvBtn.disabled = !hasText;
+    // Explore's text pane IS the script (descriptor ext "R") — hide the extra
+    // button there; elsewhere enable it only when the painted result carried code.
+    rBtn.hidden = d.ext === "R";
+    rBtn.disabled = !stats.dataset.rCode;
     buildPanelRow(n);
   }
 

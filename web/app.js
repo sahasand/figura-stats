@@ -82,17 +82,21 @@ async function render(spec) {
   preview.innerHTML = "Rendering… (first run downloads R, ~30s)";
   stats.textContent = "";
   stats.classList.remove("error");
+  delete stats.dataset.rCode;
   setStatus("busy", "R: working…");
   const out = await runFigure(spec);
   if (!out.ok) {
     preview.innerHTML = "";
     stats.textContent = "Error: " + out.error;
     stats.classList.add("error");
+    delete stats.dataset.rCode;
     setStatus("error", "R: error");
     return;
   }
   preview.innerHTML = out.svg;
   stats.textContent = out.text;
+  if (out.code) stats.dataset.rCode = out.code;
+  else delete stats.dataset.rCode;
   setStatus("ready", "R: ready");
 }
 
@@ -114,6 +118,7 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
     const stats = document.getElementById("stats");
     stats.textContent = "";
     stats.classList.remove("error");
+    delete stats.dataset.rCode;
     document.querySelectorAll("[data-figure]").forEach((b) =>
       { b.classList.toggle("active", b === btn);
         // Expose the selection to assistive tech, matching the guided

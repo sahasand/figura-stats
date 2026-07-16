@@ -42,4 +42,10 @@ const table = {
   assert.equal(spec.options.show_qq, false, "absent showQq must serialize as false");
   assert.deepEqual(Object.keys(spec.data[0]), ["age"]);
 }
+// source_filename flows into options
+{
+  const spec = buildSummarySpec(table, { groupBy: null, showPlots: false,
+    showQq: false, selected: ["age"], sourceFilename: "baseline.csv" });
+  assert.equal(spec.options.source_filename, "baseline.csv");
+}
 console.log("ok - classifyColumns + buildSummarySpec");
