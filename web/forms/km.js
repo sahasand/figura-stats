@@ -51,7 +51,7 @@ export function renderKmForm(container, onSubmit) {
     const file = e.target.files[0];
     const reader = new FileReader();
     reader.onload = () => {
-      try { fileName = file.name; data = parseKmCsv(reader.result); btn.disabled = false; }
+      try { data = parseKmCsv(reader.result); fileName = file.name; btn.disabled = false; }
       catch (err) { document.getElementById("stats").textContent = "Error: " + err.message; }
     };
     reader.readAsText(file);
