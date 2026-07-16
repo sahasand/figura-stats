@@ -10,4 +10,6 @@ test_that("groupcompare demo fixture has the frozen teaching properties", {
   # biomarker rises with dose; responder rate rises with dose (teaching targets)
   m <- tapply(csv$biomarker_normal, csv$arm, mean)
   expect_true(m[["High dose"]] > m[["Placebo"]])
+  yes_rate <- tapply(csv$responder == "Yes", csv$arm, mean)
+  expect_true(yes_rate[["High dose"]] > yes_rate[["Placebo"]])
 })
