@@ -45,17 +45,19 @@ export function renderKmForm(container, onSubmit) {
     <option value="nejm">NEJM</option><option value="jama">JAMA</option></select>
     <button type="button" id="render" disabled>Render</button>`;
   let data = null;
+  let fileName = null;
   const btn = container.querySelector("#render");
   container.querySelector("#csv").onchange = (e) => {
     const file = e.target.files[0];
     const reader = new FileReader();
     reader.onload = () => {
-      try { data = parseKmCsv(reader.result); btn.disabled = false; }
+      try { fileName = file.name; data = parseKmCsv(reader.result); btn.disabled = false; }
       catch (err) { document.getElementById("stats").textContent = "Error: " + err.message; }
     };
     reader.readAsText(file);
   };
   btn.onclick = () => onSubmit({ figure: "km", data,
     options: { time_label: container.querySelector("#tlabel").value,
-      theme: container.querySelector("#theme").value } });
+      theme: container.querySelector("#theme").value,
+      source_filename: fileName } });
 }

@@ -49,6 +49,7 @@ export function renderGroupCompareForm(container, onSubmit, doc = globalThis.doc
   container.querySelector("#csv").onchange = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    const fileName = file.name;
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -87,7 +88,8 @@ export function renderGroupCompareForm(container, onSubmit, doc = globalThis.doc
         btn.onclick = () => {
           if (!roles) return;
           onSubmit(buildGroupCompareSpec(table, roles,
-            { plot: plotSel.value, test: testSel.value }));
+            { plot: plotSel.value, test: testSel.value,
+              source_filename: fileName }));
         };
         config.appendChild(btn);
         config.hidden = false;

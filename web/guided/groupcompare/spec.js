@@ -8,6 +8,7 @@ export function buildGroupCompareSpec(table, roles, options) {
     figure: "groupcompare",
     data,
     roles: { group: roles.group, outcome: roles.outcome },
-    options: { plot: options.plot, test: options.test },
+    options: { plot: options.plot, test: options.test,
+               source_filename: options.source_filename ?? null },
   };
 }

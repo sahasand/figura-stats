@@ -39,7 +39,8 @@ export function classifyColumns(table) {
 
 // Pure: assemble the spec. Rows are projected to selected + group columns so
 // unticked data never crosses to the worker.
-export function buildSummarySpec(table, { groupBy, showPlots, showQq, selected }) {
+export function buildSummarySpec(table, { groupBy, showPlots, showQq, selected,
+                                          sourceFilename = null }) {
   const { kinds } = classifyColumns(table);
   const vars = table.columns.filter((c) => c !== groupBy && selected.includes(c));
   const keep = groupBy ? [...vars, groupBy] : vars;
@@ -55,6 +56,7 @@ export function buildSummarySpec(table, { groupBy, showPlots, showQq, selected }
       labels: null, overrides: {},
       show_plots: !!showPlots,
       show_qq: !!showQq,
+      source_filename: sourceFilename,
     },
   };
 }
@@ -88,7 +90,7 @@ export function renderSummaryForm(container, onSubmit, doc = globalThis.document
     <div id="summary-config" hidden></div>`;
   container.querySelector("#example-csv").href = getExampleCsvUrl();
   const config = container.querySelector("#summary-config");
-  let table = null;
+  let table = null, fileName = null;
 
   function showError(message) {
     const stats = doc.getElementById("stats");
@@ -152,7 +154,8 @@ export function renderSummaryForm(container, onSubmit, doc = globalThis.document
     btn.onclick = () => {
       const selected = table.columns.filter((c) => boxes[c].checked && c !== groupChoice.group);
       onSubmit(buildSummarySpec(table, {
-        groupBy: groupChoice.group, showPlots: plots.checked, showQq: qq.checked, selected }));
+        groupBy: groupChoice.group, showPlots: plots.checked, showQq: qq.checked, selected,
+        sourceFilename: fileName }));
     };
     config.appendChild(btn);
   }
@@ -160,6 +163,7 @@ export function renderSummaryForm(container, onSubmit, doc = globalThis.document
   container.querySelector("#csv").onchange = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;                       // cancelled dialog: no-op
+    fileName = file.name;
     const reader = new FileReader();
     reader.onload = () => {
       try {
