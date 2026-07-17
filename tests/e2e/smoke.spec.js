@@ -1,14 +1,16 @@
 const { test, expect } = require("@playwright/test");
 
 // Boot check only: the guided specs cover full webR renders. This guards the
-// nav — exactly the four guided analyses, in order, plus the empty state.
-test("app boots with exactly the four guided analyses", async ({ page }) => {
+// nav — exactly the five guided analyses, in DOM order, plus the empty state.
+test("app boots with exactly the five guided analyses", async ({ page }) => {
   await page.goto("/");
   const nav = page.locator("nav button[data-figure]");
-  await expect(nav).toHaveCount(4);
-  await expect(nav.nth(0)).toHaveText("Summary statistics");
-  await expect(nav.nth(1)).toHaveText("Kaplan-Meier");
-  await expect(nav.nth(2)).toHaveText("Explore plot");
-  await expect(nav.nth(3)).toHaveText("Group comparison");
+  await expect(nav).toHaveCount(5);
+  const labels = nav.locator(".nav-label");
+  await expect(labels.nth(0)).toHaveText("Summary statistics");
+  await expect(labels.nth(1)).toHaveText("Kaplan-Meier");
+  await expect(labels.nth(2)).toHaveText("Group comparison");
+  await expect(labels.nth(3)).toHaveText("Cox regression");
+  await expect(labels.nth(4)).toHaveText("Explore plot");
   await expect(page.getByText("Select an analysis on the left to begin.")).toBeVisible();
 });
