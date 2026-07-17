@@ -8,12 +8,13 @@ let webRReady;
 // of that type is requested — not at boot — so a Summary-statistics user never
 // downloads the KM survival tree. Boot installs only the shared base below.
 // See ensureExtraPackages().
-const EXTRA_PACKAGES = { km: ["survival", "cowplot"] };
+const EXTRA_PACKAGES = { km: ["survival", "cowplot"], cox: ["survival"] };
 // Human-friendly, per-figure wording for the one-time package download so the
 // figure pane reads like a sentence, not "Loading km packages". Shown while
 // ensureExtraPackages() installs — KM's survival tree is ~65MB, so warn.
 const EXTRA_PACKAGES_MESSAGE = {
   km: "Downloading survival-analysis packages (survival + cowplot) — usually 20–30 seconds, first time only. Later runs are instant.",
+  cox: "Downloading the survival-analysis package — usually 15–25 seconds, first time only. Later runs are instant.",
 };
 const installedExtras = new Set();
 // Single-flight guard: figure type -> in-flight install Promise. Without this,
@@ -38,7 +39,7 @@ async function boot() {
   await webR.installPackages(["ggplot2", "svglite", "jsonlite"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.
   // Missing files 404, and the `resp.ok` guard skips them.
-  for (const f of ["dispatch.R", "script.R", "summarize.R", "km.R", "themes.R", "explore.R", "groupcompare.R"]) {
+  for (const f of ["dispatch.R", "script.R", "summarize.R", "km.R", "themes.R", "explore.R", "groupcompare.R", "cox.R"]) {
     const resp = await fetch(`R/${f}`);
     if (resp.ok) await webR.evalRVoid(await resp.text());
   }
