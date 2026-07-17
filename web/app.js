@@ -104,9 +104,11 @@ import { renderGuidedSummary } from "./guided/summary/guided-summary.js";
 import { renderGuidedKm } from "./guided/guided-analysis.js";
 import { renderGuidedExplore } from "./guided/explore/guided-explore.js";
 import { renderGuidedGroupCompare } from "./guided/groupcompare/guided-groupcompare.js";
+import { renderGuidedCox } from "./guided/cox/guided-cox.js";
 import { initExportUI } from "./export-ui.js";
 const forms = { summary: renderGuidedSummary, km: renderGuidedKm,
-                explore: renderGuidedExplore, groupcompare: renderGuidedGroupCompare };
+                explore: renderGuidedExplore, groupcompare: renderGuidedGroupCompare,
+                cox: renderGuidedCox };
 
 let currentFigure = "figure";   // export filename stem before any selection
 
