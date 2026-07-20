@@ -70,6 +70,8 @@ Specs and implementation plans live in `docs/superpowers/{specs,plans}/`. Read t
 
 Issues are tracked as local Markdown files under `.scratch/`; external pull requests are not a request surface. See `docs/agents/issue-tracker.md`.
 
+Open (`ready-for-agent`) as of 2026-07-20, all found while building Cox's clone and left unfixed to keep that branch scoped — `.scratch/logistic-regression/issues/`: **01** `R/cox.R` builds coefficient lookup keys from bare column names while its formulas use backticks, so a CSV header containing a space renders every Cox HR cell as "not reliably estimated" — wrong output, not an error (`R/logistic.R`'s `.logistic_term_label` is the fix pattern; prioritize this one). **02** `web/guided/cox/analyze-form.js` loses the chosen event value and all reference-level edits on any column-picker change. **03** `web/guided/shell.js` unconditionally re-enables every `#demo-experiments` input in its `finally`, defeating the `cb.disabled` lock on the primary exposure checkbox — reachable on both Cox and Logistic. **04** `.cox_script` emits the *requested* reference level rather than the one actually fitted, so a downloaded script diverges from the app's table when prep falls back.
+
 ### Triage labels
 
 Uses the standard `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` vocabulary. See `docs/agents/triage-labels.md`.
