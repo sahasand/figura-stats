@@ -211,12 +211,19 @@ fig_cox <- function(spec) {
 
 # Forest plot of ADJUSTED HRs (one point per non-reference level / numeric term),
 # log x-axis, dashed rule at HR = 1. geom_errorbar(orientation="y") — never
-# geom_errorbarh; linewidth — never size.
+# geom_errorbarh; linewidth — never size. Inclusion mirrors .cox_hr_cell's
+# reliability rule so the plot can never contradict the table beside it: a
+# warned joint fit makes EVERY adjusted cell read "not reliably estimated"
+# (the warning is model-level, so .cox_rows passes it to all of them), hence a
+# warned fit plots nothing at all; and, as in .logistic_forest_svg, a CI that
+# blows up past HR 1e6 is dropped rather than flattening the shared log axis.
 .cox_forest_svg <- function(p, fits) {
+  if (!is.null(fits$joint$warn)) return("")
   jfit <- fits$joint$fit
   jc <- stats::coef(jfit); jci <- suppressWarnings(stats::confint(jfit))
   terms <- names(jc)
-  keep <- is.finite(jc) & is.finite(jci[, 1]) & is.finite(jci[, 2])
+  keep <- is.finite(jc) & is.finite(jci[, 1]) & is.finite(jci[, 2]) &
+    exp(jci[, 2]) <= 1e6
   if (!any(keep)) return("")
   # Coefficient names carry the formula's term label, which is backticked for a
   # non-syntactic header ("`study arm`Treated"), so match and strip that prefix

@@ -1,4 +1,4 @@
-# 07 — The cox/logistic "near-clone" analyze forms have diverged in opposite directions
+# 07 — The cox/logistic "near-clone" analyze forms have diverged in opposite directions (consistency, not a bug)
 
 Status: ready-for-agent
 Type: task
@@ -30,20 +30,27 @@ s.value = chosenRefs[c] ?? mostFrequent(table, c);
 if (!s.value) s.value = mostFrequent(table, c);   // stale level, no longer present
 ```
 
-**This is a latent bug, not only an inconsistency.** `chosenRefs[c] ?? mostFrequent(...)`
-assigns a remembered level without checking the rebuilt `<option>` list still offers it.
-The `if (!s.value)` line is a partial rescue that only fires because assigning an absent
-value to a `<select>` leaves `value === ""` — it does not fire when the remembered string
-happens to match a **different** column's level after a remap, and it depends on DOM
-assignment semantics rather than stating the rule. Cox's `retainedSelection` states the
-rule explicitly and is unit-tested.
+**Correction (2026-07-20): this is an inconsistency, not a latent bug.** An earlier
+revision of this issue claimed the logistic version could silently reuse one column's
+remembered level for a *different* column after a remap. That is not reachable, and the
+scenario it described was wrong:
 
-Failing scenario: map covariate `site` (levels `A`/`B`/`C`), pick reference `C`, then
-change the covariate multi-select so `site` is replaced by a column that also has a level
-named `C` but for which `C` is a poor/unintended reference. The remembered `"C"` is
-silently reused for the new column. The fitted model is valid but is not the model the
-user's visible dropdowns describe — a wrong reference level flips the direction of every
-OR for that covariate.
+- `chosenRefs` is keyed by **column name** (`chosenRefs[s.dataset.cov] = s.value`,
+  `web/guided/logistic/analyze-form.js:166`), not by position, so `chosenRefs[c]` can only
+  ever hold a level previously chosen for column `c` itself.
+- `chosenRefs` is declared inside the per-parse closure (`:163`), and the option list comes
+  from `distinctValues(table, c)` on a `table` that is fixed for the life of that closure —
+  so a given column's options are identical on every rebuild. A remembered value for `c` is
+  therefore always still among `c`'s options.
+- The `if (!s.value)` guard at `:183` is consequently near-dead defensive code rather than
+  the load-bearing rescue described above.
+
+Do **not** write a test asserting the cross-column scenario; it cannot be made to fail.
+
+What is genuinely worth fixing here is narrower: logistic encodes the fallback rule
+implicitly, in DOM assignment semantics (`select.value = <absent>` leaves `""`), where cox
+now states it explicitly in `retainedSelection` and unit-tests it. The behavior is the same;
+the robustness and the testability are not.
 
 ### Logistic has, cox lacks: readiness + dropped-row helpers
 
@@ -72,8 +79,10 @@ files naming the sibling, so the next divergence is visible.
 
 ## Test
 
-- Unit: the logistic form must fall back to the default reference when the remembered level
-  is not among the new column's levels (RED against the current `?? mostFrequent` line).
+- Unit: if logistic adopts `retainedSelection`, assert it returns the fallback for a
+  remembered level absent from the available list. Note this will **not** be RED against
+  the current inline version — the behavior already matches; the gain is an explicit,
+  tested rule rather than one implied by DOM assignment semantics. See the Correction above.
 - Unit: the Cox form's dropped-row count must match R (see issue 06).
 - Existing `cox/analyze-form.test.mjs` and `logistic/analyze-form.test.mjs` assertions must
   all still pass unchanged.

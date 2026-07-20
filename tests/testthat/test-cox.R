@@ -153,6 +153,75 @@ test_that("a covariate name that prefixes another does not claim its label", {
   expect_match(svg, "age2 (per 1 unit)", fixed = TRUE)
 })
 
+# --- Issue 05: the forest plot must honour the same reliability rule as the table
+
+# A covariate level whose members are never observed to have the event and stay
+# at risk past the last event time separates the likelihood: coxph converges
+# with an effectively infinite coefficient and warns. The warning is captured by
+# .cox_fit_one, so .cox_hr_cell renders EVERY adjusted cell — including the
+# well-behaved arm term's — as "not reliably estimated".
+mk_cox_rows_separated <- function() {
+  rows <- mk_cox_rows()
+  for (i in seq_along(rows)) rows[[i]]$grp <- "Common"
+  for (i in 1:10) {
+    rows[[i]]$grp <- "Rare"; rows[[i]]$time <- 30; rows[[i]]$status <- "alive"
+  }
+  rows
+}
+
+test_that("a warned joint fit reports no adjusted HR and plots no forest term", {
+  sc <- sc_cox(mk_cox_rows_separated(), covariates = c("arm", "grp"))
+  p <- .cox_prep(sc)
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  expect_false(is.null(fits$joint$warn))          # the fixture really does warn
+
+  out <- fig_cox(sc)
+  adj <- function(term) {
+    line <- grep(paste0("^", term, "\t"), strsplit(out$text, "\n", fixed = TRUE)[[1]],
+                 value = TRUE)
+    expect_length(line, 1)
+    strsplit(line, "\t", fixed = TRUE)[[1]][3]
+  }
+  # The table declines to report BOTH adjusted cells (the warning is model-level).
+  expect_equal(adj("Treated"), "not reliably estimated")
+  expect_equal(adj("Rare"), "not reliably estimated")
+
+  # So the forest, which plots adjusted HRs from that same fit, must plot nothing.
+  svg <- .cox_forest_svg(p, fits)
+  expect_false(grepl("arm: Treated", svg, fixed = TRUE))
+  expect_false(grepl("grp: Rare", svg, fixed = TRUE))
+  expect_identical(svg, "")
+})
+
+# A numeric covariate on a tiny scale (a "wrong units" column) fits cleanly — no
+# warning, finite CI — but its adjusted HR runs to ~1e6 with an upper bound of
+# ~1e7. On the shared log10 axis that squashes every other term to a hairline.
+mk_cox_rows_huge <- function() {
+  set.seed(41)
+  n <- 200
+  arm <- rep(c("Control", "Treated"), each = n / 2)
+  x <- round(rnorm(n, 0, 0.05), 4)
+  lp <- 15 * x - 0.7 * (arm == "Treated")
+  time <- round(rexp(n, rate = 0.05 * exp(lp)) + 0.1, 2)
+  cens <- time > 24
+  time[cens] <- 24
+  status <- ifelse(cens, "alive", "dead")
+  lapply(seq_len(n), function(i)
+    list(time = time[i], status = status[i], arm = arm[i], x = x[i]))
+}
+
+test_that("a term whose CI blows past 1e6 is left off the forest, others stay", {
+  sc <- sc_cox(mk_cox_rows_huge(), covariates = c("arm", "x"))
+  p <- .cox_prep(sc)
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  expect_null(fits$joint$warn)                    # nothing warned; only the scale is wild
+  expect_gt(exp(suppressWarnings(stats::confint(fits$joint$fit))["x", 2]), 1e6)
+
+  svg <- .cox_forest_svg(p, fits)
+  expect_false(grepl("x (per 1 unit)", svg, fixed = TRUE))
+  expect_match(svg, "arm: Treated", fixed = TRUE)
+})
+
 # --- Issue 04: the script must relevel against the reference actually fitted --
 
 test_that("script relevels against the fitted reference, not the requested one", {

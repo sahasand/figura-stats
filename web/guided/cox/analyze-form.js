@@ -33,6 +33,17 @@ export function reconcileRefLevels(remembered, covariates, levelsOf, defaultOf) 
   return out;
 }
 
+// Rows the model will drop, because a mapped column is missing (complete cases).
+// "Missing" is exactly what R/cox.R treats as missing: an absent cell or the
+// empty string. A whitespace-only cell is NOT missing there — it stays a real
+// categorical level (and makes .cox_is_numeric read the column as categorical),
+// so counting it here would over-state the preview.
+export function countDroppedRows(table, columns) {
+  if (columns.length === 0) return 0;
+  return table.rows.filter((r) =>
+    columns.some((c) => r[c] == null || String(r[c]) === "")).length;
+}
+
 // --- DOM wiring (exercised by the Playwright e2e test) ----------------------
 
 let exampleCsvUrl = null;
@@ -197,8 +208,7 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
           const spec = buildCoxSpec(table, roles, eventSel.value, refLevels,
             { source_filename: fileName });
           const used = [roles.time, roles.status, ...roles.covariates];
-          const dropped = table.rows.filter((r) =>
-            used.some((c) => r[c] == null || String(r[c]).trim() === "")).length;
+          const dropped = countDroppedRows(table, used);
           note.textContent = dropped > 0
             ? `${dropped} row(s) with missing values will be excluded.` : "";
           onSubmit(spec);
