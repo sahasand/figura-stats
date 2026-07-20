@@ -235,10 +235,85 @@
   .svg_string(gg, width = 6, height = 0.5 + 0.5 * nrow(d))
 }
 
+# C-statistic (AUC) == normalized Mann-Whitney U from fitted probabilities.
+# Base stats only; rank() midranks handle ties. NA if a class is empty.
+.logistic_auc <- function(prob, y) {
+  n1 <- sum(y == 1); n0 <- sum(y == 0)
+  if (n1 == 0 || n0 == 0) return(NA_real_)
+  (sum(rank(prob)[y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+}
+
+# VIF per CONTINUOUS predictor via base lm: VIF_j = 1/(1 - R^2_j), R^2_j from
+# regressing predictor j on the other continuous predictors. Valid only for
+# single-df (continuous) terms — categorical collinearity (which needs GVIF) is
+# not assessed. NULL when fewer than 2 continuous covariates.
+.logistic_vif <- function(df, num_covs) {
+  if (length(num_covs) < 2) return(NULL)
+  setNames(vapply(num_covs, function(v) {
+    others <- setdiff(num_covs, v)
+    f <- stats::as.formula(sprintf("`%s` ~ %s", v,
+      paste(sprintf("`%s`", others), collapse = " + ")))
+    # An exactly-duplicated covariate makes summary.lm emit "essentially perfect
+    # fit"; that is precisely the case the r2 >= 1 branch below reports, so muffle
+    # the library-internal warning rather than let it leak.
+    r2 <- withCallingHandlers(summary(stats::lm(f, data = df))$r.squared,
+      warning = function(w) invokeRestart("muffleWarning"))
+    if (!is.finite(r2) || r2 >= 1) Inf else 1 / (1 - r2)
+  }, numeric(1)), num_covs)
+}
+
 fig_logistic <- function(spec) {
   p <- .logistic_prep(spec)
   fits <- .logistic_fits(p$df, p$covs, p$cov_types)
   disp_rows <- .logistic_rows(p, fits)
+
+  # ---- Model-quality guards. Every one of these is advisory: it appends a
+  # sentence to the methods text and never blocks a fit or changes a number.
+  jfit <- fits$joint$fit
+
+  # Separation: glm's captured "fitted probabilities 0/1" warning, or any adjusted
+  # OR that blew past the reliability threshold. Flagged, never auto-corrected.
+  sep_warn <- !is.null(fits$joint$warn) && grepl("fitted probabilities", fits$joint$warn)
+  sep_cell <- any(vapply(disp_rows, function(r) identical(r$adj, "not reliably estimated"),
+                         logical(1)))
+  sep_line <- if (sep_warn || sep_cell)
+    paste0(" CAUTION: separation was detected — one or more covariates predict the outcome ",
+           "(near-)perfectly, so those odds ratios are not reliably estimated by standard ",
+           "logistic regression. Consider collapsing sparse categories, dropping the term, ",
+           "or a penalized (Firth) fit, and seek statistical review.") else ""
+
+  # EPV (events per variable): soft advisory heuristic, never a gate.
+  n_terms <- sum(vapply(p$covs, function(cl)
+    if (p$cov_types[[cl]] == "numeric") 1L else nlevels(p$df[[cl]]) - 1L, integer(1)))
+  epv <- p$n_min / n_terms
+  epv_line <- if (epv < 10)
+    sprintf(paste0(" CAUTION: about %.1f events per model term (EPV < 10); the adjusted ",
+                   "estimates may be unstable and are best treated as exploratory."), epv) else ""
+
+  # Discrimination: one overall C-statistic (base-R AUC), not per covariate.
+  auc <- .logistic_auc(stats::fitted(jfit), p$df$.y)
+  auc_line <- if (is.finite(auc))
+    sprintf(" Overall model discrimination: C-statistic = %.2f.", auc) else ""
+
+  # Multicollinearity: VIF for continuous predictors only.
+  num_covs <- names(p$cov_types)[p$cov_types == "numeric"]
+  vif <- .logistic_vif(p$df, num_covs)
+  vif_line <- if (!is.null(vif) && any(vif > 5)) {
+    finite_vif <- vif[is.finite(vif)]
+    # An exactly-duplicated covariate gives R^2 = 1, so the largest VIF can be
+    # infinite; say so in words rather than printing "Inf".
+    largest <- if (length(finite_vif) > 0) sprintf("%.1f", max(finite_vif)) else "effectively infinite"
+    sprintf(paste0(" CAUTION: multicollinearity among continuous covariates ",
+                   "(largest VIF = %s, above the usual threshold of 5); consider dropping ",
+                   "a redundant variable."), largest)
+  } else ""
+
+  # Influential observations: Cook's distance above the conventional 4/n cut-off.
+  cd <- stats::cooks.distance(jfit)
+  n_infl <- sum(cd > 4 / length(cd), na.rm = TRUE)
+  infl_line <- if (n_infl > 0)
+    sprintf(paste0(" %d observation(s) were flagged as influential (Cook's distance > 4/n); ",
+                   "inspect them for data-entry errors."), n_infl) else ""
 
   table_html <- .logistic_table_html(disp_rows)
   forest_svg <- .logistic_forest_svg(p, fits)
@@ -254,8 +329,9 @@ fig_logistic <- function(spec) {
     sprintf(" %d row(s) with missing values were excluded.", p$n_dropped) else ""
   methods <- sprintf(paste0("Multivariable logistic regression (n = %d, %d events) ",
     "adjusted for %s. Unadjusted odds ratios are from single-covariate models; ",
-    "adjusted odds ratios are from the joint model.%s"),
-    p$n, p$n_event, paste(p$covs, collapse = ", "), drop_note)
+    "adjusted odds ratios are from the joint model.%s%s%s%s%s%s"),
+    p$n, p$n_event, paste(p$covs, collapse = ", "),
+    sep_line, epv_line, auc_line, vif_line, infl_line, drop_note)
   text <- paste0(tsv, "\n\n", methods)
 
   list(svg = svg_field, text = text, code = "")

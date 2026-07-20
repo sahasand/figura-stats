@@ -126,3 +126,61 @@ test_that("forest plot labels a non-syntactic covariate header without backticks
   expect_match(forest, "age at entry (per 1 unit)", fixed = TRUE)
   expect_false(grepl("`", forest, fixed = TRUE))
 })
+
+test_that("methods text reports the C-statistic (discrimination)", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  expect_match(out$text, "C-statistic", fixed = TRUE)
+})
+
+test_that("a well-conditioned model raises none of the quality cautions", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  expect_false(grepl("separation", out$text, ignore.case = TRUE))
+  expect_false(grepl("EPV", out$text, fixed = TRUE))
+  expect_false(grepl("VIF", out$text, fixed = TRUE))
+})
+
+test_that("EPV warning fires when events per term is under 10", {
+  # 6 model terms (5 non-reference levels of `g` + `x`) against 10 events -> EPV < 2.
+  set.seed(9); n <- 60
+  g <- sample(LETTERS[1:6], n, replace = TRUE)   # 5 non-reference terms
+  x <- rnorm(n)
+  y <- ifelse(seq_len(n) <= 10, "Event", "NoEvent")
+  rows <- lapply(seq_len(n), function(i) list(outcome = y[i], g = g[i], x = x[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("g", "x")))
+  expect_match(out$text, "EPV", fixed = TRUE)
+})
+
+test_that("separation is detected and flagged, not silently shipped", {
+  # `flag` perfectly predicts the outcome -> quasi-complete separation.
+  set.seed(3); n <- 120
+  y <- rbinom(n, 1, 0.5)
+  flag <- ifelse(y == 1, "hi", "lo")           # perfect predictor
+  age <- rnorm(n, 60, 10)
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), flag = flag[i], age = age[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("flag", "age")))
+  expect_match(out$text, "separation", ignore.case = TRUE)
+  expect_match(out$svg, "not reliably estimated", fixed = TRUE)
+})
+
+test_that("multicollinearity (VIF) is flagged for near-duplicate covariates", {
+  set.seed(7); n <- 300
+  x1 <- rnorm(n)
+  x2 <- x1 + rnorm(n, 0, 0.05)                 # r ~ 0.99 with x1
+  y <- rbinom(n, 1, plogis(0.5 * x1))
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x1 = x1[i], x2 = x2[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("x1", "x2")))
+  expect_match(out$text, "VIF", fixed = TRUE)
+})
+
+test_that("an exactly duplicated covariate reports an infinite VIF in words", {
+  set.seed(11); n <- 200
+  x1 <- rnorm(n)
+  y <- rbinom(n, 1, plogis(0.5 * x1))
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x1 = x1[i], x_copy = x1[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("x1", "x_copy")))
+  expect_match(out$text, "VIF = effectively infinite", fixed = TRUE)
+  expect_false(grepl("VIF = Inf", out$text, fixed = TRUE))
+})
