@@ -89,3 +89,80 @@ test_that("demo-shape spec embeds data (no read.csv) in the script", {
   expect_match(out$code, "data.frame", fixed = TRUE)
   expect_false(grepl("read.csv", out$code, fixed = TRUE))
 })
+
+# --- Issue 01: coefficient keys must respect the backticks the formula used ----
+
+# Same data, but the arm column carries a non-syntactic header (a space), which
+# is routine in clinical CSV exports.
+mk_cox_rows_spaced <- function() {
+  lapply(mk_cox_rows(), function(r)
+    list(time = r$time, status = r$status, `study arm` = r$arm, age = r$age))
+}
+
+test_that("a covariate whose header has a space still gets estimated HRs", {
+  out <- fig_cox(sc_cox(mk_cox_rows_spaced(), covariates = c("study arm", "age")))
+  expect_false(grepl("not reliably estimated", out$text, fixed = TRUE))
+  hr <- as.numeric(sub(".*Treated[^0-9]*([0-9.]+).*", "\\1",
+                        gsub("\n", " ", out$text)))
+  expect_true(hr < 0.8)
+})
+
+# The categorical fixture above only exercises the categorical key
+# (`paste0(tl, l)`). confint()/coef() rownames are backticked for a NUMERIC
+# non-syntactic term too, so the numeric branch (`uc[tl]`, not `uc[cl]`) needs
+# its own fixture: a numeric covariate whose header carries a space.
+mk_cox_rows_num_spaced <- function() {
+  lapply(mk_cox_rows(), function(r)
+    list(time = r$time, status = r$status, arm = r$arm, `age at entry` = r$age))
+}
+
+test_that("a NUMERIC covariate whose header has a space still gets estimated HRs", {
+  out <- fig_cox(sc_cox(mk_cox_rows_num_spaced(),
+                        covariates = c("arm", "age at entry")))
+  expect_false(grepl("not reliably estimated", out$text, fixed = TRUE))
+  # Pull the numeric row's unadjusted + adjusted cells out of the TSV block and
+  # assert both are real numbers, not the "not reliably estimated" placeholder.
+  line <- grep("^age at entry \\(per 1 unit\\)\t",
+               strsplit(out$text, "\n", fixed = TRUE)[[1]], value = TRUE)
+  expect_length(line, 1)
+  cells <- strsplit(line, "\t", fixed = TRUE)[[1]][2:3]
+  hrs <- as.numeric(sub("^([0-9.]+) .*$", "\\1", cells))
+  expect_true(all(is.finite(hrs)))
+  # Simulated log-hazard rises 0.04 per year -> HR ~ 1.04 per unit.
+  expect_true(all(hrs > 1.01 & hrs < 1.09))
+})
+
+test_that("forest plot labels a space-headered covariate without backticks", {
+  p <- .cox_prep(sc_cox(mk_cox_rows_spaced(), covariates = c("study arm", "age")))
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  svg <- .cox_forest_svg(p, fits)
+  expect_match(svg, "study arm: Treated", fixed = TRUE)
+  expect_false(grepl("`study arm`", svg, fixed = TRUE))
+})
+
+test_that("a covariate name that prefixes another does not claim its label", {
+  base <- mk_cox_rows()
+  set.seed(7)
+  noise <- round(rnorm(length(base), 100, 15), 1)   # independent of age
+  rows <- lapply(seq_along(base), function(i)
+    list(time = base[[i]]$time, status = base[[i]]$status,
+         age = base[[i]]$age, age2 = noise[i]))
+  p <- .cox_prep(sc_cox(rows, covariates = c("age", "age2")))
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  svg <- .cox_forest_svg(p, fits)
+  expect_match(svg, "age2 (per 1 unit)", fixed = TRUE)
+})
+
+# --- Issue 04: the script must relevel against the reference actually fitted --
+
+test_that("script relevels against the fitted reference, not the requested one", {
+  rows <- mk_cox_rows()
+  # Ten Treated rows become a third arm level whose age is missing, so
+  # complete-case filtering drops every row carrying that level.
+  for (i in 101:110) { rows[[i]]$arm <- "Excluded"; rows[[i]]$age <- "" }
+  out <- fig_cox(sc_cox(rows, ref_levels = list(arm = "Excluded")))
+  # Control (100 rows) outnumbers Treated (90), so prep falls back to Control.
+  expect_match(out$svg, "arm (reference: Control)", fixed = TRUE)
+  expect_false(grepl('ref = "Excluded"', out$code, fixed = TRUE))
+  expect_match(out$code, 'ref = "Control"', fixed = TRUE)
+})

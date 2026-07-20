@@ -8,6 +8,33 @@ import { renderColumnPicker } from "../../lib/columnpicker.js";
 import { buildCoxSpec, distinctValues, mostFrequent } from "./spec.js";
 import { COX_DEMO } from "./demo-data.js";
 
+// --- pure decision logic (unit-tested in analyze-form.test.mjs) --------------
+
+// A remembered dropdown value carried across an options rebuild: kept only when
+// the rebuilt list still offers it, otherwise the fallback. Deselecting every
+// covariate nulls the picker's whole role map (see web/lib/columnpicker.js),
+// which momentarily clears the status column — the chosen event must survive it.
+export function retainedSelection(remembered, available, fallback = "") {
+  return available.includes(remembered) ? remembered : fallback;
+}
+
+// Reference levels for exactly the categorical covariates currently mapped,
+// reconciled against what the user already chose (keyed by column name) rather
+// than rebuilt from zero. `levelsOf(col)` returns null for a numeric covariate
+// (per-unit HR, no reference). A remembered level the column no longer offers
+// falls back to `defaultOf(col)`; a covariate no longer mapped is dropped.
+export function reconcileRefLevels(remembered, covariates, levelsOf, defaultOf) {
+  const out = {};
+  for (const c of covariates) {
+    const levels = levelsOf(c);
+    if (!levels) continue;
+    out[c] = retainedSelection(remembered[c], levels, defaultOf(c));
+  }
+  return out;
+}
+
+// --- DOM wiring (exercised by the Playwright e2e test) ----------------------
+
 let exampleCsvUrl = null;
 function getExampleCsvUrl() {
   if (!exampleCsvUrl) {
@@ -57,6 +84,7 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
       try {
         table = parseCsv(reader.result);
         fileName = file.name;
+        roles = null;
         doc.getElementById("stats").classList.remove("error");
         config.innerHTML = "";
         const pick = doc.createElement("div"); config.appendChild(pick);
@@ -84,6 +112,10 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
         note.id = "cox-dropped-note"; note.className = "hint";
 
         let statusCol = null;
+        // Form-owned state, declared inside this parse so a NEW file never
+        // inherits the previous file's event value or reference levels.
+        let chosenEvent = "";
+        const chosenRefs = {};
         const isNumericCol = (col) => table.types[col] === "numeric";
         const syncReady = () => {
           btn.disabled = !roles || !roles.covariates
@@ -94,29 +126,44 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
           const ph = doc.createElement("option");
           ph.value = ""; ph.textContent = "— choose —";
           eventSel.appendChild(ph);
-          if (statusCol) for (const v of distinctValues(table, statusCol)) {
+          const values = statusCol ? distinctValues(table, statusCol) : [];
+          for (const v of values) {
             const o = doc.createElement("option");
             o.value = v; o.textContent = v;
             eventSel.appendChild(o);
           }
+          eventSel.value = retainedSelection(chosenEvent, values, "");
           eventSel.disabled = !statusCol;
           syncReady();
         };
         const renderRefs = () => {
+          // Harvest what is on screen before tearing it down, so a level the
+          // user picked is remembered even across a null role map.
+          refWrap.querySelectorAll("select[data-cov]").forEach((s) => {
+            chosenRefs[s.dataset.cov] = s.value;
+          });
           refWrap.innerHTML = "";
           if (!roles || !roles.covariates) return;
+          const levels = {};
+          const levelsOf = (c) => {
+            if (isNumericCol(c)) return null;   // numeric covariate -> per-unit HR, no reference
+            if (!levels[c]) levels[c] = distinctValues(table, c);
+            return levels[c];
+          };
+          const refs = reconcileRefLevels(chosenRefs, roles.covariates, levelsOf,
+            (c) => mostFrequent(table, c));
           for (const c of roles.covariates) {
-            if (isNumericCol(c)) continue;   // numeric covariate -> per-unit HR, no reference
+            if (isNumericCol(c)) continue;
             const l = doc.createElement("label");
             l.textContent = `Reference level for ${c} `;
             const s = doc.createElement("select");
             s.id = "cox-ref-" + c; s.dataset.cov = c;
-            for (const v of distinctValues(table, c)) {
+            for (const v of levelsOf(c)) {
               const o = doc.createElement("option");
               o.value = v; o.textContent = v;
               s.appendChild(o);
             }
-            s.value = mostFrequent(table, c);
+            s.value = refs[c];
             l.appendChild(s); refWrap.appendChild(l);
           }
         };
@@ -133,7 +180,7 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
             renderRefs();
             syncReady();
           }, doc);
-        eventSel.onchange = syncReady;
+        eventSel.onchange = () => { chosenEvent = eventSel.value; syncReady(); };
         fillEventOptions();
 
         config.appendChild(eventLabel);
@@ -160,7 +207,9 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
         config.appendChild(note);
         config.hidden = false;
       } catch (err) {
-        table = null; config.hidden = true; config.innerHTML = "";
+        // A failed parse drops every retained choice with the closure it lived in.
+        table = null; roles = null;
+        config.hidden = true; config.innerHTML = "";
         showError(err.message);
       }
     };

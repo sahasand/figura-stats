@@ -52,6 +52,16 @@ test("demo fits a Table-3 + forest plot and enables the .R download", async ({ p
   await expect(page.locator("#stats")).toContainText(/C-statistic = 0\.6[5-9]/);
   await expect(page.locator("#stats")).toContainText("n = 320, 91 events");
   await expect(page.locator("#export-r")).toBeEnabled();
+
+  // The shell freezes the experiment controls for the duration of a run and must
+  // restore them to their PRE-run state, not blanket-enable them: `arm` is the
+  // primary exposure and content.js locks its checkbox so it can never be
+  // unchecked (unchecking every covariate reaches R's "Select at least one
+  // covariate." stop()). The other covariates must come back usable.
+  await expect(page.locator("#cov-arm")).toBeDisabled();
+  await expect(page.locator("#cov-age")).toBeEnabled();
+  await expect(page.locator("#cov-stage")).toBeEnabled();
+  await expect(page.locator("#run-demo")).toBeEnabled();
 });
 
 test("analyze stage fits an uploaded logistic model with adjusted ORs", async ({ page }) => {

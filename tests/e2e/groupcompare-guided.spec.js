@@ -18,10 +18,27 @@ test("demo: numeric outcome renders a plot with test + effect size; categorical 
   await expect(page.locator("#stats")).toContainText(/ANOVA|t-test/);
   await expect(page.locator("#stats")).toContainText("95% CI");
 
+  // With a numeric outcome the Plot picker is a live Box/Violin control, so the
+  // assertion after the switch below is not trivially true.
+  await expect(page.locator("#demo-plot")).toBeEnabled();
+
   // Switch the outcome to the categorical responder column -> chi-square.
   await page.locator("#cp_outcome").selectOption("responder");
   await expect(page.locator("#stats")).toContainText(/chi-square|Fisher/, { timeout: 120000 });
   await expect(page.locator("#preview svg")).toBeVisible();
+
+  // Shared-shell control lock (same code path logistic-guided.spec.js pins, but
+  // reached differently): a categorical outcome always renders a stacked
+  // proportion bar, so content.js replaces the Plot picker with a deliberately
+  // disabled placeholder. The rerun here is triggered BY an experiment control
+  // (not the Run button) and the locked node is a <select> created mid-change,
+  // so this covers the element-keyed restore that the checkbox-on-Run-click
+  // logistic assertion does not. A blanket re-enable after the run would leave
+  // the user an inert Plot picker that cannot change the figure.
+  await expect(page.locator("#demo-plot")).toBeDisabled();
+  await expect(page.locator("#demo-test")).toBeEnabled();
+  await expect(page.locator("#run-demo")).toBeEnabled();
+  await expect(page.locator("#reset-demo")).toBeEnabled();
 });
 
 test("analyze stage renders an uploaded comparison with a real p-value", async ({ page }) => {

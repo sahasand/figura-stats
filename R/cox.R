@@ -13,6 +13,15 @@
   !any(!is.na(raw) & is.na(num))
 }
 
+# The term label R uses for a column inside a formula, and therefore the prefix of
+# its coefficient names. .cox_fits writes every column backticked, so a syntactic
+# name appears bare ("armTreated") while a non-syntactic one — a header with a
+# space, routine in clinical CSV exports — keeps the backticks
+# ("`study arm`Treated"). Mirrors .logistic_term_label.
+.cox_term_label <- function(cl) {
+  if (identical(make.names(cl), cl)) cl else sprintf("`%s`", cl)
+}
+
 # Most frequent non-NA value of a character vector (default reference level).
 .cox_most_frequent <- function(x) {
   x <- x[!is.na(x) & x != ""]
@@ -117,16 +126,17 @@
     ufit <- fits$uni[[cl]]$fit; uwarn <- fits$uni[[cl]]$warn
     uc <- stats::coef(ufit); uci <- suppressWarnings(stats::confint(ufit))
     upm <- summary(ufit)$coefficients
+    tl <- .cox_term_label(cl)
     if (p$cov_types[[cl]] == "numeric") {
       rows[[length(rows) + 1]] <- list(term = sprintf("%s (per 1 unit)", cl),
-        unadj = .cox_hr_cell(exp(uc[cl]), exp(uci[cl, 1]), exp(uci[cl, 2]), pval(upm, cl), uwarn),
-        adj = .cox_hr_cell(exp(jc[cl]), exp(jci[cl, 1]), exp(jci[cl, 2]), pval(jpm, cl), jwarn))
+        unadj = .cox_hr_cell(exp(uc[tl]), exp(uci[tl, 1]), exp(uci[tl, 2]), pval(upm, tl), uwarn),
+        adj = .cox_hr_cell(exp(jc[tl]), exp(jci[tl, 1]), exp(jci[tl, 2]), pval(jpm, tl), jwarn))
     } else {
       lv <- levels(p$df[[cl]])
       rows[[length(rows) + 1]] <- list(term = sprintf("%s (reference: %s)", cl, lv[1]),
         unadj = "", adj = "")
       for (l in lv[-1]) {
-        key <- paste0(cl, l)
+        key <- paste0(tl, l)
         rows[[length(rows) + 1]] <- list(term = paste0("  ", l),
           unadj = .cox_hr_cell(exp(uc[key]), exp(uci[key, 1]), exp(uci[key, 2]), pval(upm, key), uwarn),
           adj = .cox_hr_cell(exp(jc[key]), exp(jci[key, 1]), exp(jci[key, 2]), pval(jpm, key), jwarn))
@@ -208,10 +218,20 @@ fig_cox <- function(spec) {
   terms <- names(jc)
   keep <- is.finite(jc) & is.finite(jci[, 1]) & is.finite(jci[, 2])
   if (!any(keep)) return("")
+  # Coefficient names carry the formula's term label, which is backticked for a
+  # non-syntactic header ("`study arm`Treated"), so match and strip that prefix
+  # literally — a bare-name regex would miss it and leak the raw coefficient name.
+  # Longest term label first, so a covariate whose name prefixes another's
+  # ("age" vs "age2") cannot claim the other's coefficients.
+  by_len <- p$covs[order(nchar(vapply(p$covs, .cox_term_label, character(1))),
+                         decreasing = TRUE)]
   labeller <- function(key) {
-    for (cl in p$covs) if (startsWith(key, cl)) {
-      if (p$cov_types[[cl]] == "numeric") return(sprintf("%s (per 1 unit)", cl))
-      return(sprintf("%s: %s", cl, sub(paste0("^", cl), "", key)))
+    for (cl in by_len) {
+      tl <- .cox_term_label(cl)
+      if (startsWith(key, tl)) {
+        if (p$cov_types[[cl]] == "numeric") return(sprintf("%s (per 1 unit)", cl))
+        return(sprintf("%s: %s", cl, substring(key, nchar(tl) + 1)))
+      }
     }
     key
   }
@@ -268,10 +288,13 @@ fig_cox <- function(spec) {
     "                  check.names = FALSE, stringsAsFactors = FALSE)",
     "dat <- dat[complete.cases(dat) & is.finite(dat$time) & dat$time >= 0, ]")
 
+  # levels(p$df[[cl]])[1] is the reference the app ACTUALLY fitted with, which is
+  # not always options$ref_levels: .cox_prep falls back to the most frequent level
+  # when the requested reference is absent from the complete-case data.
   relevel_lines <- unlist(lapply(covs, function(cl) {
     if (p$cov_types[[cl]] != "categorical") return(NULL)
-    ref <- qe(as.character(p$ref_levels[[cl]] %||% .cox_most_frequent(p$df[[cl]])))
-    sprintf('dat[["%s"]] <- relevel(factor(dat[["%s"]]), ref = "%s")', qe(cl), qe(cl), ref)
+    sprintf('dat[["%s"]] <- relevel(factor(dat[["%s"]]), ref = "%s")',
+            qe(cl), qe(cl), qe(levels(p$df[[cl]])[1]))
   }))
 
   uni_lines <- unlist(lapply(covs, function(cl) c(
