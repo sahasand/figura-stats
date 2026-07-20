@@ -1,9 +1,12 @@
 // web/sw.js
 // Figura service worker: makes repeat visits fast by caching the app shell and
-// the (no-cache) webR runtime. Versioned — bump CACHE on any deploy to hard-
-// reset all caches on activate. With stale-while-revalidate for same-origin
-// assets (below) the bump is no longer load-bearing for correctness — it's just
-// a hard reset lever; SWR self-heals a stale asset within one background fetch.
+// the (no-cache) webR runtime. Three strategies, chosen by `routeFor` below:
+//   R/*.R        network-first  — statistics may never be stale, even once
+//   same-origin  stale-while-revalidate — chrome self-heals within a round trip
+//   webR static  cache-first    — the ~6MB runtime is the bandwidth win
+// Versioned: bump CACHE to hard-reset all caches on activate. Since R sources
+// are network-first, the bump is a convenience lever, not the guard standing
+// between a deploy and wrong output.
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
@@ -38,6 +41,30 @@ const PRECACHE = [
 const WEBR_ORIGINS = ["https://webr.r-wasm.org", "https://repo.r-wasm.org"];
 const STATIC_EXT = /\.(wasm|data|mjs|tgz|so)$/i;
 
+// R sources are the statistical source of truth, not chrome. Stale CSS is a
+// cosmetic blip that self-heals; stale R means the user reads numbers and
+// figures produced by code this project has already decided was wrong, for a
+// whole session. They get network-first below, which makes the CACHE bump a
+// convenience again rather than the only thing standing between a deploy and
+// wrong output. Matched on the path so a query string can't smuggle one past.
+const R_SOURCE = /\/R\/[^/]+\.R$/i;
+
+// The single routing decision, as a pure function of the request — the fetch
+// handler below only dispatches on its answer. Kept separate so the choice
+// that matters for correctness is directly testable (see web/sw.test.mjs);
+// a service worker's routing is otherwise reachable only from a real browser.
+function routeFor(req) {
+  if (req.method !== "GET") return "pass";
+  const url = new URL(req.url);
+  if (url.origin === self.location.origin) {
+    return R_SOURCE.test(url.pathname) ? "r-source" : "same-origin";
+  }
+  if (WEBR_ORIGINS.includes(url.origin) && STATIC_EXT.test(url.pathname)) {
+    return "webr-static";
+  }
+  return "pass";
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE)
@@ -57,21 +84,48 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET") return;                    // pass through
-  const url = new URL(req.url);
-  const sameOrigin = url.origin === self.location.origin; // origin-only: correct under a subpath
-  const isWebRStatic =
-    WEBR_ORIGINS.includes(url.origin) && STATIC_EXT.test(url.pathname);
-  if (sameOrigin) {
-    event.respondWith(staleWhileRevalidate(req));      // self-healing: never serves stale forever
-  } else if (isWebRStatic) {
-    event.respondWith(cacheFirst(req));                // 6MB runtime: cache-first is the bandwidth win
+  switch (routeFor(req)) {
+    case "r-source":                                   // statistics: never stale
+      return event.respondWith(networkFirst(req));
+    case "same-origin":
+      return event.respondWith(staleWhileRevalidate(req)); // self-healing: never serves stale forever
+    case "webr-static":
+      return event.respondWith(cacheFirst(req));       // 6MB runtime: cache-first is the bandwidth win
+    default:
+      return;                                          // webR channel comms, other origins — untouched
   }
-  // else: pass through (webR channel comms, other origins) — untouched.
 });
 
-// Stale-while-revalidate for same-origin assets (incl. R/*.R, the statistical
-// source of truth): serve the cached copy immediately if present, while a
+// Network-first, for R/*.R only. The cached copy exists purely so the app still
+// works offline; whenever the network answers, its copy wins and replaces the
+// cache. A few tens of KB of R next to the ~6MB runtime makes the bandwidth
+// cost of never trusting the cache here negligible.
+//
+// `cache: "reload"` is load-bearing, not belt-and-braces: the browser's HTTP
+// cache sits in FRONT of this fetch, and a response with no Cache-Control gets
+// heuristic freshness (~10% of its age), so skipping only the service-worker
+// cache still serves superseded statistics. Verified in a browser — a
+// just-edited R file kept reading stale until the request bypassed both.
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(new Request(req, { cache: "reload" }));
+    if (res && res.ok) {
+      cache.put(req, res.clone()).catch(() => {});     // best-effort; quota errors non-fatal
+      return res;
+    }
+    // A 404/500 means a broken deploy, not a reason to boot with no statistics:
+    // prefer the last good copy, and never cache the error body.
+    const hit = await cache.match(req);
+    return hit || res;
+  } catch (_) {
+    const hit = await cache.match(req);                // offline: cached R is all we have
+    return hit || Response.error();
+  }
+}
+
+// Stale-while-revalidate for same-origin assets other than R sources (which go
+// network-first above): serve the cached copy immediately if present, while a
 // background fetch refreshes the cache for next time — so a redeployed asset
 // self-heals within one round trip, no CACHE bump required. On a cache miss we
 // await the network. Only res.ok responses are cached (same-origin is always a

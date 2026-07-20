@@ -1,6 +1,6 @@
 # 10 — The service worker can serve one page-load of stale statistical code
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, while browser-verifying the forest-plot proportion fix
 
@@ -60,3 +60,27 @@ a reasonable belt alongside it.
   the network is reachable. The existing e2e cannot cover this (it runs without a
   registered service worker), so this likely wants a focused test against the handler's
   routing logic rather than a browser test.
+
+## Comments
+
+Fixed with route 1, on `main`. `web/sw.js` gained a pure `routeFor(req)` that returns one
+of `r-source` / `same-origin` / `webr-static` / `pass`, and the fetch handler now only
+dispatches on its answer; `R/*.R` goes to a new `networkFirst()` whose cached copy is an
+offline fallback only.
+
+Route 1 alone was **not sufficient**, which only showed up in a browser. Bypassing the
+service-worker cache still left the browser's **HTTP cache** in front of the SW's own
+`fetch()`, and a response with no `Cache-Control` (the dev server sends only
+`Last-Modified`) gets heuristic freshness of ~10% of its age — so a just-edited R file
+kept reading stale through the new network-first path. The fetch is therefore issued as
+`new Request(req, { cache: "reload" })`, which bypasses both caches. Verified end to end:
+edit an R source, load once, and the first load sees the change.
+
+Route 2 (a CI check tying `R/` diffs to a `CACHE` bump) was **not** added — with R sources
+network-first the bump is no longer correctness-relevant for statistics, so the check would
+enforce a convention that no longer guards anything.
+
+Tests: `web/sw.test.mjs` runs the real `sw.js` in a `node:vm` sandbox with cache/fetch
+doubles (not a copy of its logic) and pins the routing table, the network-wins rule, the
+HTTP-cache bypass, the offline fallback, and that a 404 neither answers nor poisons the
+cache. Wired into `test:unit`.
