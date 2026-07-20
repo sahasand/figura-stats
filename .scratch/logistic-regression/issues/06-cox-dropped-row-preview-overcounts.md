@@ -1,6 +1,6 @@
 # 06 — Cox's "rows will be excluded" preview over-counts whitespace-only cells
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, during the whole-branch review of `fix/cox-shell-issues` (deferred: out of scope for that branch)
 
@@ -66,3 +66,12 @@ should be reconciled together).
 `web/guided/cox/analyze-form.test.mjs` — a table with a whitespace-only cell in a mapped
 column must count 0 dropped rows, while `""` and `null` count 1 each. Mirror the existing
 logistic unit test for `countDroppedRows`.
+
+## Comments
+
+Fixed on `fix/cox-forest-and-preview`. The inline count in
+`web/guided/cox/analyze-form.js` is now an exported pure `countDroppedRows(table,
+columns)` that treats only an absent cell or the exact empty string as missing —
+the same rule as `R/cox.R` — with a unit test mirroring the logistic one. The two
+forms still hold their own copy of the helper by design; reconciling them is
+issue 07.

@@ -2,7 +2,8 @@
 // The DOM wiring itself is exercised by the Playwright e2e test; the real
 // decisions live in these pure helpers, which keep the user's event value and
 // reference-level choices alive across a column-picker rebuild.
-import { retainedSelection, reconcileRefLevels } from "./analyze-form.js";
+import { retainedSelection, reconcileRefLevels, countDroppedRows }
+  from "./analyze-form.js";
 import assert from "node:assert";
 
 // --- retainedSelection: a remembered dropdown value across an options rebuild -
@@ -66,4 +67,22 @@ import assert from "node:assert";
   assert.deepEqual(memo, { arm: "Treated" }, "reconciling does not mutate the memo");
 }
 
-console.log("ok - retainedSelection + reconcileRefLevels");
+// --- countDroppedRows: the preview must match R's complete-case filter --------
+{
+  const table = { rows: [
+    { a: "1", b: "x" },
+    { a: "", b: "y" },        // blank a
+    { a: "3", b: null },      // null b
+    { a: "4", b: "   " },     // whitespace-only b
+    { a: "5", b: "z" },
+  ] };
+  // R/cox.R drops a row only for an absent cell or the exact empty string; a
+  // whitespace-only cell survives there as a real categorical level, so counting
+  // it here would tell the user rows are excluded that in fact are not.
+  assert.equal(countDroppedRows(table, ["a", "b"]), 2);
+  assert.equal(countDroppedRows(table, ["b"]), 1, "whitespace-only is not missing");
+  assert.equal(countDroppedRows(table, ["a"]), 1, "only the mapped columns count");
+  assert.equal(countDroppedRows(table, []), 0);
+}
+
+console.log("ok - retainedSelection + reconcileRefLevels + countDroppedRows");
