@@ -47,6 +47,19 @@ const STATIC_EXT = /\.(wasm|data|mjs|tgz|so)$/i;
 // whole session. They get network-first below, which makes the CACHE bump a
 // convenience again rather than the only thing standing between a deploy and
 // wrong output. Matched on the path so a query string can't smuggle one past.
+//
+// THIRD-CACHE WARNING. Two caches are handled here — the service-worker cache
+// (network-first below) and the browser's HTTP cache (`cache: "reload"` on that
+// fetch). A CDN in front of the origin is a third one, and neither guard
+// reaches it: `cache: "reload"` instructs the *browser*, not an edge. Today
+// GitHub Pages serves this directly, so there is no third cache. If the site
+// ever moves behind a CDN (e.g. a custom domain proxied through Cloudflare),
+// add an explicit bypass-cache rule for `/R/*` at the edge BEFORE cutting the
+// domain over. Cloudflare caches by file extension by default and `.R` is not
+// on that list, so it works accidentally — until someone enables "Cache
+// Everything" or a broad cache rule, at which point stale statistics come back
+// wearing a new hat. Make it a rule, not an accident. See
+// `.scratch/logistic-regression/issues/10-sw-serves-stale-r-sources.md`.
 const R_SOURCE = /\/R\/[^/]+\.R$/i;
 
 // The single routing decision, as a pure function of the request — the fetch
