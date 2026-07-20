@@ -154,7 +154,13 @@ export function renderLogisticAnalyzeForm(container, onSubmit, doc = globalThis.
           eventSel.disabled = !outcomeCol;
           syncReady();
         };
+        // Both areas are rebuilt on every picker change, so a value the user
+        // typed or picked is carried over whenever that covariate is still in.
+        const chosenRefs = {}, chosenIncrs = {};
         const renderRefs = () => {
+          refWrap.querySelectorAll("select[data-cov]").forEach((s) => {
+            chosenRefs[s.dataset.cov] = s.value;
+          });
           refWrap.innerHTML = "";
           if (!roles || !roles.covariates) return;
           for (const c of roles.covariates) {
@@ -169,11 +175,15 @@ export function renderLogisticAnalyzeForm(container, onSubmit, doc = globalThis.
               o.value = v; o.textContent = v;
               s.appendChild(o);
             }
-            s.value = mostFrequent(table, c);
+            s.value = chosenRefs[c] ?? mostFrequent(table, c);
+            if (!s.value) s.value = mostFrequent(table, c);   // stale level, no longer present
             l.appendChild(s); refWrap.appendChild(l);
           }
         };
         const renderIncrements = () => {
+          incrWrap.querySelectorAll("input[data-cov]").forEach((i) => {
+            chosenIncrs[i.dataset.cov] = i.value;
+          });
           incrWrap.innerHTML = "";
           if (!roles || !roles.covariates) return;
           for (const c of roles.covariates) {
@@ -181,7 +191,8 @@ export function renderLogisticAnalyzeForm(container, onSubmit, doc = globalThis.
             const l = doc.createElement("label");
             l.textContent = `Report ${c} per (increment) `;
             const inp = doc.createElement("input");
-            inp.type = "number"; inp.min = "0"; inp.step = "any"; inp.value = "1";
+            inp.type = "number"; inp.min = "0"; inp.step = "any";
+            inp.value = chosenIncrs[c] ?? "1";
             inp.id = "logistic-incr-" + c; inp.dataset.cov = c;
             l.htmlFor = inp.id;
             l.appendChild(inp); incrWrap.appendChild(l);
