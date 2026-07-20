@@ -39,7 +39,7 @@ async function boot() {
   await webR.installPackages(["ggplot2", "svglite", "jsonlite"], { quiet: true });
   // Load the R sources that define render_figure() and the fig_* functions.
   // Missing files 404, and the `resp.ok` guard skips them.
-  for (const f of ["dispatch.R", "script.R", "summarize.R", "km.R", "themes.R", "explore.R", "groupcompare.R", "cox.R"]) {
+  for (const f of ["dispatch.R", "script.R", "summarize.R", "km.R", "themes.R", "explore.R", "groupcompare.R", "cox.R", "logistic.R"]) {
     const resp = await fetch(`R/${f}`);
     if (resp.ok) await webR.evalRVoid(await resp.text());
   }

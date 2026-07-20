@@ -10,6 +10,7 @@ render_figure <- function(json_string) {
       explore = fig_explore(spec),
       groupcompare = fig_groupcompare(spec),
       cox     = fig_cox(spec),
+      logistic = fig_logistic(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
     res <- list(ok = TRUE, svg = out$svg, text = out$text)
