@@ -1,6 +1,8 @@
 /* ---------------------------------------------------------------------------
-   Workbench chrome — a calm three-pane analysis workspace:
-   slim toolbar, elevated panes, monospace console, status bar.
+   Workbench chrome — a calm three-pane analysis workspace on warm paper:
+   slim toolbar, layered cream surfaces, graphite ink, a docked console strip.
+   The rendered artifact (Table 1 / Table 3) is typeset like a journal galley:
+   serif row labels, monospace numerals, three rules, no zebra.
    Fonts are SELF-HOSTED (web/fonts/): this site makes no network calls
    beyond webR — never link a font CDN here.
 --------------------------------------------------------------------------- */
@@ -35,32 +37,85 @@
   src: url("fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
   font-weight: 500; font-style: normal; font-display: swap;
 }
+/* Source Serif 4 sets the *artifact*, never the chrome: table row labels,
+   captions, footnotes, the wordmark, teaching prose headings. */
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("fonts/source-serif-4-latin-400-normal.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("fonts/source-serif-4-latin-600-normal.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("fonts/source-serif-4-latin-400-italic.woff2") format("woff2");
+  font-weight: 400; font-style: italic; font-display: swap;
+}
 
 :root {
-  --chrome: #eef1f5;      /* page background behind the panes */
-  --panel: #ffffff;       /* pane bodies */
-  --line: #d6dde6;        /* hairline borders */
-  --line-soft: #e4e9ef;
-  --ink: #1c2732;
-  --slate: #5b6b7b;
-  --accent: #0f766e;      /* single accent: actions, active states, focus */
-  --accent-dark: #0b5d57;
-  --accent-wash: #e7f4f2; /* active-item / focus wash */
-  --console-bg: #f7f9fb;
-  --error: #b3372f;
-  --ok: #2e7d4f;
-  --warn-bg: #fdf6ec;
-  --warn-border: #e8ceA0;
-  --warn-ink: #7c5410;
-  --radius: 10px;         /* panes */
-  --radius-ctl: 7px;      /* buttons, inputs */
-  --shadow-pane: 0 1px 2px rgba(16, 24, 40, .05), 0 2px 8px rgba(16, 24, 40, .05);
-  /* Back-compat aliases (older rules referenced the RStudio-blue names). */
+  /* Surfaces — layered warm neutrals, not flat white. */
+  --chrome: #e9e4d8;        /* desk: page background behind the panes */
+  --panel: #fffdf9;         /* pane bodies, cards */
+  --panel-raised: #faf7ef;  /* inset fills: code, hover, notes, methods text */
+  --rail: #f6f3ec;          /* analyses sidebar */
+  --output-canvas: #efeae0; /* backdrop behind the rendered artifact */
+  --segment-track: #f2eee4; /* segmented-control track */
+  --sheet: #fffef9;         /* galley proof: the paper a table is set on */
+
+  /* Ink & lines. */
+  --ink: #1b1a17;
+  --ink-2: #2b2822;
+  --ink-muted: #6b675d;     /* secondary text — AA at small sizes */
+  --ink-faint: #8a857a;     /* decorative only: 3.6:1, never body copy */
+  --line: #ece7db;
+  --line-soft: #f0ebdf;
+  --border-card: #e6e0d3;
+  --sheet-border: #e6dfcf;
+
+  /* Teal accent — the existing identity, calmer and less saturated. */
+  --accent: #0d6b63;
+  --accent-dark: #0a544d;
+  --accent-wash: #e6efec;
+  --accent-tint-border: #c4dbd5;
+  --accent-on-dark: #bfe0da;
+
+  /* Signal / status. */
+  --ok: #3a7d54;
+  --error: #a33c2f;
+  --warn-bg: #f5ecdd;
+  --warn-border: #e3d1ac;
+  --warn-ink: #8a5a1a;
+  --signal-skew: #b1743a;
+
+  /* Docked terminal strip (status + log actions only — the methods text
+     itself stays on paper, because users paste it into a manuscript). */
+  --term-bg: #1a1e1c;
+  --term-line: #29302c;
+  --term-text: #c2ccc8;
+  --term-muted: #949e9a;
+  --term-ok: #79b7a3;
+
+  --radius: 11px;           /* panes */
+  --radius-card: 9px;       /* cards */
+  --radius-ctl: 8px;        /* buttons, inputs */
+  --radius-sheet: 4px;      /* the galley proof — squarer reads as paper */
+  --shadow-pane: 0 1px 2px rgba(40, 34, 20, .05), 0 2px 8px rgba(40, 34, 20, .06);
+  --shadow-sheet: 0 2px 0 #f0e9d8, 0 18px 44px -22px rgba(40, 34, 20, .4);
+  /* Back-compat aliases (older rules referenced the RStudio-blue names and
+     the pre-reskin neutral names). Keeping them means no rule silently
+     falls back to an unset variable. */
+  --slate: var(--ink-muted);
+  --console-bg: var(--panel-raised);
+  --paper: var(--panel);
   --rblue: var(--accent);
   --rblue-dark: var(--accent-dark);
   --sky: var(--accent-wash);
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
 }
 
 * { box-sizing: border-box; }
@@ -74,10 +129,11 @@ body {
   background: var(--chrome);
   display: flex;
   flex-direction: column;
+  -webkit-font-smoothing: antialiased;
 }
 
 :focus-visible {
-  outline: 2px solid var(--rblue);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -88,71 +144,79 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0 .875rem;
-  height: 42px;
+  padding: 0 1.125rem;
+  height: 54px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   flex: none;
 }
 
-.brand { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
+.brand { display: flex; align-items: center; gap: .625rem; min-width: 0; }
 
+/* The bar-chart mark sits in a teal tile — the one solid accent shape in the
+   chrome, so the wordmark itself can stay quiet serif. */
 .mark {
-  width: 14px;
-  height: 14px;
-  fill: var(--rblue);
-  align-self: center;
+  width: 24px;
+  height: 24px;
+  padding: 5px;
+  fill: #fff;
+  background: var(--accent);
+  border-radius: 7px;
   flex: none;
 }
 
 .brand h1 {
   margin: 0;
-  font-size: .875rem;
-  font-weight: 650;
-  letter-spacing: .01em;
+  font: 600 1.0625rem/1 var(--serif);
+  letter-spacing: -.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.engine {
+/* The no-egress guarantee is the product's strongest claim — it gets a
+   permanent seat in the top bar, not a footer caption. */
+.egress-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .4375rem;
   font: .6875rem var(--mono);
-  color: var(--slate);
-  border: 1px solid var(--line-soft);
+  letter-spacing: .02em;
+  color: var(--accent-dark);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-tint-border);
   border-radius: 999px;
-  padding: .0625rem .5rem;
-  align-self: center;
+  padding: .3125rem .6875rem;
+  white-space: nowrap;
 }
 
-/* Session status chip: a pill with a state dot — idle -> busy -> ready. */
+.session { display: flex; align-items: center; gap: .75rem; }
+
+/* Session status chip: a state dot — idle -> busy -> ready. */
 .chip {
   display: inline-flex;
   align-items: center;
   gap: .4375rem;
-  font: 500 .6875rem var(--sans);
-  padding: .25rem .625rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--slate);
-  background: var(--panel);
+  font: .75rem var(--mono);
+  color: var(--ink-muted);
   white-space: nowrap;
 }
 
 .chip::before {
   content: "";
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--line);
+  background: var(--border-card);
   flex: none;
 }
 
-.chip.busy  { color: var(--accent-dark); border-color: #b5d9d5; background: var(--accent-wash); }
-.chip.busy::before  { background: var(--accent); }
-.chip.ready { color: var(--ok); border-color: #bcd9c8; background: #eef7f1; }
-.chip.ready::before { background: var(--ok); }
-.chip.error { color: var(--error); border-color: #e0b9b5; background: #fbf0ef; }
-.chip.error::before { background: var(--error); }
+.chip.busy  { color: var(--accent-dark); }
+.chip.busy::before  { background: var(--accent); box-shadow: 0 0 0 3px rgba(13, 107, 99, .15); }
+.chip.ready { color: var(--ok); }
+.chip.ready::before { background: var(--ok); box-shadow: 0 0 0 3px rgba(58, 125, 84, .15); }
+.chip.error { color: var(--error); }
+.chip.error::before { background: var(--error); box-shadow: 0 0 0 3px rgba(163, 60, 47, .15); }
 
 /* ---- Pane frame --------------------------------------------------------- */
 
@@ -160,14 +224,14 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 200px minmax(300px, 1fr) minmax(0, 1.6fr);
+  grid-template-columns: 240px minmax(320px, 1fr) minmax(0, 1.6fr);
   gap: 10px;
   padding: 10px;
 }
 
 .pane {
   background: var(--panel);
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-pane);
   min-width: 0;
@@ -178,30 +242,31 @@ body {
 }
 
 .pane-title {
-  font: 600 .6875rem/1 var(--sans);
+  font: .6875rem/1 var(--mono);
   text-transform: uppercase;
-  letter-spacing: .09em;
-  color: var(--slate);
+  letter-spacing: .1em;
+  color: var(--ink-muted);
   background: none;
   border-bottom: 1px solid var(--line-soft);
-  padding: .625rem .875rem .5rem;
+  padding: .75rem 1rem .625rem;
   flex: none;
 }
 
 /* ---- Analyses sidebar --------------------------------------------------- */
 
+.nav-pane { background: var(--rail); }
+
 .nav-pane nav {
   overflow-y: auto;
-  padding: .375rem;
+  padding: .375rem .5rem;
 }
 
 .nav-group {
   margin: .625rem .375rem .25rem;
-  font-size: .6563rem;
-  font-weight: 650;
+  font: .6563rem var(--mono);
   text-transform: uppercase;
-  letter-spacing: .09em;
-  color: var(--slate);
+  letter-spacing: .1em;
+  color: var(--ink-muted);
 }
 
 .nav-group:first-child { margin-top: .25rem; }
@@ -217,57 +282,89 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: .125rem;
+  gap: .0625rem;
   width: 100%;
   min-height: 36px;
   text-align: left;
   font: inherit;
-  color: var(--ink);
+  color: var(--ink-2);
   background: none;
   border: none;
-  border-radius: var(--radius-ctl);
-  padding: .375rem .75rem;
+  border-radius: var(--radius-card);
+  padding: .625rem .6875rem;
   cursor: pointer;
 }
 
+.nav-label { font-weight: 500; }
+
 .nav-desc {
-  font-size: .75rem;
+  font-size: .6875rem;
   font-weight: 400;
-  line-height: 1.35;
-  color: var(--slate);
+  line-height: 1.4;
+  color: var(--ink-muted);
 }
 
-.nav-pane nav button:hover { background: #f1f4f8; }
+.nav-pane nav button:hover { background: var(--segment-track); }
 
+/* Active analysis is the one solid teal block in the rail — unmissable. */
 .nav-pane nav button.active {
-  background: var(--accent-wash);
-  color: var(--accent-dark);
+  background: var(--accent);
+  color: #fff;
 }
 
 .nav-pane nav button.active .nav-label { font-weight: 600; }
+.nav-pane nav button.active .nav-desc { color: var(--accent-on-dark); }
+.nav-pane nav button.active:hover { background: var(--accent-dark); }
 
-/* Keep the active description readable rather than full-strength accent. */
-.nav-pane nav button.active .nav-desc {
-  color: color-mix(in srgb, var(--accent-dark) 65%, var(--slate));
+/* The invariant card closes the rail: the architecture *is* the privacy
+   guarantee, so it is stated where it can't be mistaken for marketing. */
+.invariant-card {
+  margin: auto .875rem .875rem;
+  padding: .8125rem .875rem;
+  background: var(--panel);
+  border: 1px solid var(--border-card);
+  border-radius: 10px;
+}
+
+.invariant-card .invariant-title {
+  display: block;
+  font: .625rem var(--mono);
+  letter-spacing: .08em;
+  color: var(--accent-dark);
+  margin-bottom: .375rem;
+}
+
+.invariant-card p {
+  margin: 0;
+  font-size: .71875rem;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  text-wrap: pretty;
 }
 
 /* ---- Configuration pane (forms are generated markup; style by element) -- */
 
 #form {
   overflow-y: auto;
-  padding: .875rem 1rem 1.25rem;
+  padding: 1.125rem;
 }
 
 #form h2 {
   margin: 0 0 .25rem;
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: .01em;
+  font: 600 1.25rem/1.25 var(--serif);
+  letter-spacing: -.01em;
 }
 
 #form p {
   margin: .25rem 0 .75rem;
-  color: var(--slate);
+  color: var(--ink-muted);
+}
+
+/* The lead paragraph under an analysis title reads as prose, not UI copy. */
+#form > h2 + p {
+  font: .90625rem/1.6 var(--serif);
+  color: var(--ink-muted);
+  text-wrap: pretty;
 }
 
 /* Guided teaching prose (Understand / Try an Example) — these panels render
@@ -275,9 +372,7 @@ body {
    hierarchy, not at browser defaults. */
 #form h3 {
   margin: 1.125rem 0 .375rem;
-  font-size: .9375rem;
-  font-weight: 650;
-  letter-spacing: .005em;
+  font: 600 1rem/1.3 var(--serif);
 }
 
 #form h4 {
@@ -304,7 +399,7 @@ body {
 #form summary {
   cursor: pointer;
   font-weight: 600;
-  color: var(--slate);
+  color: var(--ink-muted);
 }
 
 #form summary:hover { color: var(--ink); }
@@ -312,34 +407,34 @@ body {
 #form figure { margin: 1rem 0; }
 
 #form figcaption {
-  font-size: .75rem;
-  color: var(--slate);
+  font: italic .78125rem/1.5 var(--serif);
+  color: var(--ink-muted);
   margin-top: .375rem;
+  text-wrap: pretty;
 }
 
 #form code {
   font: .75rem var(--mono);
-  background: var(--console-bg);
+  background: var(--panel-raised);
   border: 1px solid var(--line-soft);
-  border-radius: 2px;
+  border-radius: 3px;
   padding: 0 .25rem;
 }
 
 label {
   display: block;
-  margin: .75rem 0 .1875rem;
-  font-size: .6875rem;
-  font-weight: 600;
+  margin: .875rem 0 .1875rem;
+  font: .6875rem var(--mono);
   text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--slate);
+  letter-spacing: .08em;
+  color: var(--ink-muted);
 }
 
 input, select, textarea {
   font: .8125rem var(--sans);
   color: var(--ink);
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-ctl);
   padding: .4375rem .625rem;
   width: 12rem;
@@ -358,7 +453,7 @@ select { width: auto; min-width: 12rem; max-width: 100%; }
 
 select[multiple] { min-height: 7rem; width: 100%; }
 
-input:hover, select:hover, textarea:hover { border-color: var(--slate); }
+input:hover, select:hover, textarea:hover { border-color: var(--ink-faint); }
 
 input:focus, select:focus, textarea:focus {
   outline: none;
@@ -370,8 +465,8 @@ input[type="file"] {
   width: 100%;
   padding: .5rem;
   font-size: .75rem;
-  color: var(--slate);
-  background: var(--console-bg);
+  color: var(--ink-muted);
+  background: var(--panel-raised);
   border-style: dashed;
   border-radius: var(--radius-ctl);
 }
@@ -380,7 +475,7 @@ input[type="file"]::file-selector-button {
   font: 600 .75rem var(--sans);
   color: var(--ink);
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-ctl);
   padding: .3125rem .75rem;
   margin-right: .625rem;
@@ -391,17 +486,17 @@ input[type="file"]::file-selector-button {
   font: 600 .8125rem var(--sans);
   color: var(--ink);
   background: var(--panel);
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-ctl);
-  padding: .4375rem 1rem;
+  padding: .5rem 1rem;
   margin: .875rem .375rem 0 0;
   cursor: pointer;
 }
 
 #form button:hover {
-  border-color: var(--slate);
-  background: var(--console-bg);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, .06);
+  border-color: var(--ink-faint);
+  background: var(--panel-raised);
+  box-shadow: 0 1px 2px rgba(40, 34, 20, .08);
 }
 
 /* Primary actions — one per stage: #render on classic forms, #run-demo on
@@ -409,7 +504,7 @@ input[type="file"]::file-selector-button {
 #form #render, #form #run-demo {
   color: #fff;
   background: var(--accent);
-  border-color: var(--accent-dark);
+  border-color: var(--accent);
 }
 
 #form #render { display: block; margin-top: 1.125rem; }
@@ -417,51 +512,53 @@ input[type="file"]::file-selector-button {
 #form #render:hover, #form #run-demo:hover {
   background: var(--accent-dark);
   border-color: var(--accent-dark);
-  box-shadow: 0 1px 3px rgba(11, 93, 87, .3);
+  box-shadow: 0 1px 3px rgba(10, 84, 77, .25);
 }
 
 #form button:disabled {
-  color: var(--slate);
-  background: var(--chrome);
+  color: var(--ink-faint);
+  background: var(--panel-raised);
   border-color: var(--line);
   box-shadow: none;
   cursor: not-allowed;
 }
 
-/* ---- Guided stage tabs (Kaplan–Meier) ----------------------------------- */
+/* ---- Guided stage tabs — a segmented control ---------------------------- */
 
 /* Scoped under #form to outrank the generic `#form button` rules above. */
 .stage-tabs {
   display: flex;
-  gap: .25rem;
-  margin: 0 0 .75rem;
-  border-bottom: 1px solid var(--line-soft);
+  gap: .1875rem;
+  margin: .875rem 0 1rem;
+  padding: .1875rem;
+  background: var(--segment-track);
+  border-radius: var(--radius-card);
 }
 
 #form .stage-tabs [role="tab"] {
-  font: 600 .8125rem var(--sans);
-  color: var(--slate);
+  flex: 1;
+  font: 500 .78125rem var(--sans);
+  color: var(--ink-muted);
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
-  padding: .5rem .875rem;
-  margin: 0 0 -1px;
+  border-radius: 7px;
+  padding: .4375rem .625rem;
+  margin: 0;
   box-shadow: none;
   cursor: pointer;
 }
 
 #form .stage-tabs [role="tab"]:hover {
   color: var(--ink);
-  background: #f1f4f8;
-  border-color: transparent;
+  background: rgba(255, 253, 249, .6);
   box-shadow: none;
 }
 
 #form .stage-tabs [role="tab"][aria-selected="true"] {
-  color: var(--accent-dark);
-  border-bottom-color: var(--accent);
-  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(40, 34, 20, .08);
 }
 
 /* Mandatory synthetic-data banner on the Try an Example stage — one per
@@ -478,11 +575,11 @@ input[type="file"]::file-selector-button {
 }
 .demo-actions { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; }
 .callout {
-  color: var(--slate);
+  color: var(--ink-muted);
   font-size: .8rem;
   margin: .25rem 0 .75rem;
   padding-left: .75rem;
-  border-left: 2px solid var(--line-soft);
+  border-left: 2px solid var(--border-card);
 }
 
 /* Experiment controls are sentence-case checkbox/select rows, not the
@@ -491,6 +588,7 @@ input[type="file"]::file-selector-button {
   display: flex;
   align-items: center;
   gap: .5rem;
+  font-family: var(--sans);
   text-transform: none;
   letter-spacing: normal;
   font-size: .8125rem;
@@ -522,19 +620,30 @@ input[type="file"]::file-selector-button {
 
 /* Empty states read as instructions, not decoration. */
 .empty {
-  color: var(--slate);
+  color: var(--ink-muted);
   padding: .25rem 0;
 }
 
 .empty p { margin: 0 0 .375rem; }
 
-/* The figure pane's empty state sits centered in the viewer, quiet. */
+/* The figure pane's empty state sits centered in the viewer, quiet — with a
+   set serif sigma standing in for the artifact that will land there. */
 #preview .empty {
   height: 100%;
   display: grid;
   place-content: center;
   text-align: center;
   font: .8125rem var(--sans);
+  color: var(--ink-muted);
+}
+
+#preview .empty::before {
+  content: "Σ";
+  display: block;
+  font: 400 2.25rem/1 var(--serif);
+  color: var(--ink-faint);
+  opacity: .5;
+  margin-bottom: .625rem;
 }
 
 #preview .empty p { margin: 0; }
@@ -545,7 +654,7 @@ input[type="file"]::file-selector-button {
 #preview.busy::after {
   content: "Updating…";
   position: absolute; top: 0.5rem; right: 0.75rem;
-  font-size: 0.8rem; color: var(--accent);
+  font: .75rem var(--mono); color: var(--accent);
 }
 
 /* ---- Output pane: Figure viewer + Console ------------------------------- */
@@ -561,7 +670,7 @@ input[type="file"]::file-selector-button {
 
 .output-figure, .output-console {
   background: var(--panel);
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-pane);
   display: flex;
@@ -573,13 +682,16 @@ input[type="file"]::file-selector-button {
 .output-figure { flex: 1 1 62%; }
 .output-console { flex: 1 1 38%; }
 
+/* The output area is a canvas the artifact sits *on*, so a table reads as a
+   sheet of paper and a figure reads as a mounted plate. */
 #preview {
   flex: 1;
   overflow: auto;
-  padding: .875rem 1rem;
+  padding: 1.25rem;
+  background: var(--output-canvas);
   /* Plain-text states (progress pings, "Rendering…") read as session output. */
   font: .75rem var(--mono);
-  color: var(--slate);
+  color: var(--ink-muted);
 }
 
 #preview svg {
@@ -591,37 +703,122 @@ input[type="file"]::file-selector-button {
   max-height: 100%;
   width: auto;
   height: auto;
+  /* ggplot's theme_minimal draws on a transparent background and rules its
+     grid in grey92 — on the warm canvas that would vanish, so every plot is
+     mounted on a panel card. */
+  background: var(--panel);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  padding: .625rem;
 }
 
-/* The Summary statistics table arrives as HTML in the figure slot;
-   give it journal rules: top/bottom borders and a header rule only. */
+/* ---- The galley proof: rendered tables ---------------------------------- */
+
+/* R wraps every table analysis (Table 1, Cox/Logistic Table 3) in
+   .summary-output > .table-scroll — that wrapper is the sheet. */
+.summary-output { display: flex; flex-direction: column; gap: 1rem; }
+.summary-output .table-scroll {
+  overflow-x: auto;   /* narrow viewports scroll the table, not the page */
+  background: var(--sheet);
+  border: 1px solid var(--sheet-border);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-sheet);
+  padding: 1.75rem 2rem 1.5rem;
+}
+
+/* Journal three-rule style — rules ride on the cells, not the table, so the
+   paper margin stays outside them. No vertical rules, no zebra. */
 #preview table {
   font: .8125rem var(--sans);
   color: var(--ink);
   border-collapse: collapse;
-  border-top: 2px solid var(--ink);
-  border-bottom: 2px solid var(--ink);
-  margin: .25rem 0;
+  margin: 0;
+  width: 100%;
 }
 
 #preview th, #preview td {
-  padding: .3125rem .75rem;
+  padding: .375rem .875rem;
   border: none;
   text-align: left;
+  vertical-align: top;
 }
 
-#preview thead th, #preview tr:first-child th { border-bottom: 1px solid var(--ink); }
+#preview th:first-child, #preview td:first-child { padding-left: 0; }
+#preview th:last-child, #preview td:last-child { padding-right: 0; }
 
-#preview tbody tr:hover td { background: var(--console-bg); }
+/* Header block: 1.5px rule above, 1px rule below; mono small caps. */
+#preview thead th, #preview tr:first-child th {
+  font: 600 .6875rem var(--mono);
+  letter-spacing: .02em;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding-top: .5rem;
+  padding-bottom: .5rem;
+}
 
+/* Closing rule under the last body row. */
+#preview tbody tr:last-child td { border-bottom: 1.5px solid var(--ink); }
+
+/* Row labels are set in serif; every value column is monospace and figures
+   align on the decimal. */
+#preview table.table1 td:first-child { font: .8125rem/1.45 var(--serif); }
+
+#preview table.table1 td:not(:first-child),
+#preview table.table1 th:not(:first-child) {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: .71875rem;
+  font-variant-numeric: tabular-nums;
+  /* An estimate and its CI are one value — never break "4.5 (2.48–7.15)"
+     across lines. The sheet scrolls horizontally instead. */
+  white-space: nowrap;
+}
+
+#preview tbody tr:hover td { background: rgba(236, 231, 219, .45); }
+
+table.table1 .why {
+  font: italic .6875rem var(--serif);
+  color: var(--ink-muted);
+  margin-top: .125rem;
+}
+table.table1 .lvl { padding-left: 1.25rem; display: inline-block; }
+
+/* ---- Distribution-plot cards (Summary) ---------------------------------- */
+
+figure.dist-plot {
+  margin: 0;
+  background: var(--panel);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  padding: .75rem;
+}
+/* The card is the frame here — don't double-mount the SVG inside it. */
+figure.dist-plot svg {
+  max-width: 100%; height: auto;   /* KM containment pattern */
+  background: none; border: none; padding: 0; border-radius: 0;
+}
+.plot-legend { font: .6875rem var(--mono); color: var(--ink-muted); margin-top: .35rem; }
+.plot-legend .mean-key { color: #2b6cb0; }
+.plot-legend .median-key { color: var(--signal-skew); }
+
+figcaption.synthetic {
+  margin-top: .6rem; background: var(--warn-bg); border: 1px solid var(--warn-border);
+  color: var(--warn-ink); border-radius: var(--radius-ctl); padding: .4rem .75rem;
+  font-size: .75rem;
+}
+
+/* ---- Methods / results text --------------------------------------------
+   Deliberately NOT a dark terminal: this text is the sentence the user pastes
+   into a manuscript, so it stays on paper and reads as prose. The terminal
+   treatment lives on the console header strip instead. */
 #stats {
   flex: 1;
   overflow: auto;
   margin: 0;
-  padding: .75rem 1rem;
-  font: .75rem/1.65 var(--mono);
+  padding: 1rem 1.125rem;
+  font: .75rem/1.7 var(--mono);
   color: var(--ink);
-  background: var(--console-bg);
+  background: var(--panel-raised);
   white-space: pre-wrap;
   border-left: 2px solid var(--accent);
 }
@@ -630,29 +827,102 @@ input[type="file"]::file-selector-button {
 
 #stats.error { color: var(--error); border-left-color: var(--error); }
 
-/* ---- Status bar --------------------------------------------------------- */
+/* ---- Export toolbars ---------------------------------------------------- */
 
-.statusbar {
-  flex: none;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: .3125rem .875rem;
-  font: .6875rem var(--mono);
-  color: var(--slate);
+/* When a pane title carries a toolbar, the divider belongs to the whole head —
+   left on the title it renders as a stray underline the width of the word. */
+.pane-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; flex-wrap: wrap;
+  padding-right: .875rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pane-head .pane-title { border-bottom: none; }
+.export-toolbar { display: flex; align-items: center; gap: .4rem; }
+.export-toolbar .export-hint {
+  font: .6563rem var(--mono); color: var(--ink-muted);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.export-toolbar button, .export-toolbar select {
+  font: inherit; font-size: .75rem; font-family: var(--sans);
+  color: var(--ink); background: var(--panel);
+  border: 1px solid var(--border-card); border-radius: 7px;
+  padding: .1875rem .5625rem; cursor: pointer;
+}
+.export-toolbar button:hover:not(:disabled),
+.export-toolbar select:hover { border-color: var(--ink-faint); }
+.export-toolbar button:disabled { color: #a9a396; border-color: var(--line); cursor: default; }
+.export-feedback { font-size: .74rem; color: var(--ink-muted); }
+
+/* The console header is the one dark surface: a status strip that says "a
+   real R session ran this", without darkening the text users copy. */
+.output-console .pane-head {
+  background: var(--term-bg);
+  border-bottom-color: var(--term-line);
+}
+.output-console .pane-title {
+  color: var(--term-muted);
+  border-bottom: none;
+}
+.output-console .export-toolbar button {
+  color: var(--term-text);
+  background: transparent;
+  border-color: var(--term-line);
+}
+.output-console .export-toolbar button:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--term-ok);
+}
+.output-console .export-toolbar button:disabled {
+  color: #5f6b67;
+  border-color: var(--term-line);
+}
+.output-console .export-toolbar #export-r:not(:disabled) { color: var(--term-ok); }
+.output-console .export-feedback { color: var(--term-ok); }
+
+#export-panels {
+  display: flex; align-items: center; gap: .4rem; padding: .3rem 1rem;
+  font: .6875rem var(--mono); color: var(--ink-muted);
+  background: var(--panel); border-bottom: 1px solid var(--line-soft);
+}
+/* The id selector above outranks the UA [hidden] rule — restore it. */
+#export-panels[hidden] { display: none; }
+#export-panels button {
+  font: .6875rem var(--sans); color: var(--ink); background: var(--panel);
+  border: 1px solid var(--border-card); border-radius: 6px;
+  padding: .0625rem .5rem; cursor: pointer;
+}
+
+/* ---- Variable checklist + CSV help -------------------------------------- */
+
+.var-list {
+  border: 1px solid var(--border-card); border-radius: var(--radius-ctl);
   background: var(--panel);
-  border-top: 1px solid var(--line);
+  padding: .25rem; max-width: 28rem;
 }
+.var-list .var-row {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .45rem .6rem; border-radius: 6px; min-height: 28px;
+}
+.var-list .var-row:hover { background: var(--panel-raised); }
+.var-list input[type="checkbox"] { width: auto; accent-color: var(--accent); margin: 0; }
+.var-list .var-name { font: .8125rem var(--mono); }
+.var-list .var-note {
+  font: .6563rem var(--mono); color: var(--ink-muted); background: var(--panel-raised);
+  border: 1px solid var(--line); border-radius: 5px; padding: .05rem .4rem;
+}
+.var-list .var-note.flag {
+  color: var(--warn-ink); background: var(--warn-bg); border-color: var(--warn-border);
+}
+@media (pointer: coarse) { .var-list .var-row { min-height: 44px; } }  /* touch targets */
 
-.dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ok);
-  margin-right: .4375rem;
-  vertical-align: 1px;
+.csv-help {
+  border: 1px solid var(--line); border-radius: var(--radius-ctl);
+  background: var(--panel-raised);
+  padding: .5rem .75rem; color: var(--ink-muted);
 }
+.csv-help summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.csv-help ul { margin: .5rem 0 0; padding-left: 1.25rem; line-height: 1.6; }
 
 /* ---- Responsive --------------------------------------------------------- */
 
@@ -666,18 +936,26 @@ input[type="file"]::file-selector-button {
     gap: .25rem;
     align-items: center;
   }
-  .nav-pane nav button { width: auto; min-height: 44px; border: 1px solid var(--line); }
+  .nav-pane nav button { width: auto; min-height: 44px; border: 1px solid var(--border-card); }
   .nav-pane nav button.active { border-color: var(--accent); }
   .nav-desc { display: none; }
   .nav-group { width: 100%; margin: .375rem .25rem .125rem; }
+  .invariant-card { margin: .5rem .875rem .875rem; }
   #preview { min-height: 10rem; }
   #stats { min-height: 6rem; }
-  .statusbar { flex-direction: column; gap: .125rem; }
+  .summary-output .table-scroll { padding: 1rem 1.125rem; }
+  .toolbar { height: auto; padding: .5rem 1rem; flex-wrap: wrap; gap: .5rem; }
+}
+
+/* The top-bar pill is the guarantee's primary home, but on very narrow
+   screens the status chip matters more — drop the pill, keep the rail card. */
+@media (max-width: 620px) {
+  .egress-pill { display: none; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .nav-pane nav button, #form button, input, select, textarea, .chip,
-  input[type="file"]::file-selector-button {
+  .export-toolbar button, input[type="file"]::file-selector-button {
     transition: background-color .15s ease-out, border-color .15s ease-out,
                 color .15s ease-out, box-shadow .15s ease-out;
   }
@@ -699,73 +977,4 @@ input[type="file"]::file-selector-button {
     from { opacity: 0; transform: translateY(3px); }
     to   { opacity: 1; transform: none; }
   }
-}
-
-/* ---- Guided summary (Table 1): results composite + variable checklist ----
-   Visual reference: ~/.gstack/projects/my-stats/designs/summary-table1-results-20260715/ */
-.summary-output { display: flex; flex-direction: column; gap: 1rem; }
-.summary-output .table-scroll { overflow-x: auto; }  /* narrow viewports scroll the table, not the page */
-#preview table.table1 td:not(:first-child),
-#preview table.table1 th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
-table.table1 .why { font-size: .6875rem; color: var(--slate); margin-top: .125rem; }
-table.table1 .lvl { padding-left: 1.25rem; display: inline-block; }
-figure.dist-plot { margin: 0; }
-figure.dist-plot svg { max-width: 100%; height: auto; }  /* KM containment pattern */
-.plot-legend { font-size: .6875rem; color: var(--slate); margin-top: .35rem; }
-.plot-legend .mean-key { color: #2b6cb0; }
-.plot-legend .median-key { color: #c05621; }
-figcaption.synthetic {
-  margin-top: .6rem; background: var(--warn-bg); border: 1px solid var(--warn-border);
-  color: var(--warn-ink); border-radius: var(--radius-ctl); padding: .4rem .75rem;
-  font-size: .75rem;
-}
-.var-list {
-  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
-  padding: .25rem; max-width: 28rem;
-}
-.var-list .var-row {
-  display: flex; align-items: center; gap: .6rem;
-  padding: .45rem .6rem; border-radius: 5px; min-height: 28px;
-}
-.var-list .var-row:hover { background: var(--console-bg); }
-.var-list input[type="checkbox"] { width: auto; accent-color: var(--accent); margin: 0; }
-.var-list .var-name { font: .8125rem var(--mono); }
-.var-list .var-note {
-  font-size: .6875rem; color: var(--slate); background: var(--console-bg);
-  border-radius: 4px; padding: .05rem .4rem;
-}
-.var-list .var-note.flag {
-  color: var(--warn-ink); background: var(--warn-bg); border: 1px solid var(--warn-border);
-}
-@media (pointer: coarse) { .var-list .var-row { min-height: 44px; } }  /* touch targets */
-.csv-help {
-  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
-  padding: .5rem .75rem; color: var(--slate);
-}
-.csv-help summary { cursor: pointer; font-weight: 600; color: var(--ink); }
-.csv-help ul { margin: .5rem 0 0; padding-left: 1.25rem; line-height: 1.6; }
-
-/* Journal-export toolbars: pane titles gain a right-aligned control strip. */
-.pane-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
-.export-toolbar { display: flex; align-items: center; gap: .4rem; }
-.export-toolbar .export-hint {
-  font-size: .68rem; color: var(--slate); text-transform: uppercase; letter-spacing: .05em;
-}
-.export-toolbar button, .export-toolbar select {
-  font: inherit; font-size: .78rem; color: var(--ink); background: var(--paper, #fff);
-  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
-  padding: .15rem .55rem; cursor: pointer;
-}
-.export-toolbar button:disabled { opacity: .45; cursor: default; }
-.export-feedback { font-size: .74rem; color: var(--slate); }
-#export-panels {
-  display: flex; align-items: center; gap: .4rem; padding: .3rem 0;
-  font-size: .74rem; color: var(--slate);
-}
-/* The id selector above outranks the UA [hidden] rule — restore it. */
-#export-panels[hidden] { display: none; }
-#export-panels button {
-  font: inherit; font-size: .7rem; color: var(--ink); background: var(--paper, #fff);
-  border: 1px solid var(--line-soft); border-radius: var(--radius-ctl);
-  padding: .05rem .45rem; cursor: pointer;
 }

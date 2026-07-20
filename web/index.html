@@ -16,9 +16,9 @@
         <rect x="11" y="1" width="3" height="14" />
       </svg>
       <h1>Figura</h1>
-      <span class="engine">webR</span>
     </div>
     <div class="session">
+      <span class="egress-pill" title="There is no backend. R runs in this browser tab via WebAssembly — your data is never uploaded.">◆ NO DATA EGRESS</span>
       <span id="rstatus" class="chip idle" role="status">R: idle</span>
     </div>
   </header>
@@ -54,6 +54,10 @@
           <span class="nav-desc">Build a ggplot2 figure interactively</span>
         </button>
       </nav>
+      <div class="invariant-card">
+        <span class="invariant-title">◆ ARCHITECTURAL INVARIANT</span>
+        <p>There is no backend that <em>could</em> receive your data. R runs in this tab via webR.</p>
+      </div>
     </aside>
 
     <section class="pane config-pane" aria-label="Configuration">
@@ -104,11 +108,6 @@
       </div>
     </section>
   </div>
-
-  <footer class="statusbar">
-    <span><span class="dot" aria-hidden="true"></span>Local session — data never leaves this browser</span>
-    <span>R packages run via webR (WebAssembly)</span>
-  </footer>
 
   <script type="module" src="app.js"></script>
 </body>

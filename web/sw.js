@@ -7,7 +7,7 @@
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
-const CACHE = "figura-v6";
+const CACHE = "figura-v7";
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath
@@ -26,6 +26,10 @@ const PRECACHE = [
   "fonts/ibm-plex-sans-latin-400-normal.woff2",
   "fonts/ibm-plex-sans-latin-600-normal.woff2",
   "fonts/ibm-plex-mono-latin-400-normal.woff2",
+  // Source Serif 4 sets the rendered artifact (table labels, captions, the
+  // wordmark) — a late-arriving serif reflows the galley proof, so precache it.
+  "fonts/source-serif-4-latin-400-normal.woff2",
+  "fonts/source-serif-4-latin-600-normal.woff2",
 ];
 
 // webR origins whose STATIC runtime/package assets we cache. Only these exact
