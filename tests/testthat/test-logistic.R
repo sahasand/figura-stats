@@ -25,7 +25,7 @@ test_that("fig_logistic returns svg table, text, and code", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
   expect_match(out$svg, "<table", fixed = TRUE)
   expect_true(nzchar(out$text))
-  expect_true(!is.null(out$code))
+  expect_true(nzchar(out$code))
 })
 
 test_that("both unadjusted and adjusted ORs are reported", {
@@ -235,6 +235,69 @@ test_that(".logistic_fit_one captures the separation warning rather than leaking
 test_that("influential observations (Cook's distance) are flagged when present", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
   expect_match(out$text, "flagged as influential (Cook's distance > 4/n)", fixed = TRUE)
+})
+
+test_that("logistic code parses as R and mentions glm(binomial)", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  expect_silent(parse(text = out$code))
+  expect_match(out$code, "glm(", fixed = TRUE)
+  expect_match(out$code, "binomial", fixed = TRUE)
+})
+
+test_that("demo-shape spec embeds data (no read.csv) in the script", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))   # no source_filename -> embedded
+  expect_match(out$code, "data.frame", fixed = TRUE)
+  expect_false(grepl("read.csv", out$code, fixed = TRUE))
+})
+
+test_that("upload-shape spec reads the user's real column names", {
+  spec <- sc_logit(mk_logit_rows())
+  spec$options$source_filename <- "mydata.csv"
+  spec$options$source_roles <- list(outcome = "outcome",
+    covariates = as.list(c("arm", "age")), event = "Event")
+  out <- fig_logistic(spec)
+  expect_match(out$code, "read.csv", fixed = TRUE)
+  expect_match(out$code, "mydata.csv", fixed = TRUE)
+})
+
+# The three numbers of an OR cell "1.23 (0.45–2.34, p=0.010)".
+tsv_cell_nums <- function(cell) {
+  m <- regmatches(cell, regexec("^([0-9.]+) \\(([0-9.]+)–([0-9.]+),", cell))[[1]]
+  expect_length(m, 4)
+  as.numeric(m[-1])
+}
+
+test_that("the generated script runs and reproduces the app's odds ratios", {
+  # Both awkward cases at once: a non-default reference level and a non-1
+  # increment. If the script's prep pipeline diverges from .logistic_prep in
+  # either content or ORDER, these numbers stop matching.
+  spec <- sc_logit(mk_logit_rows(), ref_levels = list(arm = "Treated"),
+                   increments = list(age = 10))
+  out <- fig_logistic(spec)
+  env <- new.env(parent = globalenv())
+  expect_silent(eval(parse(text = out$code), env))
+
+  adj <- exp(cbind(stats::coef(env$fit), stats::confint.default(env$fit)))
+  expect_equal(sprintf("%.2f", adj["armControl", ]),
+               sprintf("%.2f", tsv_cell_nums(tsv_adj_cell(out$text, "Control"))))
+  expect_equal(sprintf("%.2f", adj["age", ]),
+               sprintf("%.2f", tsv_cell_nums(tsv_adj_cell(out$text, "age \\(per 10 units\\)"))))
+
+  # m_uni holds the LAST univariable model the script fitted (age).
+  uni <- exp(cbind(stats::coef(env$m_uni), stats::confint.default(env$m_uni)))
+  expect_equal(sprintf("%.2f", uni["age", ]),
+               sprintf("%.2f", tsv_cell_nums(tsv_unadj_cell(out$text, "age \\(per 10 units\\)"))))
+})
+
+test_that("the script runs for a single non-syntactic covariate", {
+  rows <- lapply(mk_logit_rows(), function(r)
+    setNames(list(r$outcome, r$arm, r$age), c("outcome", "study arm", "age at entry")))
+  out <- fig_logistic(sc_logit(rows, covariates = c("study arm")))
+  env <- new.env(parent = globalenv())
+  expect_silent(eval(parse(text = out$code), env))
+  adj <- exp(cbind(stats::coef(env$fit), stats::confint.default(env$fit)))
+  expect_equal(sprintf("%.2f", adj["`study arm`Treated", ]),
+               sprintf("%.2f", tsv_cell_nums(tsv_adj_cell(out$text, "Treated"))))
 })
 
 test_that("no influential-point sentence when no observation exceeds 4/n", {

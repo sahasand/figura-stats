@@ -268,6 +268,95 @@
   }, numeric(1))
 }
 
+# Downloadable R script: the univariable + joint glm calls, the C-statistic, and
+# an equivalent forest plot. The prep block reproduces .logistic_prep's pipeline
+# in the SAME order (recode -> complete cases -> increment rescale -> relevel),
+# so the script's odds ratios match the app's table. For uploads, prep reads the
+# user's REAL column names + event coding (source_roles), exactly like .cox_script.
+.logistic_script <- function(spec, p, fits) {
+  opts <- spec$options %||% list()
+  qe <- function(s) gsub('"', '\\\\"', s)
+  covs <- p$covs
+  sr <- if (nzchar(as.character(opts$source_filename %||% ""))) opts$source_roles else NULL
+  ev <- qe(as.character(opts$event_value %||% ""))
+  # Embedded-demo data is written out under the role column names; an upload's
+  # file carries the user's original headers (travelling in source_roles).
+  outcome_name <- if (!is.null(sr)) sr$outcome else spec$roles$outcome
+  ocol_raw <- sprintf('df[["%s"]]', qe(outcome_name))
+  # as.numeric mirrors .numeric_col: a numeric column read back from a CSV with
+  # blank cells arrives as character, and the increment divide below needs numeric.
+  cov_expr <- function(cl) {
+    e <- sprintf('df[["%s"]]', qe(cl))
+    if (p$cov_types[[cl]] == "numeric") sprintf("as.numeric(%s)", e) else e
+  }
+
+  prep <- c(
+    sprintf('# Event coding: outcome == "%s" is the event (y = 1); all else y = 0.', ev),
+    sprintf('outcome_raw <- %s', ocol_raw),
+    sprintf(paste0('y <- as.integer(as.character(outcome_raw) == "%s" | ',
+                   '(!is.na(suppressWarnings(as.numeric("%s"))) & ',
+                   '!is.na(suppressWarnings(as.numeric(outcome_raw))) & ',
+                   'suppressWarnings(as.numeric(outcome_raw)) == suppressWarnings(as.numeric("%s"))))'),
+            ev, ev, ev),
+    'dat <- data.frame(.y = y,',
+    paste0("                  ",
+      paste(vapply(covs, function(cl) sprintf('`%s` = %s', qe(cl), cov_expr(cl)),
+                   character(1)), collapse = ",\n                  "), ","),
+    "                  check.names = FALSE, stringsAsFactors = FALSE)",
+    "dat <- dat[complete.cases(dat), ]")
+
+  incr_lines <- unlist(lapply(covs, function(cl) {
+    if (p$cov_types[[cl]] != "numeric" || p$incr[[cl]] == 1) return(NULL)
+    sprintf('dat[["%s"]] <- dat[["%s"]] / %g   # per-%g-unit odds ratio',
+            qe(cl), qe(cl), p$incr[[cl]], p$incr[[cl]])
+  }))
+
+  # levels(p$df[[cl]])[1] is the reference the app ACTUALLY fitted with, which is
+  # not always options$ref_levels: .logistic_prep falls back to the most frequent
+  # level when the requested reference is absent from the complete-case data.
+  relevel_lines <- unlist(lapply(covs, function(cl) {
+    if (p$cov_types[[cl]] != "categorical") return(NULL)
+    sprintf('dat[["%s"]] <- relevel(factor(dat[["%s"]]), ref = "%s")',
+            qe(cl), qe(cl), qe(levels(p$df[[cl]])[1]))
+  }))
+
+  uni_lines <- unlist(lapply(covs, function(cl) c(
+    sprintf('# Unadjusted OR for %s', cl),
+    sprintf('m_uni <- glm(.y ~ `%s`, family = binomial, data = dat)', qe(cl)),
+    "summary(m_uni)",
+    "exp(cbind(OR = coef(m_uni), confint.default(m_uni)))   # Wald 95% CI",
+    "")))
+  joint_rhs <- paste(sprintf("`%s`", covs), collapse = " + ")
+  joint_lines <- c(
+    "# Adjusted (joint) model:",
+    sprintf("fit <- glm(.y ~ %s, family = binomial, data = dat)", joint_rhs),
+    "summary(fit)",
+    "exp(cbind(OR = coef(fit), confint.default(fit)))   # adjusted ORs + Wald 95% CI", "",
+    "# Overall discrimination (C-statistic):",
+    "prob <- fitted(fit); n1 <- sum(dat$.y == 1); n0 <- sum(dat$.y == 0)",
+    "(sum(rank(prob)[dat$.y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)", "")
+  fig_lines <- c(
+    "# Equivalent forest plot of the adjusted odds ratios:",
+    "library(ggplot2)",
+    "co <- exp(cbind(coef(fit), confint.default(fit)))[-1, , drop = FALSE]",
+    "fp <- data.frame(term = rownames(co), or = co[, 1], lo = co[, 2], hi = co[, 3])",
+    "fp$term <- factor(fp$term, levels = rev(fp$term))",
+    "p_forest <- ggplot(fp, aes(or, term)) +",
+    '  geom_vline(xintercept = 1, linetype = "dashed", colour = "grey50") +',
+    '  geom_errorbar(aes(xmin = lo, xmax = hi), orientation = "y", width = 0.2) +',
+    "  geom_point(size = 2.4) + scale_x_log10() +",
+    '  labs(x = "Adjusted odds ratio (log scale)", y = NULL) +',
+    "  theme_minimal(base_size = 12)",
+    '# print(p_forest)')
+
+  body <- c(prep, "",
+            incr_lines, if (length(incr_lines)) "" else NULL,
+            relevel_lines, if (length(relevel_lines)) "" else NULL,
+            uni_lines, joint_lines, fig_lines)
+  .script_assemble("Logistic regression", spec,
+                   c(spec$roles$outcome, covs), c("ggplot2"), body)
+}
+
 fig_logistic <- function(spec) {
   p <- .logistic_prep(spec)
   fits <- .logistic_fits(p$df, p$covs, p$cov_types)
@@ -348,5 +437,5 @@ fig_logistic <- function(spec) {
     sep_line, epv_line, auc_line, vif_line, infl_line, drop_note)
   text <- paste0(tsv, "\n\n", methods)
 
-  list(svg = svg_field, text = text, code = "")
+  list(svg = svg_field, text = text, code = .logistic_script(spec, p, fits))
 }
