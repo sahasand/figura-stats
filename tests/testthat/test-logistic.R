@@ -311,3 +311,12 @@ test_that("no influential-point sentence when no observation exceeds 4/n", {
   expect_false(grepl("influential", out$text, fixed = TRUE))
   expect_false(grepl("Cook", out$text, fixed = TRUE))
 })
+
+test_that("render_figure routes logistic specs and returns ok JSON", {
+  spec <- sc_logit(mk_logit_rows())
+  js <- jsonlite::toJSON(spec, auto_unbox = TRUE)
+  res <- jsonlite::fromJSON(render_figure(js))
+  expect_true(res$ok)
+  expect_match(res$svg, "<table", fixed = TRUE)
+  expect_true(nzchar(res$code))
+})
