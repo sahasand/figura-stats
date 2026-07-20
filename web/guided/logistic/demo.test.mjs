@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildLogisticDemoSpec, DEFAULT_DEMO_STATE, DEMO_TABLE } from "./demo.js";
 import { LOGISTIC_DEMO } from "./demo-data.js";
+import { EXAMPLE_INTRO_HTML, renderUnderstand } from "./content.js";
 
 const spec = buildLogisticDemoSpec(DEFAULT_DEMO_STATE());
 assert.equal(spec.figure, "logistic");
@@ -49,5 +50,19 @@ assert.deepEqual(DEMO_TABLE.columns, LOGISTIC_DEMO.columns);
 assert.equal(DEMO_TABLE.rows.length, LOGISTIC_DEMO.rows.length);
 assert.equal(DEMO_TABLE.types.age, "numeric");
 assert.equal(DEMO_TABLE.types.complication, "categorical");
+
+// F5: the Example intro's sample size is derived from LOGISTIC_DEMO.rows.length
+// (drift-proof), but the Understand section's event-rate percentage is a
+// hand-typed literal ("28%"). If demo-data.js is ever regenerated, this must
+// fail rather than let stale copy silently ship.
+assert.ok(EXAMPLE_INTRO_HTML.includes(String(LOGISTIC_DEMO.rows.length)),
+  "Example intro must state the actual number of demo rows");
+
+const fakePanel = { innerHTML: "" };
+renderUnderstand(fakePanel);
+const events = LOGISTIC_DEMO.rows.filter((r) => r.complication === "Yes").length;
+const pct = Math.round((100 * events) / LOGISTIC_DEMO.rows.length);
+assert.ok(fakePanel.innerHTML.includes(`${pct}%`),
+  `Understand copy must quote the actual event rate (${pct}%), not a stale hardcoded value`);
 
 console.log("demo.test.mjs OK");

@@ -21,8 +21,8 @@ const SECTIONS = [
     of the two from 1. When the outcome is uncommon (under roughly 10%) the two are
     close enough that people read an OR as a relative risk; when the outcome is common
     — as in the example below, where 28% of patients had a complication — an OR of 0.50
-    means a considerably smaller reduction in <em>risk</em> than "half". Report it as an
-    odds ratio and say so.</p>` },
+    corresponds to about a 42% reduction in <em>risk</em>, not the 50% that "half"
+    suggests. Report it as an odds ratio and say so.</p>` },
   { title: "Is logistic regression appropriate?", html: `
     <p>Use it when each row is one independent participant, the outcome is
     <strong>binary</strong> (event / no event), and you have the baseline covariates
@@ -45,7 +45,7 @@ const SECTIONS = [
       <li>A 95% CI that crosses 1 means the effect is not statistically resolved. It does
       not mean there is no effect.</li>
       <li>Adjusted odds ratios are adjusted only for the covariates you put in the model.
-      Anything you did not measure is still confounding the result.</li>
+      Anything you did not measure could still be confounding the result.</li>
     </ul>
     <p class="callout">With fewer than about 10 events per model term, adjusted
     estimates become unstable — the tool warns you when that happens.</p>` },
@@ -62,12 +62,13 @@ export const EXAMPLE_INTRO_HTML = `
   and disease stage, and whether a <strong>complication</strong> occurred. The new
   treatment was given preferentially to older, higher-stage patients — the very patients
   most likely to have a complication anyway.</p>
-  <p>Run the example with only <code>arm</code> in the model and the treatment looks
-  useless: an unadjusted odds ratio of about 1.0, with a confidence interval sitting
-  squarely across 1. Add <code>age</code> and <code>stage</code> and the adjusted odds
-  ratio drops to roughly 0.5 — the treatment does help, and the unadjusted comparison
-  was hiding it behind the sicker patients who received it. Toggle the covariates below
-  to watch that happen.</p>
+  <p>The example loads with <code>arm</code>, <code>age</code>, and <code>stage</code>
+  all checked. Run it as configured and the adjusted odds ratio for the new treatment is
+  about 0.5, with a confidence interval that stays under 1. Uncheck <code>age</code> and
+  <code>stage</code> and the odds ratio for <code>arm</code> alone jumps to about 1.0,
+  with a confidence interval sitting squarely across 1 — in this synthetic dataset,
+  adjusting for age and stage accounts for the confounding that made the raw comparison
+  look null. Toggle the covariates below to watch that happen.</p>
   <p class="callout">When the results text flags a few observations as "influential"
   (Cook's distance), that is expected here and on most datasets — the rule of thumb it
   uses picks out a small percentage of rows routinely. It is a prompt to check those
