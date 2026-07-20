@@ -107,6 +107,31 @@ test_that("a covariate whose header has a space still gets estimated HRs", {
   expect_true(hr < 0.8)
 })
 
+# The categorical fixture above only exercises the categorical key
+# (`paste0(tl, l)`). confint()/coef() rownames are backticked for a NUMERIC
+# non-syntactic term too, so the numeric branch (`uc[tl]`, not `uc[cl]`) needs
+# its own fixture: a numeric covariate whose header carries a space.
+mk_cox_rows_num_spaced <- function() {
+  lapply(mk_cox_rows(), function(r)
+    list(time = r$time, status = r$status, arm = r$arm, `age at entry` = r$age))
+}
+
+test_that("a NUMERIC covariate whose header has a space still gets estimated HRs", {
+  out <- fig_cox(sc_cox(mk_cox_rows_num_spaced(),
+                        covariates = c("arm", "age at entry")))
+  expect_false(grepl("not reliably estimated", out$text, fixed = TRUE))
+  # Pull the numeric row's unadjusted + adjusted cells out of the TSV block and
+  # assert both are real numbers, not the "not reliably estimated" placeholder.
+  line <- grep("^age at entry \\(per 1 unit\\)\t",
+               strsplit(out$text, "\n", fixed = TRUE)[[1]], value = TRUE)
+  expect_length(line, 1)
+  cells <- strsplit(line, "\t", fixed = TRUE)[[1]][2:3]
+  hrs <- as.numeric(sub("^([0-9.]+) .*$", "\\1", cells))
+  expect_true(all(is.finite(hrs)))
+  # Simulated log-hazard rises 0.04 per year -> HR ~ 1.04 per unit.
+  expect_true(all(hrs > 1.01 & hrs < 1.09))
+})
+
 test_that("forest plot labels a space-headered covariate without backticks", {
   p <- .cox_prep(sc_cox(mk_cox_rows_spaced(), covariates = c("study arm", "age")))
   fits <- .cox_fits(p$df, p$covs, p$cov_types)
