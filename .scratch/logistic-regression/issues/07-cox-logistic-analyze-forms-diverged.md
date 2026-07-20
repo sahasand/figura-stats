@@ -1,6 +1,6 @@
 # 07 — The cox/logistic "near-clone" analyze forms have diverged in opposite directions (consistency, not a bug)
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, during the whole-branch review of `fix/cox-shell-issues` (deferred: out of scope for that branch)
 
@@ -86,3 +86,34 @@ files naming the sibling, so the next divergence is visible.
 - Unit: the Cox form's dropped-row count must match R (see issue 06).
 - Existing `cox/analyze-form.test.mjs` and `logistic/analyze-form.test.mjs` assertions must
   all still pass unchanged.
+
+## Comments
+
+Resolved on `main` via the shared-module route (option 1), not the copy-into-both fallback.
+
+`web/lib/modelform.js` now holds all four helpers — `retainedSelection`,
+`reconcileRefLevels` (from cox) and `renderReadiness`, `countDroppedRows` (from logistic) —
+and both analyze forms import them. `renderReadiness` gained an options argument
+(`outcomeRole`, `checkOverlap`, `messages`) so cox can express its own shape (a `status`
+column rather than an `outcome`, and no outcome/covariate overlap rule) without a second
+copy of the logic. Each form keeps a comment naming `web/lib/modelform.js` as the place to
+change it.
+
+Logistic also picked up `retainedSelection` for its event-value dropdown, replacing an
+inline `Array.from(options).some(...)` scan — same behavior, one fewer hand-rolled rule.
+
+Behavior is unchanged in both forms, deliberately. Two things that looked like changes are
+not: cox's readiness check now also tests `roles.status`, which is a no-op because
+`renderColumnPicker`'s `current()` returns `null` unless every non-optional role is set
+(`web/lib/columnpicker.js:19-37`) and none of cox's roles are optional; and logistic's
+reference-level fallback moved from DOM-assignment semantics to an explicit rule that the
+issue's own Correction section already established was equivalent.
+
+`web/lib/modelform.test.mjs` covers all four helpers (28 assertions, including that
+reconciling does not mutate the caller's memo) and is wired into `test:unit`. The existing
+`cox/analyze-form.test.mjs` and `logistic/analyze-form.test.mjs` pass with **every
+assertion unchanged**; each form re-exports the helpers its own test imports.
+
+Left undone, deliberately: cox still does not reject a status column that is also selected
+as a covariate, where logistic rejects the analogous case. Closing that gap would change
+behavior, which was out of scope here. Worth its own issue.

@@ -7,42 +7,24 @@ import { parseCsv, toCsv } from "../../lib/csv.js";
 import { renderColumnPicker } from "../../lib/columnpicker.js";
 import { buildCoxSpec, distinctValues, mostFrequent } from "./spec.js";
 import { COX_DEMO } from "./demo-data.js";
+// The decision logic is shared with web/guided/logistic/analyze-form.js —
+// change it in web/lib/modelform.js, not here. Re-exported so the existing
+// unit test (and anything else) can keep importing it from this module.
+import { retainedSelection, reconcileRefLevels, renderReadiness, countDroppedRows }
+  from "../../lib/modelform.js";
+export { retainedSelection, reconcileRefLevels, countDroppedRows };
 
-// --- pure decision logic (unit-tested in analyze-form.test.mjs) --------------
-
-// A remembered dropdown value carried across an options rebuild: kept only when
-// the rebuilt list still offers it, otherwise the fallback. Deselecting every
-// covariate nulls the picker's whole role map (see web/lib/columnpicker.js),
-// which momentarily clears the status column — the chosen event must survive it.
-export function retainedSelection(remembered, available, fallback = "") {
-  return available.includes(remembered) ? remembered : fallback;
-}
-
-// Reference levels for exactly the categorical covariates currently mapped,
-// reconciled against what the user already chose (keyed by column name) rather
-// than rebuilt from zero. `levelsOf(col)` returns null for a numeric covariate
-// (per-unit HR, no reference). A remembered level the column no longer offers
-// falls back to `defaultOf(col)`; a covariate no longer mapped is dropped.
-export function reconcileRefLevels(remembered, covariates, levelsOf, defaultOf) {
-  const out = {};
-  for (const c of covariates) {
-    const levels = levelsOf(c);
-    if (!levels) continue;
-    out[c] = retainedSelection(remembered[c], levels, defaultOf(c));
-  }
-  return out;
-}
-
-// Rows the model will drop, because a mapped column is missing (complete cases).
-// "Missing" is exactly what R/cox.R treats as missing: an absent cell or the
-// empty string. A whitespace-only cell is NOT missing there — it stays a real
-// categorical level (and makes .cox_is_numeric read the column as categorical),
-// so counting it here would over-state the preview.
-export function countDroppedRows(table, columns) {
-  if (columns.length === 0) return 0;
-  return table.rows.filter((r) =>
-    columns.some((c) => r[c] == null || String(r[c]) === "")).length;
-}
+// Cox names its outcome column "status", and (unlike logistic) does not gate
+// Render on the outcome also being selected as a covariate — the reason string
+// is never surfaced here, this form has no readiness hint.
+const COX_READINESS = {
+  outcomeRole: "status",
+  checkOverlap: false,
+  messages: {
+    roles: "Choose a follow-up time column, an event status column, and at least one covariate to continue.",
+    eventValue: "Choose which status value means the event occurred.",
+  },
+};
 
 // --- DOM wiring (exercised by the Playwright e2e test) ----------------------
 
@@ -129,8 +111,8 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
         const chosenRefs = {};
         const isNumericCol = (col) => table.types[col] === "numeric";
         const syncReady = () => {
-          btn.disabled = !roles || !roles.covariates
-            || roles.covariates.length === 0 || !eventSel.value;
+          btn.disabled = !renderReadiness(
+            { roles, eventValue: eventSel.value }, COX_READINESS).ready;
         };
         const fillEventOptions = () => {
           eventSel.innerHTML = "";
@@ -200,7 +182,8 @@ export function renderCoxAnalyzeForm(container, onSubmit, doc = globalThis.docum
         config.appendChild(refWrap);
 
         btn.onclick = () => {
-          if (!roles || !eventSel.value) return;
+          if (!renderReadiness({ roles, eventValue: eventSel.value },
+            COX_READINESS).ready) return;
           const refLevels = {};
           refWrap.querySelectorAll("select[data-cov]").forEach((s) => {
             refLevels[s.dataset.cov] = s.value;

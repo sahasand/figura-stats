@@ -7,6 +7,12 @@ import { parseCsv, toCsv } from "../../lib/csv.js";
 import { renderColumnPicker } from "../../lib/columnpicker.js";
 import { buildLogisticSpec, distinctValues, mostFrequent } from "./spec.js";
 import { LOGISTIC_DEMO } from "./demo-data.js";
+// The decision logic is shared with web/guided/cox/analyze-form.js — change it
+// in web/lib/modelform.js, not here. Re-exported so the existing unit test (and
+// anything else) can keep importing it from this module.
+import { retainedSelection, reconcileRefLevels, renderReadiness, countDroppedRows }
+  from "../../lib/modelform.js";
+export { renderReadiness, countDroppedRows };
 
 // --- pure decision logic (unit-tested in analyze-form.test.mjs) --------------
 
@@ -16,40 +22,6 @@ import { LOGISTIC_DEMO } from "./demo-data.js";
 export function normalizeIncrement(value) {
   const k = Number(value);
   return Number.isFinite(k) && k > 0 ? k : 1;
-}
-
-// Whether Render may fire, plus a plain-language reason when it may not.
-export function renderReadiness({ roles, eventValue }) {
-  // The column picker collapses its whole role map to null when any role is
-  // unset, so "no roles yet" can mean either half is missing — say both.
-  if (!roles || !roles.outcome) {
-    return { ready: false,
-      reason: "Choose an outcome column and at least one covariate to continue." };
-  }
-  const covs = roles.covariates || [];
-  if (covs.length === 0) {
-    return { ready: false, reason: "Choose at least one covariate to adjust for." };
-  }
-  if (covs.includes(roles.outcome)) {
-    return { ready: false,
-      reason: "The outcome column cannot also be used as a covariate." };
-  }
-  if (!eventValue) {
-    return { ready: false,
-      reason: "Choose which outcome value means the event occurred." };
-  }
-  return { ready: true, reason: "" };
-}
-
-// Rows the model will drop, because a mapped column is missing (complete cases).
-// "Missing" is exactly what R/logistic.R treats as missing: an absent cell or the
-// empty string. A whitespace-only cell is NOT missing there — it stays a real
-// categorical level (and makes .logistic_is_numeric read the column as
-// categorical), so counting it here would over-state the preview.
-export function countDroppedRows(table, columns) {
-  if (columns.length === 0) return 0;
-  return table.rows.filter((r) =>
-    columns.some((c) => r[c] == null || String(r[c]) === "")).length;
 }
 
 // --- DOM wiring (exercised by the Playwright e2e test) ----------------------
@@ -148,13 +120,13 @@ export function renderLogisticAnalyzeForm(container, onSubmit, doc = globalThis.
           const ph = doc.createElement("option");
           ph.value = ""; ph.textContent = "— choose —";
           eventSel.appendChild(ph);
-          if (outcomeCol) for (const v of distinctValues(table, outcomeCol)) {
+          const values = outcomeCol ? distinctValues(table, outcomeCol) : [];
+          for (const v of values) {
             const o = doc.createElement("option");
             o.value = v; o.textContent = v;
             eventSel.appendChild(o);
           }
-          eventSel.value = Array.from(eventSel.options)
-            .some((o) => o.value === chosenEvent && o.value !== "") ? chosenEvent : "";
+          eventSel.value = retainedSelection(chosenEvent, values, "");
           eventSel.disabled = !outcomeCol;
           syncReady();
         };
@@ -167,20 +139,27 @@ export function renderLogisticAnalyzeForm(container, onSubmit, doc = globalThis.
           });
           refWrap.innerHTML = "";
           if (!roles || !roles.covariates) return;
+          const levels = {};
+          const levelsOf = (c) => {
+            if (isNumericCol(c)) return null;   // numeric -> increment, not a reference
+            if (!levels[c]) levels[c] = distinctValues(table, c);
+            return levels[c];
+          };
+          const refs = reconcileRefLevels(chosenRefs, roles.covariates, levelsOf,
+            (c) => mostFrequent(table, c));
           for (const c of roles.covariates) {
-            if (isNumericCol(c)) continue;   // numeric -> increment, not a reference
+            if (isNumericCol(c)) continue;
             const l = doc.createElement("label");
             l.textContent = `Reference level for ${c} `;
             const s = doc.createElement("select");
             s.id = "logistic-ref-" + c; s.dataset.cov = c;
             l.htmlFor = s.id;
-            for (const v of distinctValues(table, c)) {
+            for (const v of levelsOf(c)) {
               const o = doc.createElement("option");
               o.value = v; o.textContent = v;
               s.appendChild(o);
             }
-            s.value = chosenRefs[c] ?? mostFrequent(table, c);
-            if (!s.value) s.value = mostFrequent(table, c);   // stale level, no longer present
+            s.value = refs[c];
             l.appendChild(s); refWrap.appendChild(l);
           }
         };
