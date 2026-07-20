@@ -8,3 +8,8 @@ web/webr/
 web/R/
 *.DS_Store
 .gstack/
+# Machine-local agent session state.
+.claude/
+# Scraped third-party sources (journal pages) kept for research provenance —
+# never publish: the captures are someone else's copyrighted content.
+.firecrawl/

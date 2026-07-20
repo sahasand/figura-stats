@@ -1,5 +1,5 @@
 {
-  "name": "manuscript-figures-web",
+  "name": "figura-stats",
   "private": true,
   "scripts": {
     "serve": "python3 -m http.server 8321 --directory web",

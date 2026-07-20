@@ -11,7 +11,7 @@ const CACHE = "figura-v3";
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath
-// (e.g. https://<user>.github.io/my-stats/) as well as at root. Root-absolute
+// (e.g. https://<user>.github.io/figura-stats/) as well as at root. Root-absolute
 // paths ("/index.html") would 404 under a subpath and reject the all-or-nothing
 // install, leaving the SW inert in production.
 const scoped = (p) => new URL(p, self.registration.scope).toString();
