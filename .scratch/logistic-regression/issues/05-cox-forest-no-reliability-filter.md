@@ -1,6 +1,6 @@
 # 05 — Cox forest plot has no reliability filter, so an unestimable term can flatten the axis
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, during the whole-branch review of `fix/cox-shell-issues` (deferred: out of scope for that branch, which was scoped to four tracked defects)
 
@@ -65,3 +65,17 @@ everything is filtered out, so no new empty-plot path is needed.
 then assert that the term's HR cell reads "not reliably estimated" **and** that the forest
 SVG does not carry its label. Confirm the assertion is RED against the current `keep`
 before relying on it.
+
+## Comments
+
+Fixed on `fix/cox-forest-and-preview`. `.cox_forest_svg` now returns `""` outright
+when `fits$joint$warn` is non-NULL — verified that `.cox_rows` passes the joint
+fit's warning to the adjusted cell of *every* term, so a warned fit already makes
+the whole adjusted column read "not reliably estimated"; plotting anything in that
+state contradicted the table. The per-term `keep` additionally drops CIs whose
+upper bound exceeds HR 1e6, matching `.logistic_forest_svg`. Two regression tests:
+a covariate level that never has the event and outlives the last event (coxph
+warns, forest must be empty), and a tiny-scale numeric covariate whose adjusted CI
+reaches ~1e7 with no warning (that term drops, the well-behaved arm term stays).
+The healthy demo fit's forest SVG is byte-identical before and after (md5
+699ab9dc75ce7f80c76d9964f5f05303).
