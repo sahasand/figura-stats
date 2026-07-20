@@ -1,6 +1,6 @@
 # 03 — Guided shell re-enables demo controls that content.js deliberately locked
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, during the logistic-regression build
 
@@ -22,3 +22,16 @@ Consequence: after the first demo run the user can uncheck the primary exposure,
 ## Fix
 
 Snapshot each control's `disabled` state before the run and restore that snapshot in `finally`, rather than blanket-enabling. Add an e2e assertion that the primary-exposure checkbox is still disabled after a completed demo run.
+
+## Answer
+
+Fixed on `fix/cox-shell-issues`. `web/guided/shell.js` now freezes the demo controls through a
+reference-counted `createControlLock()` (`web/guided/control-lock.js`): `acquire()` remembers each
+element's `disabled` state in a Map keyed by the element, `release()` restores that snapshot only
+when the last overlapping run settles. Element-keyed restore survives a re-render mid-run (nodes
+acquire never saw are left alone); ref-counting keeps two overlapping runs from unfreezing early;
+`release()` stays in the `finally`, so a throw in `runAndShow` still restores.
+
+Covered by `web/guided/control-lock.test.mjs` (registered in the `test:unit` chain) and by an e2e
+assertion in `tests/e2e/logistic-guided.spec.js` that `#cov-arm` is still disabled — and
+`#cov-age`/`#cov-stage`/`#run-demo` enabled — after a completed demo run.

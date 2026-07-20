@@ -6,6 +6,7 @@
 import { createSession, setStage, storeResult, getResult, setDemoOptions, resetDemo,
   getDemoGeneration, isDemoGenerationCurrent, STAGES } from "./session-state.js";
 import { createCoalescer } from "./live-run.js";
+import { createControlLock } from "./control-lock.js";
 
 const STAGE_LABELS = { understand: "Understand", example: "Try an Example", analyze: "Analyze Your Data" };
 // The result context each stage is allowed to paint into the shared #preview/#stats.
@@ -165,16 +166,21 @@ export function createGuidedShell(cfg) {
         ...panel.querySelectorAll(cfg.experimentControlsSelector)];
     }
 
+    // Reference-counted freeze/restore for the controls above. Restoring the
+    // PRE-run disabled state (rather than enabling everything) is what keeps an
+    // analysis's own lock — cox/logistic disable the primary-exposure checkbox
+    // in content.js — intact across a run.
+    const controlLock = createControlLock();
+
     // Shared run path: the Run button always calls this, and the experiment
     // controls call it too (conditionally) so both go through one place.
     async function runDemo() {
       if (cfg.liveRender) {
         return coalescer.submit(cfg.buildDemoSpec(ctx.getSession().demoOptions));
       }
-      const controls = inFlightControls();
-      controls.forEach((el) => { el.disabled = true; });   // no duplicate/overlapping runs
+      controlLock.acquire(inFlightControls());        // no duplicate/overlapping runs
       try { await ctx.runAndShow(cfg.buildDemoSpec(ctx.getSession().demoOptions), "demo"); }
-      finally { controls.forEach((el) => { el.disabled = false; }); }
+      finally { controlLock.release(); }
     }
 
     runBtn.addEventListener("click", runDemo);
