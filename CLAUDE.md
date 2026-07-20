@@ -41,7 +41,7 @@ Kaplan–Meier, Table 1 (Summary), Explore plot, Group comparison, Cox regressio
 
 **No data egress.** The only network calls are the webR runtime/packages from the CDN and `fetch("R/*.R")`. There is no analytics or upload of user data — this is an invariant, not a preference. All statistics live in R; JS only parses CSVs and marshals columns. Fonts (IBM Plex) are self-hosted in `web/fonts/` for the same reason — never link a font CDN.
 
-**UI tokens.** All chrome styling routes through the CSS variables at the top of `web/styles.css` (teal `--accent`, `--radius*`, warn palette). Data colors in figures (Tol palette, `R/km.R .km_palette`) are deliberately distinct from chrome colors. Known UI/a11y fast-follows live in `.scratch/guided-analysis-km/issues/stage-a-fast-follows.md`.
+**UI tokens.** All chrome styling routes through the CSS variables at the top of `web/styles.css` — warm paper surfaces (`--chrome` desk, `--panel`, `--rail`, `--output-canvas`, `--sheet`) over graphite ink, teal `--accent` `#0d6b63`, `--radius*`, warn palette. Three fonts, all self-hosted: IBM Plex Sans/Mono for chrome, **Source Serif 4 for the rendered artifact only** (table row labels, italic captions, teaching-prose headings, the wordmark). A rendered table is a "galley proof" — R already wraps every table analysis in `.summary-output > .table-scroll`, and that wrapper is the sheet; the journal three-rule borders ride on the **cells**, not the table, so the paper margin stays outside them. `--ink-faint` is decorative only (3.6:1); anything under 14px uses `--ink-muted`. Data colors in figures (Tol palette, `R/km.R .km_palette`) are deliberately distinct from chrome colors. Known UI/a11y fast-follows live in `.scratch/guided-analysis-km/issues/stage-a-fast-follows.md`.
 
 ## Adding a figure or analysis
 
@@ -61,6 +61,8 @@ For CSV analyses, build the form on `web/lib/csv.js` + `web/lib/columnpicker.js`
 
 - Local R is Homebrew R 4.6 (bleeding-edge → CRAN builds packages from source). See the memory note `r-toolchain-homebrew-webr-gotchas` for the system-lib / Anaconda-PATH fixes needed to install the package tree locally.
 - CI (`.github/workflows/ci.yml`) runs the R suite and the JS unit tests, but **not** the Playwright e2e (it downloads webR — slow/flaky). Deploy (`deploy.yml`) copies `R/`→`web/R/` and publishes `web/` to Pages on push to `main`.
+- **The site serves from the custom domain `figurastats.org`** (Cloudflare registrar + DNS, GitHub Pages origin). `web/CNAME` holds it — it must stay in `web/`, never the repo root, because `deploy.yml` uploads `path: web` as the artifact; a root-level `CNAME` is not published and every deploy silently clears the custom domain. GitHub's repo-level Pages setting must name the same domain.
+- **If Cloudflare's proxy is ever enabled, `/R/*` needs a bypass-cache rule first**, and SSL/TLS mode must be Full (Flexible loops against Pages' HTTP→HTTPS redirect). An edge cache is a third cache that neither the service worker's network-first nor its `cache: "reload"` can reach — see the THIRD-CACHE WARNING in `web/sw.js`.
 
 ## Design docs
 
