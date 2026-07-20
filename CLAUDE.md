@@ -53,6 +53,8 @@ A new figure `foo` requires **five parallel keys to stay in sync**, or it will p
 4. `web/guided/foo/guided-foo.js` — a `createGuidedShell({...})` config exporting `renderGuidedFoo`, with the analysis's Understand/demo/analyze-form pieces beside it in `web/guided/foo/`; `web/app.js` — import `renderGuidedFoo` and add `foo: renderGuidedFoo` to the `forms` registry; `web/index.html` — a `<button data-figure="foo">`.
 5. If it uses a new R package, add it to `DESCRIPTION` Imports (CI installs deps via `local::.`) **and** to the worker's `EXTRA_PACKAGES` for that figure.
 
+**Bump `CACHE` in `web/sw.js` on any change under `R/`.** The service worker serves same-origin assets — including `R/*.R`, the statistical source of truth — stale-while-revalidate, so without a bump a returning user's *first* load after a deploy still computes with the previous R sources and only self-heals on the load after that. It reads as "the fix didn't ship". This has bitten twice; see `.scratch/logistic-regression/issues/10-*`.
+
 For CSV analyses, build the form on `web/lib/csv.js` + `web/lib/columnpicker.js`; coerce spec columns to numeric with a suppress-warning-then-clear-`stop()` pattern (see `.numeric_col` in `R/summarize.R`) so a non-numeric column yields a readable error, not a leaked coercion warning.
 
 ## Environment notes
