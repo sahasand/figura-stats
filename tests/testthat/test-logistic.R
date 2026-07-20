@@ -108,3 +108,21 @@ test_that("constant covariate errors readably", {
   expect_error(fig_logistic(sc_logit(rows, covariates = c("arm"))),
                "one level", ignore.case = TRUE)
 })
+
+test_that("fig_logistic svg includes a forest-plot svg", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  expect_match(out$svg, "<svg", fixed = TRUE)
+  expect_gt(nchar(out$svg), 800)
+})
+
+test_that("forest plot labels a non-syntactic covariate header without backticks", {
+  rows <- lapply(mk_logit_rows(), function(r)
+    setNames(list(r$outcome, r$arm, r$age), c("outcome", "study arm", "age at entry")))
+  out <- fig_logistic(sc_logit(rows, covariates = c("study arm", "age at entry")))
+  # Assert on the forest plot alone, so the table's own labels can't satisfy these.
+  forest <- sub("^.*</table></div>", "", out$svg)
+  expect_match(forest, "<svg", fixed = TRUE)
+  expect_match(forest, "study arm: Treated", fixed = TRUE)
+  expect_match(forest, "age at entry (per 1 unit)", fixed = TRUE)
+  expect_false(grepl("`", forest, fixed = TRUE))
+})

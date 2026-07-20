@@ -185,14 +185,65 @@
          paste(body, collapse = ""), "</tbody></table>")
 }
 
+# Forest plot of ADJUSTED ORs (one point per non-reference level / numeric term),
+# log x-axis, dashed rule at OR = 1. geom_errorbar(orientation="y") — never
+# geom_errorbarh; linewidth — never size. Inclusion mirrors .logistic_or_cell's
+# reliability rule: drop non-finite terms and CIs that blow up past OR 1e6.
+.logistic_forest_svg <- function(p, fits) {
+  sm <- summary(fits$joint$fit)$coefficients
+  keys <- setdiff(rownames(sm), "(Intercept)")
+  if (length(keys) == 0) return("")
+  est <- sm[keys, "Estimate"]; se <- sm[keys, "Std. Error"]
+  or <- exp(est); lo <- exp(est - 1.96 * se); hi <- exp(est + 1.96 * se)
+  keep <- is.finite(or) & is.finite(lo) & is.finite(hi) & hi <= 1e6
+  if (!any(keep)) return("")
+  # Coefficient names carry the formula's term label, which is backticked for a
+  # non-syntactic header ("`study arm`Treated"), so match and strip that prefix
+  # literally — a bare-name regex would miss it and leak the raw coefficient name.
+  # Longest term label first, so a covariate whose name prefixes another's
+  # ("age" vs "age2") cannot claim the other's coefficients.
+  by_len <- p$covs[order(nchar(vapply(p$covs, .logistic_term_label, character(1))),
+                         decreasing = TRUE)]
+  labeller <- function(key) {
+    for (cl in by_len) {
+      tl <- .logistic_term_label(cl)
+      if (startsWith(key, tl)) {
+        if (p$cov_types[[cl]] == "numeric") {
+          k <- p$incr[[cl]]
+          return(if (k == 1) sprintf("%s (per 1 unit)", cl) else sprintf("%s (per %g units)", cl, k))
+        }
+        return(sprintf("%s: %s", cl, substring(key, nchar(tl) + 1)))
+      }
+    }
+    key
+  }
+  d <- data.frame(term = vapply(keys[keep], labeller, character(1)),
+                  or = or[keep], lo = lo[keep], hi = hi[keep],
+                  stringsAsFactors = FALSE)
+  d$term <- factor(d$term, levels = rev(d$term))
+  pal <- .km_palette(nrow(d))
+  gg <- ggplot2::ggplot(d, ggplot2::aes(x = or, y = term, color = term)) +
+    ggplot2::geom_vline(xintercept = 1, linetype = "dashed", linewidth = 0.5,
+                        colour = "grey50") +
+    ggplot2::geom_errorbar(ggplot2::aes(xmin = lo, xmax = hi), orientation = "y",
+                           width = 0.2, linewidth = 0.6) +
+    ggplot2::geom_point(size = 2.4) +
+    ggplot2::scale_x_log10() +
+    ggplot2::scale_color_manual(values = pal, guide = "none") +
+    ggplot2::labs(x = "Adjusted odds ratio (log scale)", y = NULL) +
+    .fig_theme("generic")
+  .svg_string(gg, width = 6, height = 0.5 + 0.5 * nrow(d))
+}
+
 fig_logistic <- function(spec) {
   p <- .logistic_prep(spec)
   fits <- .logistic_fits(p$df, p$covs, p$cov_types)
   disp_rows <- .logistic_rows(p, fits)
 
   table_html <- .logistic_table_html(disp_rows)
-  svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div></div>",
-                       table_html)
+  forest_svg <- .logistic_forest_svg(p, fits)
+  svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div>%s</div>",
+                       table_html, forest_svg)
 
   tsv <- paste(c(paste(c("Characteristic", "Unadjusted OR (95% CI, p)",
                          "Adjusted OR (95% CI, p)"), collapse = "\t"),
