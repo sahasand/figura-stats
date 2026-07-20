@@ -141,15 +141,14 @@
 }
 
 # Wald OR (95% CI, p) for one coefficient key from a summary() matrix. Returns
-# "not reliably estimated" when non-finite or the CI blows up past OR 1e6
-# (the separation signature).
+# "not reliably estimated" when the interval fails the shared reliability rule
+# (.ratio_reportable, R/dispatch.R) — the separation signature, in either tail.
 .logistic_or_cell <- function(smat, key) {
   if (!(key %in% rownames(smat))) return("not reliably estimated")
   est <- smat[key, "Estimate"]; se <- smat[key, "Std. Error"]
   p <- smat[key, "Pr(>|z|)"]
   or <- exp(est); lo <- exp(est - 1.96 * se); hi <- exp(est + 1.96 * se)
-  if (!is.finite(or) || !is.finite(lo) || !is.finite(hi) || hi > 1e6)
-    return("not reliably estimated")
+  if (!.ratio_reportable(or, lo, hi)) return("not reliably estimated")
   pf <- if (p < 0.001) "p<0.001" else sprintf("p=%.3f", p)
   sprintf("%.2f (%.2f–%.2f, %s)", or, lo, hi, pf)
 }
@@ -204,14 +203,15 @@
 # Forest plot of ADJUSTED ORs (one point per non-reference level / numeric term),
 # log x-axis, dashed rule at OR = 1. geom_errorbar(orientation="y") — never
 # geom_errorbarh; linewidth — never size. Inclusion mirrors .logistic_or_cell's
-# reliability rule: drop non-finite terms and CIs that blow up past OR 1e6.
+# reliability rule exactly: both call .ratio_reportable, so the table and the
+# plot can never disagree about which terms carry usable information.
 .logistic_forest_svg <- function(p, fits) {
   sm <- summary(fits$joint$fit)$coefficients
   keys <- setdiff(rownames(sm), "(Intercept)")
   if (length(keys) == 0) return("")
   est <- sm[keys, "Estimate"]; se <- sm[keys, "Std. Error"]
   or <- exp(est); lo <- exp(est - 1.96 * se); hi <- exp(est + 1.96 * se)
-  keep <- is.finite(or) & is.finite(lo) & is.finite(hi) & hi <= 1e6
+  keep <- .ratio_reportable(or, lo, hi)
   if (!any(keep)) return("")
   # Coefficient names carry the formula's term label, which is backticked for a
   # non-syntactic header ("`study arm`Treated"), so match and strip that prefix

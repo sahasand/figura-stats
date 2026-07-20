@@ -255,3 +255,79 @@ test_that("the adjusted-HR forest keeps a sane aspect ratio at every term count"
   forest1 <- sub("^.*</table></div>", "", out1$svg)
   expect_gte(.cox_forest_aspect(forest1), 0.5)
 })
+
+# --- Issues 08 + 09: one reliability rule, applied to the table AND the plot --
+# Before this, cox bounded only the forest plot and only from above: a
+# huge-but-finite HR printed a number in Table 3 while being silently absent
+# from the figure (09), and an extreme *protective* term passed both bounds and
+# flattened the shared log axis (08). The rule is now symmetric — [1e-6, 1e6] —
+# and shared by the cell formatter and the plot filter, so the two agree.
+
+test_that("a huge-but-finite HR is unreportable in the table, not just the plot", {
+  sc <- sc_cox(mk_cox_rows_huge(), covariates = c("arm", "x"))
+  p <- .cox_prep(sc)
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  expect_null(fits$joint$warn)                    # nothing warned; only the scale is wild
+
+  out <- fig_cox(sc)
+  # The row exists and is labelled, but its adjusted cell refuses to state a number.
+  expect_match(out$svg, "x (per 1 unit)", fixed = TRUE)
+  expect_match(out$svg, "not reliably estimated", fixed = TRUE)
+  # The healthy covariate is unaffected — this must not become a blanket refusal.
+  expect_match(out$text, "arm", fixed = TRUE)
+  expect_false(grepl("1e+06", out$svg, fixed = TRUE))
+})
+
+# Same shape as mk_cox_rows_huge(), with the sign flipped: an extremely
+# PROTECTIVE term. Its CI is finite and sits far below 1e6, so the old
+# upper-only bound kept it and let it span ~11 decades of the shared axis.
+mk_cox_rows_protective <- function() {
+  set.seed(41)
+  n <- 200
+  arm <- rep(c("Control", "Treated"), each = n / 2)
+  x <- round(rnorm(n, 0, 0.05), 4)
+  lp <- -15 * x - 0.7 * (arm == "Treated")
+  time <- round(rexp(n, rate = 0.05 * exp(lp)) + 0.1, 2)
+  cens <- time > 24
+  time[cens] <- 24
+  status <- ifelse(cens, "alive", "dead")
+  lapply(seq_len(n), function(i)
+    list(time = time[i], status = status[i], arm = arm[i], x = x[i]))
+}
+
+test_that("an extremely protective term is dropped from the forest, others stay", {
+  sc <- sc_cox(mk_cox_rows_protective(), covariates = c("arm", "x"))
+  p <- .cox_prep(sc)
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  expect_null(fits$joint$warn)                    # finite, unwarned — only the scale is wild
+  expect_lt(exp(suppressWarnings(stats::confint(fits$joint$fit))["x", 1]), 1e-6)
+
+  svg <- .cox_forest_svg(p, fits)
+  expect_false(grepl("x (per 1 unit)", svg, fixed = TRUE))
+  expect_match(svg, "arm: Treated", fixed = TRUE)  # the healthy term keeps a readable axis
+})
+
+test_that("the reliability rule is symmetric on the ratio scale", {
+  expect_true(.ratio_reportable(1.5, 0.9, 2.2))
+  expect_false(.ratio_reportable(Inf, 0.9, 2.2))
+  expect_false(.ratio_reportable(1.5, 0.9, 2e6))    # runaway upper limit
+  expect_false(.ratio_reportable(1.5, 1e-7, 2.2))   # runaway lower limit
+  expect_equal(.ratio_reportable(c(1.5, 1.5), c(0.9, 1e-7), c(2.2, 2.2)),
+               c(TRUE, FALSE))                      # vectorised for the plot filters
+})
+
+test_that("an unreliable HR cell is explained in the methods text", {
+  # With the symmetric rule, a cox cell can refuse to print a number from a fit
+  # that raised NO warning at all — so unlike the warned case, nothing else in
+  # the text accounts for it. Logistic has said this since it shipped; cox said
+  # nothing, leaving "not reliably estimated" in the table unexplained.
+  out <- fig_cox(sc_cox(mk_cox_rows_huge(), covariates = c("arm", "x")))
+  expect_match(out$svg, "not reliably estimated", fixed = TRUE)
+  expect_match(out$text, "separation or severe collinearity", fixed = TRUE)
+})
+
+test_that("a healthy model says nothing about separation or collinearity", {
+  out <- fig_cox(sc_cox(mk_cox_rows()))
+  expect_false(grepl("not reliably estimated", out$svg, fixed = TRUE))
+  expect_false(grepl("separation or severe collinearity", out$text, fixed = TRUE))
+})

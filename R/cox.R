@@ -103,9 +103,12 @@
   list(uni = uni, joint = joint)
 }
 
-# Format one HR (95% CI, p); "not reliably estimated" when non-finite or warned.
+# Format one HR (95% CI, p); "not reliably estimated" when the fit warned or the
+# interval fails the shared reliability rule (.ratio_reportable, R/dispatch.R).
+# That rule is what .cox_forest_svg filters on too, so a hazard ratio the figure
+# refuses to draw can never print here as though it were a finding.
 .cox_hr_cell <- function(est, lo, hi, p, warn) {
-  if (!is.null(warn) || !is.finite(est) || !is.finite(lo) || !is.finite(hi))
+  if (!is.null(warn) || !.ratio_reportable(est, lo, hi))
     return("not reliably estimated")
   pf <- if (p < 0.001) "p<0.001" else sprintf("p=%.3f", p)
   sprintf("%.2f (%.2f–%.2f, %s)", est, lo, hi, pf)
@@ -167,6 +170,24 @@ fig_cox <- function(spec) {
   epv_line <- if (epv < 10)
     " CAUTION: fewer than 10 events per model term (EPV < 10); the adjusted estimates may be unstable." else ""
 
+  # A cell that refuses to print a number needs a sentence saying why, or the
+  # user is left reading "not reliably estimated" with nothing to act on. Both
+  # columns are inspected: an UNADJUSTED cell can run away while the adjusted
+  # one stays inside the bound (a crude effect that is explained away), and the
+  # reverse happens too. Mirrors .logistic_or_cell's sibling advisory; both
+  # causes are named because both trip the same rule.
+  unrel_cell <- any(vapply(disp_rows, function(r)
+    identical(r$adj, "not reliably estimated") ||
+      identical(r$unadj, "not reliably estimated"), logical(1)))
+  unrel_line <- if (unrel_cell)
+    paste0(" CAUTION: separation or severe collinearity was detected — one or more ",
+           "covariates either predict the event (near-)perfectly or duplicate ",
+           "information already carried by another covariate, so those hazard ratios ",
+           "are not reliably estimated by standard Cox regression and are omitted from ",
+           "the forest plot. Consider collapsing sparse categories, dropping or ",
+           "combining a redundant covariate, or rescaling one on a clinically ",
+           "meaningful unit, and seek statistical review.") else ""
+
   table_html <- .cox_table_html(disp_rows)
   forest_svg <- .cox_forest_svg(p, fits)
   svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div>%s</div>",
@@ -182,8 +203,9 @@ fig_cox <- function(spec) {
     sprintf(" %d row(s) with missing values were excluded.", p$n_dropped) else ""
   methods <- sprintf(paste0("Multivariable Cox proportional-hazards regression (n = %d, %d events) ",
     "adjusted for %s. Unadjusted hazard ratios are from single-covariate models; ",
-    "adjusted hazard ratios are from the joint model.%s%s%s"),
-    p$n, p$events, paste(p$covs, collapse = ", "), ph_line, epv_line, drop_note)
+    "adjusted hazard ratios are from the joint model.%s%s%s%s"),
+    p$n, p$events, paste(p$covs, collapse = ", "), unrel_line, ph_line, epv_line,
+    drop_note)
   text <- paste0(tsv, "\n\n", methods)
 
   list(svg = svg_field, text = text, code = .cox_script(spec, p, fits))
@@ -216,14 +238,14 @@ fig_cox <- function(spec) {
 # warned joint fit makes EVERY adjusted cell read "not reliably estimated"
 # (the warning is model-level, so .cox_rows passes it to all of them), hence a
 # warned fit plots nothing at all; and, as in .logistic_forest_svg, a CI that
-# blows up past HR 1e6 is dropped rather than flattening the shared log axis.
+# runs away in EITHER direction is dropped rather than flattening the shared
+# log axis (.ratio_reportable, R/dispatch.R — the same rule .cox_hr_cell uses).
 .cox_forest_svg <- function(p, fits) {
   if (!is.null(fits$joint$warn)) return("")
   jfit <- fits$joint$fit
   jc <- stats::coef(jfit); jci <- suppressWarnings(stats::confint(jfit))
   terms <- names(jc)
-  keep <- is.finite(jc) & is.finite(jci[, 1]) & is.finite(jci[, 2]) &
-    exp(jci[, 2]) <= 1e6
+  keep <- .ratio_reportable(exp(jc), exp(jci[, 1]), exp(jci[, 2]))
   if (!any(keep)) return("")
   # Coefficient names carry the formula's term label, which is backticked for a
   # non-syntactic header ("`study arm`Treated"), so match and strip that prefix

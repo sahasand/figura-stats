@@ -1,6 +1,6 @@
 # 09 — Cox table prints an HR the forest plot silently omits
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, during review of `fix/cox-forest-and-preview` (introduced by issue 05's fix, knowingly)
 
@@ -35,3 +35,25 @@ Decide, with the owner, whether cox's table should adopt the 1e6 reliability bou
 two outputs agree and the two analyses stay parallel. If yes, expect the change to alter
 Table 3 cells for extreme fits, and add a test pinning the new wording. See also issue 08,
 which raises the same question for the lower tail in both analyses.
+
+## Comments
+
+Resolved with owner sign-off, on `main`, together with issue 08 — they were one
+decision wearing two issue numbers.
+
+Route taken: **adopt the bound in the table**, not revert it in the plot. Both analyses now
+share a single predicate, `.ratio_reportable(est, lo, hi)` in `R/dispatch.R`, called by
+`.cox_hr_cell`, `.logistic_or_cell`, `.cox_forest_svg` and `.logistic_forest_svg`. A table
+and its figure can no longer disagree about which terms carry usable information, and cox
+and logistic can no longer drift apart on the question.
+
+Shipped output does change, as predicted: a hazard ratio whose CI runs past 1e6 (or, per
+issue 08, below 1e-6) now reads "not reliably estimated" where it previously printed a
+number.
+
+One gap this opened had to be closed in the same change: with the old rule a cox cell only
+went unreliable when the fit *warned*, and the warning had its own sentence. The bound
+makes an **unwarned** fit produce refusals, so `fig_cox` gained the separation/collinearity
+CAUTION that `fig_logistic` has always had — otherwise the table said "not reliably
+estimated" with nothing anywhere explaining why. Tested both ways: present when a cell
+refuses, absent for a healthy model.

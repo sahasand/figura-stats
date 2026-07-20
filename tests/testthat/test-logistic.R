@@ -264,9 +264,17 @@ test_that("an unreliable UNADJUSTED cell is explained in the methods text", {
   # adjusted effect is near zero and stays inside it. Only the unadjusted column
   # reads "not reliably estimated", so a check on the adjusted column alone would
   # leave that cell in the table with nothing explaining it.
+  #
+  # The noise sd is 0.6, not the 0.3 this fixture was born with. Under the old
+  # upper-only bound, 0.3 left x's ADJUSTED CI at 3.8e-07 – 1.4e+04 — eleven
+  # decades — and the table printed it as "0.07 (0.00–13730.00)". The symmetric
+  # rule (issue 08) correctly refuses that, which would have made BOTH columns
+  # unreliable and quietly destroyed this test's premise. Loosening the
+  # collinearity restores the intended contrast; every assertion below is
+  # unchanged.
   set.seed(101); n <- 400
   z <- rnorm(n)
-  x <- z + rnorm(n, 0, 0.3)
+  x <- z + rnorm(n, 0, 0.6)
   y <- rbinom(n, 1, plogis(-0.5 + 1.2 * z))
   rows <- lapply(seq_len(n), function(i)
     list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x = x[i], z = z[i]))
@@ -406,4 +414,42 @@ test_that("the adjusted-OR forest keeps a sane aspect ratio at every term count"
   out1 <- fig_logistic(sc_logit(mk_logit_rows(), covariates = "arm"))
   forest1 <- sub("^.*</table></div>", "", out1$svg)
   expect_gte(.forest_aspect(forest1), 0.5)
+})
+
+# --- Issue 08: the reliability rule bounds the protective tail too ------------
+# The bound was upper-only (hi <= 1e6). An extremely PROTECTIVE term produces a
+# CI that is finite, unwarned, and far *below* that bound, so it was reported
+# and plotted — flattening the shared log axis exactly as a runaway upper limit
+# does. The rule is now the symmetric [1e-6, 1e6], shared with cox.
+
+# Mirror of the "unreliable UNADJUSTED cell" fixture above with the sign
+# flipped: at a per-15-unit increment x's crude OR is ~e^-18, so both CI limits
+# sit under 1e-6 while staying far under 1e6.
+mk_logit_rows_protective <- function() {
+  set.seed(101); n <- 400
+  z <- rnorm(n)
+  x <- z + rnorm(n, 0, 0.3)
+  y <- rbinom(n, 1, plogis(-0.5 - 1.2 * z))
+  lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x = x[i], z = z[i]))
+}
+
+test_that("an extremely protective OR is unreportable, in the table and the plot", {
+  sc <- sc_logit(mk_logit_rows_protective(), covariates = c("x", "z"),
+                 increments = list(x = 15))
+  out <- fig_logistic(sc)
+  label <- "x \\(per 15 units\\)"
+  expect_identical(tsv_unadj_cell(out$text, label), "not reliably estimated")
+
+  # z, on its own scale, stays perfectly reportable — not a blanket refusal.
+  expect_false(tsv_adj_cell(out$text, "z \\(per 1 unit\\)") == "not reliably estimated")
+})
+
+test_that("the forest keeps a readable axis when one term is extremely protective", {
+  p <- .logistic_prep(sc_logit(mk_logit_rows_protective(), covariates = c("x", "z"),
+                               increments = list(x = 15)))
+  fits <- .logistic_fits(p$df, p$covs, p$cov_types)
+  svg <- .logistic_forest_svg(p, fits)
+  expect_false(grepl("x (per 15 units)", svg, fixed = TRUE))
+  expect_match(svg, "z", fixed = TRUE)
 })
