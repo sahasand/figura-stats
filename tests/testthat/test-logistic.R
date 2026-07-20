@@ -384,3 +384,26 @@ test_that("render_figure routes logistic specs and returns ok JSON", {
   expect_match(res$svg, "<table", fixed = TRUE)
   expect_true(nzchar(res$code))
 })
+
+# The forest SVG is width-fitted by the browser (`#preview svg { max-width: 100% }`),
+# so a short canvas is scaled up more and carries the theme's fixed 12pt type with
+# it — the figure reads as oversized type on a squashed plot. Every other figure in
+# the app is authored between 4.5in and 6in tall against a 6-7in width; the forest
+# must stay in that proportion band at any term count, including the one-term case.
+.forest_aspect <- function(svg) {
+  w <- as.numeric(sub(".*\\bwidth='([0-9.]+)pt'.*", "\\1", substr(svg, 1, 400)))
+  h <- as.numeric(sub(".*\\bheight='([0-9.]+)pt'.*", "\\1", substr(svg, 1, 400)))
+  h / w
+}
+
+test_that("the adjusted-OR forest keeps a sane aspect ratio at every term count", {
+  # 4 terms (arm + age + two stage levels) — the shipped demo shape.
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  forest <- sub("^.*</table></div>", "", out$svg)
+  expect_gte(.forest_aspect(forest), 0.5)
+
+  # One term is the degenerate case the old formula punished hardest.
+  out1 <- fig_logistic(sc_logit(mk_logit_rows(), covariates = "arm"))
+  forest1 <- sub("^.*</table></div>", "", out1$svg)
+  expect_gte(.forest_aspect(forest1), 0.5)
+})

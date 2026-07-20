@@ -248,7 +248,12 @@
     ggplot2::scale_color_manual(values = pal, guide = "none") +
     ggplot2::labs(x = "Adjusted odds ratio (log scale)", y = NULL) +
     .fig_theme("generic")
-  .svg_string(gg, width = 6, height = 0.5 + 0.5 * nrow(d))
+  # The browser width-fits this SVG (`#preview svg { max-width: 100% }`), so the
+  # canvas proportion — not the point size — decides how large the type reads. A
+  # short canvas is scaled up further and leaves less plot around the same 12pt
+  # text. Grow with the term count, but never below the 3.6in floor, which keeps
+  # a one- or two-term forest in the same proportion band as the other figures.
+  .svg_string(gg, width = 6.5, height = max(3.6, 0.9 + 0.7 * nrow(d)))
 }
 
 # C-statistic (AUC) == normalized Mann-Whitney U from fitted probabilities.
