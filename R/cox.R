@@ -288,10 +288,13 @@ fig_cox <- function(spec) {
     "                  check.names = FALSE, stringsAsFactors = FALSE)",
     "dat <- dat[complete.cases(dat) & is.finite(dat$time) & dat$time >= 0, ]")
 
+  # levels(p$df[[cl]])[1] is the reference the app ACTUALLY fitted with, which is
+  # not always options$ref_levels: .cox_prep falls back to the most frequent level
+  # when the requested reference is absent from the complete-case data.
   relevel_lines <- unlist(lapply(covs, function(cl) {
     if (p$cov_types[[cl]] != "categorical") return(NULL)
-    ref <- qe(as.character(p$ref_levels[[cl]] %||% .cox_most_frequent(p$df[[cl]])))
-    sprintf('dat[["%s"]] <- relevel(factor(dat[["%s"]]), ref = "%s")', qe(cl), qe(cl), ref)
+    sprintf('dat[["%s"]] <- relevel(factor(dat[["%s"]]), ref = "%s")',
+            qe(cl), qe(cl), qe(levels(p$df[[cl]])[1]))
   }))
 
   uni_lines <- unlist(lapply(covs, function(cl) c(

@@ -1,6 +1,6 @@
 # 04 — Downloadable Cox script can emit a reference level the app did not fit
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Found: 2026-07-20, during the logistic-regression build
 
@@ -31,3 +31,11 @@ qe(levels(p$df[[cl]])[1])
 ```
 
 Add a test where the requested reference level is dropped by complete-case filtering and assert the emitted script matches the fitted baseline.
+
+## Comments
+
+Fixed on `fix/cox-shell-issues`. `.cox_script`'s `relevel_lines` now reads
+`levels(p$df[[cl]])[1]` — the reference the app actually fitted — instead of
+re-deriving it from `spec$options$ref_levels`. Regression test drops every row
+carrying the requested reference level via complete-case filtering and asserts the
+emitted script relevels against the fallback baseline the table shows.

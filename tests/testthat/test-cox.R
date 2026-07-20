@@ -127,3 +127,17 @@ test_that("a covariate name that prefixes another does not claim its label", {
   svg <- .cox_forest_svg(p, fits)
   expect_match(svg, "age2 (per 1 unit)", fixed = TRUE)
 })
+
+# --- Issue 04: the script must relevel against the reference actually fitted --
+
+test_that("script relevels against the fitted reference, not the requested one", {
+  rows <- mk_cox_rows()
+  # Ten Treated rows become a third arm level whose age is missing, so
+  # complete-case filtering drops every row carrying that level.
+  for (i in 101:110) { rows[[i]]$arm <- "Excluded"; rows[[i]]$age <- "" }
+  out <- fig_cox(sc_cox(rows, ref_levels = list(arm = "Excluded")))
+  # Control (100 rows) outnumbers Treated (90), so prep falls back to Control.
+  expect_match(out$svg, "arm (reference: Control)", fixed = TRUE)
+  expect_false(grepl('ref = "Excluded"', out$code, fixed = TRUE))
+  expect_match(out$code, 'ref = "Control"', fixed = TRUE)
+})
