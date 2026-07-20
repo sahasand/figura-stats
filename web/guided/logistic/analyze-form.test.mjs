@@ -66,7 +66,10 @@ import assert from "node:assert";
     { a: "4", b: "   " },     // whitespace-only b
     { a: "5", b: "z" },
   ] };
-  assert.equal(countDroppedRows(table, ["a", "b"]), 3);
+  // R drops a row only for an absent cell or the exact empty string; a
+  // whitespace-only cell is a real categorical level there, so it is NOT dropped.
+  assert.equal(countDroppedRows(table, ["a", "b"]), 2);
+  assert.equal(countDroppedRows(table, ["b"]), 1, "whitespace-only is not missing");
   assert.equal(countDroppedRows(table, ["a"]), 1, "only the mapped columns count");
   assert.equal(countDroppedRows(table, []), 0);
 }

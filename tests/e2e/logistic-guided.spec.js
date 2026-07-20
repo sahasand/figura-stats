@@ -6,7 +6,7 @@ const path = require("path");
 
 const DEMO_CSV = path.join(__dirname, "..", "testthat", "fixtures", "logistic-demo.csv");
 
-// Table cells read "1.02 (0.63–1.66, p=0.930)"; the leading number is the OR.
+// Table cells read "1.02 (0.63–1.66, p=0.932)"; the leading number is the OR.
 async function orInRow(page, label, column) {
   const row = page.locator("#preview table tbody tr", { hasText: label }).first();
   await expect(row).toBeVisible();
@@ -48,7 +48,7 @@ test("demo fits a Table-3 + forest plot and enables the .R download", async ({ p
   expect(ageAdj).toBeLessThan(1.75);
 
   await expect(page.locator("#stats")).toContainText(/adjusted/i);
-  await expect(page.locator("#stats")).toContainText(/New treatment|arm/);
+  await expect(page.locator("#stats")).toContainText(/New treatment/);
   await expect(page.locator("#stats")).toContainText(/C-statistic = 0\.6[5-9]/);
   await expect(page.locator("#stats")).toContainText("n = 320, 91 events");
   await expect(page.locator("#export-r")).toBeEnabled();

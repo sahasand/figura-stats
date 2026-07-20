@@ -127,16 +127,17 @@ test_that("forest plot labels a non-syntactic covariate header without backticks
   expect_false(grepl("`", forest, fixed = TRUE))
 })
 
-test_that("methods text reports the C-statistic (discrimination)", {
+test_that("methods text reports the C-statistic as apparent (in-sample)", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
-  expect_match(out$text, "C-statistic", fixed = TRUE)
+  expect_match(out$text, "apparent (in-sample) C-statistic = ", fixed = TRUE)
 })
 
-test_that("a well-conditioned model raises none of the quality cautions", {
+test_that("a well-conditioned model raises no separation, EPV or VIF caution", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
   expect_false(grepl("separation", out$text, ignore.case = TRUE))
   expect_false(grepl("EPV", out$text, fixed = TRUE))
   expect_false(grepl("VIF", out$text, fixed = TRUE))
+  expect_false(grepl("numerical warning", out$text, fixed = TRUE))
 })
 
 test_that("two weakly-correlated continuous covariates raise no VIF caution", {
@@ -232,6 +233,67 @@ test_that(".logistic_fit_one captures the separation warning rather than leaking
   expect_s3_class(res$fit, "glm")
 })
 
+test_that(".logistic_other_warn speaks up for a non-separation fit warning", {
+  # The separation message has its own dedicated sentence, so it must NOT also
+  # produce the generic advisory; anything else must never be discarded silently.
+  expect_identical(.logistic_other_warn(list(NULL, NULL)), "")
+  expect_identical(
+    .logistic_other_warn(list("glm.fit: fitted probabilities numerically 0 or 1 occurred")),
+    "")
+  msg <- .logistic_other_warn(list(NULL, "glm.fit: algorithm did not converge"))
+  expect_match(msg, "CAUTION", fixed = TRUE)
+  expect_match(msg, "glm.fit: algorithm did not converge", fixed = TRUE)
+  expect_match(msg, "seek statistical review", fixed = TRUE)
+})
+
+test_that("a separation-only fit does not also raise the generic warning advisory", {
+  set.seed(3); n <- 120
+  y <- rbinom(n, 1, 0.5)
+  flag <- ifelse(y == 1, "hi", "lo")
+  age <- rnorm(n, 60, 10)
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), flag = flag[i], age = age[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("flag", "age")))
+  expect_match(out$text, "separation", ignore.case = TRUE)
+  expect_false(grepl("numerical warning", out$text, fixed = TRUE))
+})
+
+test_that("an unreliable UNADJUSTED cell is explained in the methods text", {
+  # x is explained away by z: its crude effect is large (and, at a per-15-unit
+  # increment, blows the Wald CI past the 1e6 reliability threshold) while the
+  # adjusted effect is near zero and stays inside it. Only the unadjusted column
+  # reads "not reliably estimated", so a check on the adjusted column alone would
+  # leave that cell in the table with nothing explaining it.
+  set.seed(101); n <- 400
+  z <- rnorm(n)
+  x <- z + rnorm(n, 0, 0.3)
+  y <- rbinom(n, 1, plogis(-0.5 + 1.2 * z))
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x = x[i], z = z[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("x", "z"),
+                               increments = list(x = 15)))
+  label <- "x \\(per 15 units\\)"
+  expect_identical(tsv_unadj_cell(out$text, label), "not reliably estimated")
+  expect_false(tsv_adj_cell(out$text, label) == "not reliably estimated")
+  expect_match(out$text, "separation or severe collinearity", fixed = TRUE)
+})
+
+test_that("a single-covariate model is described as univariable, not adjusted", {
+  out <- fig_logistic(sc_logit(mk_logit_rows(), covariates = c("arm")))
+  expect_match(out$text, "Univariable logistic regression (n = 240", fixed = TRUE)
+  expect_match(out$text, "arm as the only covariate", fixed = TRUE)
+  expect_match(out$text, "No adjustment was made for other variables", fixed = TRUE)
+  expect_false(grepl("Multivariable", out$text, fixed = TRUE))
+  expect_false(grepl("adjusted for arm", out$text, fixed = TRUE))
+})
+
+test_that("a multi-covariate model keeps the multivariable wording", {
+  out <- fig_logistic(sc_logit(mk_logit_rows(), covariates = c("arm", "age")))
+  expect_match(out$text, "Multivariable logistic regression (n = 240", fixed = TRUE)
+  expect_match(out$text, "adjusted for arm, age", fixed = TRUE)
+  expect_false(grepl("Univariable logistic regression", out$text, fixed = TRUE))
+})
+
 test_that("influential observations (Cook's distance) are flagged when present", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
   expect_match(out$text, "flagged as influential (Cook's distance > 4/n)", fixed = TRUE)
@@ -246,7 +308,9 @@ test_that("logistic code parses as R and mentions glm(binomial)", {
 
 test_that("demo-shape spec embeds data (no read.csv) in the script", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))   # no source_filename -> embedded
-  expect_match(out$code, "data.frame", fixed = TRUE)
+  # The embed literal specifically — the read.csv path also emits "data.frame"
+  # further down, so the bare word could never fail this test.
+  expect_match(out$code, "df <- data.frame(outcome = c(\"", fixed = TRUE)
   expect_false(grepl("read.csv", out$code, fixed = TRUE))
 })
 

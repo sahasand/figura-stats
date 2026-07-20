@@ -42,10 +42,14 @@ export function renderReadiness({ roles, eventValue }) {
 }
 
 // Rows the model will drop, because a mapped column is missing (complete cases).
+// "Missing" is exactly what R/logistic.R treats as missing: an absent cell or the
+// empty string. A whitespace-only cell is NOT missing there — it stays a real
+// categorical level (and makes .logistic_is_numeric read the column as
+// categorical), so counting it here would over-state the preview.
 export function countDroppedRows(table, columns) {
   if (columns.length === 0) return 0;
   return table.rows.filter((r) =>
-    columns.some((c) => r[c] == null || String(r[c]).trim() === "")).length;
+    columns.some((c) => r[c] == null || String(r[c]) === "")).length;
 }
 
 // --- DOM wiring (exercised by the Playwright e2e test) ----------------------

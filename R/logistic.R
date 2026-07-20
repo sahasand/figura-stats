@@ -113,6 +113,22 @@
   list(fit = fit, warn = warn)
 }
 
+# Advisory for any captured glm warning that is NOT the recognized separation
+# signal ("fitted probabilities numerically 0 or 1"), which has its own dedicated
+# sentence. Without this, a warning such as "glm.fit: algorithm did not converge"
+# would be captured, muffled, and then silently discarded, leaving the user with
+# odds ratios from a bad fit and no caution at all. Returns "" when there is
+# nothing to say. Advisory only — it never gates a fit or changes a number.
+.logistic_other_warn <- function(warns) {
+  w <- unlist(warns, use.names = FALSE)
+  w <- w[!is.na(w) & nzchar(w) & !grepl("fitted probabilities", w)]
+  if (length(w) == 0) return("")
+  sprintf(paste0(" CAUTION: fitting reported a numerical warning (\"%s\"); the odds ",
+                 "ratios above may come from a model that did not fit cleanly. Check ",
+                 "the covariates for sparse categories or extreme values, and seek ",
+                 "statistical review."), w[[1]])
+}
+
 # Univariable glm per covariate + one joint model.
 .logistic_fits <- function(df, covs, cov_types) {
   uni <- lapply(covs, function(cl)
@@ -369,8 +385,13 @@ fig_logistic <- function(spec) {
   # Separation: glm's captured "fitted probabilities 0/1" warning, or any adjusted
   # OR that blew past the reliability threshold. Flagged, never auto-corrected.
   sep_warn <- !is.null(fits$joint$warn) && grepl("fitted probabilities", fits$joint$warn)
-  sep_cell <- any(vapply(disp_rows, function(r) identical(r$adj, "not reliably estimated"),
-                         logical(1)))
+  # Both columns are inspected: an UNADJUSTED cell can blow past the reliability
+  # threshold while the adjusted one stays finite (a covariate whose crude effect is
+  # explained away), and that cell would otherwise appear in the table with no
+  # explanatory sentence anywhere in the methods text.
+  sep_cell <- any(vapply(disp_rows, function(r)
+    identical(r$adj, "not reliably estimated") ||
+      identical(r$unadj, "not reliably estimated"), logical(1)))
   # Both causes are named because both can trip this rule: a covariate that predicts
   # the outcome (near-)perfectly, and one that duplicates another covariate — the
   # latter blows the CI past the same threshold without any separation at all.
@@ -381,6 +402,15 @@ fig_logistic <- function(spec) {
            "not reliably estimated by standard logistic regression. Consider collapsing ",
            "sparse categories, dropping or combining a redundant variable, or a penalized ",
            "(Firth) fit, and seek statistical review.") else ""
+
+  # Fallback advisory for any captured fit warning (joint model or any univariable
+  # one) that no other caution already explains. Separation frequently surfaces as
+  # "glm.fit: algorithm did not converge" rather than the fitted-probabilities
+  # message, so when the separation sentence is already being printed it covers the
+  # warning and this stays quiet; otherwise the warning would be muffled and then
+  # thrown away, leaving an unconverged fit's odds ratios with no caution at all.
+  other_warn_line <- if (nzchar(sep_line)) "" else .logistic_other_warn(
+    c(list(fits$joint$warn), lapply(fits$uni, function(f) f$warn)))
 
   # EPV (events per variable): soft advisory heuristic, never a gate.
   n_terms <- sum(vapply(p$covs, function(cl)
@@ -393,7 +423,10 @@ fig_logistic <- function(spec) {
   # Discrimination: one overall C-statistic (base-R AUC), not per covariate.
   auc <- .logistic_auc(stats::fitted(jfit), p$df$.y)
   auc_line <- if (is.finite(auc))
-    sprintf(" Overall model discrimination: C-statistic = %.2f.", auc) else ""
+    # "apparent" because it is measured on the same rows the model was fitted to,
+    # with no split-sample or bootstrap correction — it is optimistically biased.
+    sprintf(" Overall model discrimination: apparent (in-sample) C-statistic = %.2f.",
+            auc) else ""
 
   # Multicollinearity: VIF for continuous predictors only.
   num_covs <- names(p$cov_types)[p$cov_types == "numeric"]
@@ -430,11 +463,22 @@ fig_logistic <- function(spec) {
                collapse = "\n")
   drop_note <- if (p$n_dropped > 0)
     sprintf(" %d row(s) with missing values were excluded.", p$n_dropped) else ""
-  methods <- sprintf(paste0("Multivariable logistic regression (n = %d, %d events) ",
-    "adjusted for %s. Unadjusted odds ratios are from single-covariate models; ",
-    "adjusted odds ratios are from the joint model.%s%s%s%s%s%s"),
-    p$n, p$n_event, paste(p$covs, collapse = ", "),
-    sep_line, epv_line, auc_line, vif_line, infl_line, drop_note)
+  # With a single covariate there is no joint model to speak of: the fit is
+  # univariable, nothing is adjusted for, and the two table columns are the same
+  # model. Claiming "multivariable ... adjusted for X" there would be false in a
+  # sentence built to be pasted into a manuscript.
+  lead <- if (length(p$covs) == 1)
+    sprintf(paste0("Univariable logistic regression (n = %d, %d events) with %s as the ",
+                   "only covariate. No adjustment was made for other variables, so the ",
+                   "unadjusted and adjusted columns report the same model."),
+            p$n, p$n_event, p$covs[[1]])
+  else
+    sprintf(paste0("Multivariable logistic regression (n = %d, %d events) adjusted for ",
+                   "%s. Unadjusted odds ratios are from single-covariate models; ",
+                   "adjusted odds ratios are from the joint model."),
+            p$n, p$n_event, paste(p$covs, collapse = ", "))
+  methods <- paste0(lead, sep_line, other_warn_line, epv_line, auc_line, vif_line,
+                    infl_line, drop_note)
   text <- paste0(tsv, "\n\n", methods)
 
   list(svg = svg_field, text = text, code = .logistic_script(spec, p, fits))

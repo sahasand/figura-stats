@@ -10,9 +10,10 @@ const SECTIONS = [
     or versus a reference level (for a category).</p>
     <p>Unadjusted odds ratios come from one model per covariate. Adjusted odds ratios
     come from a single joint model, so each one is the effect of that variable with the
-    others held fixed. The gap between the two columns is the confounding that the
-    adjustment removed — when a treatment is given more often to sicker patients, the
-    unadjusted column carries their extra risk and the adjusted column does not.</p>` },
+    others held fixed. Most of the gap between the two columns here is the confounding
+    that the adjustment removed — when a treatment is given more often to sicker
+    patients, the unadjusted column carries their extra risk and the adjusted column
+    does not.</p>` },
   { title: "What an odds ratio is, and is not", html: `
     <p>Odds are events divided by non-events: 30 complications in 100 patients is a
     risk of 30% but odds of 30/70 = 0.43. An odds ratio compares those odds between
@@ -22,7 +23,15 @@ const SECTIONS = [
     close enough that people read an OR as a relative risk; when the outcome is common
     — as in the example below, where 28% of patients had a complication — an OR of 0.50
     corresponds to about a 42% reduction in <em>risk</em>, not the 50% that "half"
-    suggests. Report it as an odds ratio and say so.</p>` },
+    suggests. Report it as an odds ratio and say so.</p>
+    <p>One more quirk: an adjusted odds ratio differs from the unadjusted one even when
+    there is nothing to correct. Add a covariate that predicts the outcome and the odds
+    ratio for everything else moves further from 1, whether or not that covariate has
+    any relation to the exposure — statisticians call this
+    <strong>non-collapsibility</strong>, and it is a property of the odds ratio itself,
+    not evidence that bias was removed. So read a gap between the two columns as
+    confounding only when the covariate you added is plausibly related to both the
+    exposure and the outcome.</p>` },
   { title: "Is logistic regression appropriate?", html: `
     <p>Use it when each row is one independent participant, the outcome is
     <strong>binary</strong> (event / no event), and you have the baseline covariates
@@ -32,7 +41,9 @@ const SECTIONS = [
     <p>It checks for <strong>separation</strong> (a covariate that predicts the outcome
     almost perfectly, which makes odds ratios meaningless), for
     <strong>multicollinearity</strong> among numeric covariates (two variables carrying
-    the same information), and it reports the model's overall discrimination. Each of
+    the same information), and it reports the model's overall discrimination as a
+    C-statistic — measured on the very patients the model was fitted to, so it flatters
+    the model and would be lower in new patients. Each of
     those is advisory — none of them blocks a result or changes a number. The tool does
     not fit penalized (Firth), matched, or mixed models; if separation is flagged, seek
     statistical review rather than reporting the affected odds ratios.</p>` },
