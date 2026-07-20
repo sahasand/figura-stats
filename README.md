@@ -34,6 +34,10 @@ by mapping your own CSV columns to the roles the method needs.
 - **Cox regression** — the "Table 3": unadjusted beside adjusted hazard
   ratios, an adjusted-HR forest plot, and a proportional-hazards check via
   `cox.zph` reported non-blocking.
+- **Logistic regression** — the "Table 3" for a binary outcome: unadjusted
+  beside adjusted odds ratios, an adjusted-OR forest plot on a log axis with
+  a null line at OR = 1, plus non-blocking diagnostic checks (separation,
+  events-per-variable, collinearity) reported alongside.
 - **Explore plot** — build a ggplot2 figure interactively. The R shown to you
   is never string-built; the plot is constructed as an expression and the same
   expression is deparsed into the code pane, so the script is literally the
