@@ -249,17 +249,23 @@
 # not assessed. NULL when fewer than 2 continuous covariates.
 .logistic_vif <- function(df, num_covs) {
   if (length(num_covs) < 2) return(NULL)
-  setNames(vapply(num_covs, function(v) {
+  vapply(num_covs, function(v) {
     others <- setdiff(num_covs, v)
     f <- stats::as.formula(sprintf("`%s` ~ %s", v,
       paste(sprintf("`%s`", others), collapse = " + ")))
+    lmfit <- stats::lm(f, data = df)
     # An exactly-duplicated covariate makes summary.lm emit "essentially perfect
     # fit"; that is precisely the case the r2 >= 1 branch below reports, so muffle
-    # the library-internal warning rather than let it leak.
-    r2 <- withCallingHandlers(summary(stats::lm(f, data = df))$r.squared,
-      warning = function(w) invokeRestart("muffleWarning"))
+    # that one library-internal message. Anything else is re-raised untouched — a
+    # blanket muffle here would hide future regressions from the WARN-0 gate. The
+    # handler wraps summary() only, so lm() itself can never be silenced.
+    r2 <- withCallingHandlers(summary(lmfit)$r.squared,
+      warning = function(w) {
+        if (grepl("essentially perfect fit", conditionMessage(w), fixed = TRUE))
+          invokeRestart("muffleWarning")
+      })
     if (!is.finite(r2) || r2 >= 1) Inf else 1 / (1 - r2)
-  }, numeric(1)), num_covs)
+  }, numeric(1))
 }
 
 fig_logistic <- function(spec) {
@@ -276,11 +282,16 @@ fig_logistic <- function(spec) {
   sep_warn <- !is.null(fits$joint$warn) && grepl("fitted probabilities", fits$joint$warn)
   sep_cell <- any(vapply(disp_rows, function(r) identical(r$adj, "not reliably estimated"),
                          logical(1)))
+  # Both causes are named because both can trip this rule: a covariate that predicts
+  # the outcome (near-)perfectly, and one that duplicates another covariate — the
+  # latter blows the CI past the same threshold without any separation at all.
   sep_line <- if (sep_warn || sep_cell)
-    paste0(" CAUTION: separation was detected — one or more covariates predict the outcome ",
-           "(near-)perfectly, so those odds ratios are not reliably estimated by standard ",
-           "logistic regression. Consider collapsing sparse categories, dropping the term, ",
-           "or a penalized (Firth) fit, and seek statistical review.") else ""
+    paste0(" CAUTION: separation or severe collinearity was detected — one or more ",
+           "covariates either predict the outcome (near-)perfectly or duplicate ",
+           "information already carried by another covariate, so those odds ratios are ",
+           "not reliably estimated by standard logistic regression. Consider collapsing ",
+           "sparse categories, dropping or combining a redundant variable, or a penalized ",
+           "(Firth) fit, and seek statistical review.") else ""
 
   # EPV (events per variable): soft advisory heuristic, never a gate.
   n_terms <- sum(vapply(p$covs, function(cl)
@@ -299,10 +310,13 @@ fig_logistic <- function(spec) {
   num_covs <- names(p$cov_types)[p$cov_types == "numeric"]
   vif <- .logistic_vif(p$df, num_covs)
   vif_line <- if (!is.null(vif) && any(vif > 5)) {
-    finite_vif <- vif[is.finite(vif)]
-    # An exactly-duplicated covariate gives R^2 = 1, so the largest VIF can be
-    # infinite; say so in words rather than printing "Inf".
-    largest <- if (length(finite_vif) > 0) sprintf("%.1f", max(finite_vif)) else "effectively infinite"
+    # An exactly-duplicated covariate gives R^2 = 1, so a VIF can be infinite; say so
+    # in words rather than printing "Inf". Keyed off the presence of a non-finite VIF,
+    # not off the absence of finite ones: with a third, independent covariate a finite
+    # VIF of ~1.0 also exists, and reporting it would read "largest VIF = 1.0, above
+    # the usual threshold of 5".
+    largest <- if (any(!is.finite(vif))) "effectively infinite"
+      else sprintf("%.1f", max(vif))
     sprintf(paste0(" CAUTION: multicollinearity among continuous covariates ",
                    "(largest VIF = %s, above the usual threshold of 5); consider dropping ",
                    "a redundant variable."), largest)

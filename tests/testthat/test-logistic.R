@@ -139,6 +139,20 @@ test_that("a well-conditioned model raises none of the quality cautions", {
   expect_false(grepl("VIF", out$text, fixed = TRUE))
 })
 
+test_that("two weakly-correlated continuous covariates raise no VIF caution", {
+  # The demo fixture's only continuous covariate is `age`, so .logistic_vif returns
+  # NULL there and the `any(vif > 5)` threshold is never consulted. Here two
+  # continuous covariates exist (VIF is computed) but are near-orthogonal.
+  set.seed(21); n <- 300
+  x1 <- rnorm(n)
+  x2 <- 0.1 * x1 + rnorm(n)                    # r ~ 0.1 with x1 -> VIF ~ 1.01
+  y <- rbinom(n, 1, plogis(0.5 * x1))
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x1 = x1[i], x2 = x2[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("x1", "x2")))
+  expect_false(grepl("VIF", out$text, fixed = TRUE))
+})
+
 test_that("EPV warning fires when events per term is under 10", {
   # 6 model terms (5 non-reference levels of `g` + `x`) against 10 events -> EPV < 2.
   set.seed(9); n <- 60
@@ -183,4 +197,54 @@ test_that("an exactly duplicated covariate reports an infinite VIF in words", {
   out <- fig_logistic(sc_logit(rows, covariates = c("x1", "x_copy")))
   expect_match(out$text, "VIF = effectively infinite", fixed = TRUE)
   expect_false(grepl("VIF = Inf", out$text, fixed = TRUE))
+  # The blown-out CI trips the separation rule here, but the cause is collinearity,
+  # so the sentence must name both and must not prescribe only separation remedies.
+  expect_match(out$text, "separation or severe collinearity", fixed = TRUE)
+  expect_match(out$text, "redundant variable", fixed = TRUE)
+})
+
+test_that("an infinite VIF is reported in words even when a finite VIF also exists", {
+  # x1 and x_copy are exactly collinear (VIF = Inf) while x3 is independent
+  # (VIF ~ 1.0). Reporting the largest FINITE VIF here would print
+  # "largest VIF = 1.0, above the usual threshold of 5" — self-contradictory.
+  set.seed(13); n <- 200
+  x1 <- rnorm(n); x3 <- rnorm(n)
+  y <- rbinom(n, 1, plogis(0.5 * x1))
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"),
+         x1 = x1[i], x_copy = x1[i], x3 = x3[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("x1", "x_copy", "x3")))
+  expect_match(out$text, "VIF = effectively infinite", fixed = TRUE)
+  expect_false(grepl("VIF = 1.0", out$text, fixed = TRUE))
+})
+
+test_that(".logistic_fit_one captures the separation warning rather than leaking it", {
+  # The only consumer of the warning-capture seam is fig_logistic's `sep_warn`, which
+  # greps "fitted probabilities"; pin the captured message's shape directly. A
+  # continuous perfect predictor raises BOTH glm warnings and the capture keeps the
+  # last one, which is the "fitted probabilities" message sep_warn looks for.
+  set.seed(5); n <- 120
+  x <- rnorm(n)
+  df <- data.frame(.y = as.integer(x > 0), x = x, check.names = FALSE)
+  res <- .logistic_fit_one(stats::as.formula(".y ~ `x`"), df)
+  expect_false(is.null(res$warn))
+  expect_match(res$warn, "fitted probabilities numerically 0 or 1 occurred", fixed = TRUE)
+  expect_s3_class(res$fit, "glm")
+})
+
+test_that("influential observations (Cook's distance) are flagged when present", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  expect_match(out$text, "flagged as influential (Cook's distance > 4/n)", fixed = TRUE)
+})
+
+test_that("no influential-point sentence when no observation exceeds 4/n", {
+  # Perfectly balanced, effect-free design: every Cook's distance sits under 4/n.
+  n <- 200
+  x <- rep(seq(-1, 1, length.out = n / 2), 2)
+  y <- rep(c(0, 1), each = n / 2)
+  rows <- lapply(seq_len(n), function(i)
+    list(outcome = ifelse(y[i] == 1, "Event", "NoEvent"), x = x[i]))
+  out <- fig_logistic(sc_logit(rows, covariates = c("x")))
+  expect_false(grepl("influential", out$text, fixed = TRUE))
+  expect_false(grepl("Cook", out$text, fixed = TRUE))
 })
