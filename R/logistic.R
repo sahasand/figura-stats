@@ -12,6 +12,14 @@
   !any(!is.na(raw) & is.na(num))
 }
 
+# The term label R uses for a column inside a formula, and therefore the prefix of
+# its coefficient names. A syntactic name appears bare (`arm` -> "armTreated"); a
+# non-syntactic one (a header with a space, common in clinical CSV exports) keeps
+# the backticks the formula was written with ("`study arm`Treated").
+.logistic_term_label <- function(cl) {
+  if (identical(make.names(cl), cl)) cl else sprintf("`%s`", cl)
+}
+
 # Most frequent non-NA value of a character vector (default reference level).
 .logistic_most_frequent <- function(x) {
   x <- x[!is.na(x) & x != ""]
@@ -38,11 +46,13 @@
 
   ev <- as.character(spec$options$event_value %||% "")
   outcome_raw <- .char_col(rows, ocol)
+  # A blank outcome cell is missing, not a non-event: NA here so complete.cases
+  # drops the row instead of silently counting it in the non-event group.
+  outcome_raw[!is.na(outcome_raw) & outcome_raw == ""] <- NA
   ev_num <- suppressWarnings(as.numeric(ev))
   y <- as.integer(outcome_raw == ev |
     (!is.na(ev_num) & !is.na(suppressWarnings(as.numeric(outcome_raw))) &
        suppressWarnings(as.numeric(outcome_raw)) == ev_num))
-  y[is.na(y)] <- NA_integer_
 
   cov_types <- setNames(
     vapply(covs, function(cl) if (.logistic_is_numeric(rows, cl)) "numeric" else "categorical",
@@ -68,6 +78,11 @@
   # problem, and "too few events" is the actionable message.
   n_event <- sum(df$.y == 1)
   n_min <- min(n_event, nrow(df) - n_event)
+  # No match at all is a column/value mix-up, not a sample-size problem — say so,
+  # otherwise "too few events (0 ...)" points the user at the wrong cause.
+  if (n_event == 0) stop(sprintf(
+    "No rows have outcome '%s' in column '%s'; check the event value you selected.",
+    ev, ocol))
   if (n_min < 10) stop(sprintf("Too few events (%d in the smaller outcome group) to fit a reliable logistic model; at least 10 are needed.", n_min))
 
   # Rescale numeric covariates to the chosen increment (per-k OR = exp(k*beta));
@@ -130,17 +145,18 @@
   jsm <- summary(fits$joint$fit)$coefficients
   for (cl in p$covs) {
     usm <- summary(fits$uni[[cl]]$fit)$coefficients
+    tl <- .logistic_term_label(cl)
     if (p$cov_types[[cl]] == "numeric") {
       k <- p$incr[[cl]]
       unit <- if (k == 1) "per 1 unit" else sprintf("per %g units", k)
       rows[[length(rows) + 1]] <- list(term = sprintf("%s (%s)", cl, unit),
-        unadj = .logistic_or_cell(usm, cl), adj = .logistic_or_cell(jsm, cl))
+        unadj = .logistic_or_cell(usm, tl), adj = .logistic_or_cell(jsm, tl))
     } else {
       lv <- levels(p$df[[cl]])
       rows[[length(rows) + 1]] <- list(term = sprintf("%s (reference: %s)", cl, lv[1]),
         unadj = "", adj = "")
       for (l in lv[-1]) {
-        key <- paste0(cl, l)
+        key <- paste0(tl, l)
         rows[[length(rows) + 1]] <- list(term = paste0("  ", l),
           unadj = .logistic_or_cell(usm, key), adj = .logistic_or_cell(jsm, key))
       }

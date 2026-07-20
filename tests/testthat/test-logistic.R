@@ -34,18 +34,61 @@ test_that("both unadjusted and adjusted ORs are reported", {
   expect_match(out$text, "[Uu]nadjusted")
 })
 
+# Third TSV field (adjusted OR) of the row whose Characteristic is `label`.
+tsv_adj_cell <- function(text, label) {
+  line <- grep(paste0("^", label, "\t"), strsplit(text, "\n")[[1]], value = TRUE)
+  expect_length(line, 1)
+  strsplit(line, "\t")[[1]][3]
+}
+tsv_unadj_cell <- function(text, label) {
+  line <- grep(paste0("^", label, "\t"), strsplit(text, "\n")[[1]], value = TRUE)
+  expect_length(line, 1)
+  strsplit(line, "\t")[[1]][2]
+}
+
 test_that("adjusted arm OR recovers the simulated protective effect (< 1)", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
-  or <- as.numeric(sub(".*Treated[^0-9]*([0-9.]+).*", "\\1",
-                       gsub("\n", " ", out$text)))
+  adj <- tsv_adj_cell(out$text, "Treated")
+  or <- as.numeric(sub("^([0-9.]+) .*$", "\\1", adj))
+  expect_false(is.na(or))
   expect_true(or < 0.85)
 })
 
 test_that("reference level appears and can be overridden", {
   out <- fig_logistic(sc_logit(mk_logit_rows()))
-  expect_match(out$svg, "reference", ignore.case = TRUE)
+  expect_match(out$svg, "reference: Control", fixed = TRUE)
   out2 <- fig_logistic(sc_logit(mk_logit_rows(), ref_levels = list(arm = "Treated")))
-  expect_match(out2$svg, "Treated", fixed = TRUE)
+  expect_match(out2$svg, "reference: Treated", fixed = TRUE)
+  expect_false(grepl("reference: Control", out2$svg, fixed = TRUE))
+  expect_match(out2$svg, "<span class=\"lvl\">Control</span>", fixed = TRUE)
+  expect_false(grepl("<span class=\"lvl\">Treated</span>", out2$svg, fixed = TRUE))
+})
+
+test_that("a covariate whose header is not a syntactic R name is estimated", {
+  rows <- lapply(mk_logit_rows(), function(r)
+    setNames(list(r$outcome, r$arm, r$age), c("outcome", "study arm", "age at entry")))
+  out <- fig_logistic(sc_logit(rows, covariates = c("study arm", "age at entry")))
+  expect_false(grepl("not reliably estimated", out$text, fixed = TRUE))
+  unadj <- tsv_unadj_cell(out$text, "Treated")
+  adj <- tsv_adj_cell(out$text, "Treated")
+  expect_false(unadj == "not reliably estimated")
+  expect_false(adj == "not reliably estimated")
+  expect_match(unadj, "^[0-9.]+ \\([0-9.]+")
+  expect_match(adj, "^[0-9.]+ \\([0-9.]+")
+  expect_true(as.numeric(sub("^([0-9.]+) .*$", "\\1", adj)) < 0.85)
+})
+
+test_that("blank outcome cells are treated as missing, not as non-events", {
+  rows <- mk_logit_rows()
+  for (i in 1:20) rows[[i]]$outcome <- ""
+  out <- fig_logistic(sc_logit(rows))
+  expect_match(out$text, "(n = 220", fixed = TRUE)
+  expect_match(out$text, "20 row(s) with missing values were excluded.", fixed = TRUE)
+})
+
+test_that("an event value matching no row errors with an actionable message", {
+  expect_error(fig_logistic(sc_logit(mk_logit_rows(), event_value = "Relapse")),
+               "Relapse", fixed = TRUE)
 })
 
 test_that("no covariate selected errors readably", {
