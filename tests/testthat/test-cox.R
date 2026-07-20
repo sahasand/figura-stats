@@ -235,3 +235,23 @@ test_that("script relevels against the fitted reference, not the requested one",
   expect_false(grepl('ref = "Excluded"', out$code, fixed = TRUE))
   expect_match(out$code, 'ref = "Control"', fixed = TRUE)
 })
+
+# See the note on the matching test in test-logistic.R: the forest SVG is
+# width-fitted by the browser, so a short canvas magnifies the theme's fixed
+# 12pt type. Keep cox in the same proportion band as its sibling and as the
+# other figures in the app.
+.cox_forest_aspect <- function(svg) {
+  w <- as.numeric(sub(".*\\bwidth='([0-9.]+)pt'.*", "\\1", substr(svg, 1, 400)))
+  h <- as.numeric(sub(".*\\bheight='([0-9.]+)pt'.*", "\\1", substr(svg, 1, 400)))
+  h / w
+}
+
+test_that("the adjusted-HR forest keeps a sane aspect ratio at every term count", {
+  out <- fig_cox(sc_cox(mk_cox_rows()))
+  forest <- sub("^.*</table></div>", "", out$svg)
+  expect_gte(.cox_forest_aspect(forest), 0.5)
+
+  out1 <- fig_cox(sc_cox(mk_cox_rows(), covariates = "arm"))
+  forest1 <- sub("^.*</table></div>", "", out1$svg)
+  expect_gte(.cox_forest_aspect(forest1), 0.5)
+})
