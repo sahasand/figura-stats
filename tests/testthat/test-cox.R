@@ -89,3 +89,41 @@ test_that("demo-shape spec embeds data (no read.csv) in the script", {
   expect_match(out$code, "data.frame", fixed = TRUE)
   expect_false(grepl("read.csv", out$code, fixed = TRUE))
 })
+
+# --- Issue 01: coefficient keys must respect the backticks the formula used ----
+
+# Same data, but the arm column carries a non-syntactic header (a space), which
+# is routine in clinical CSV exports.
+mk_cox_rows_spaced <- function() {
+  lapply(mk_cox_rows(), function(r)
+    list(time = r$time, status = r$status, `study arm` = r$arm, age = r$age))
+}
+
+test_that("a covariate whose header has a space still gets estimated HRs", {
+  out <- fig_cox(sc_cox(mk_cox_rows_spaced(), covariates = c("study arm", "age")))
+  expect_false(grepl("not reliably estimated", out$text, fixed = TRUE))
+  hr <- as.numeric(sub(".*Treated[^0-9]*([0-9.]+).*", "\\1",
+                        gsub("\n", " ", out$text)))
+  expect_true(hr < 0.8)
+})
+
+test_that("forest plot labels a space-headered covariate without backticks", {
+  p <- .cox_prep(sc_cox(mk_cox_rows_spaced(), covariates = c("study arm", "age")))
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  svg <- .cox_forest_svg(p, fits)
+  expect_match(svg, "study arm: Treated", fixed = TRUE)
+  expect_false(grepl("`study arm`", svg, fixed = TRUE))
+})
+
+test_that("a covariate name that prefixes another does not claim its label", {
+  base <- mk_cox_rows()
+  set.seed(7)
+  noise <- round(rnorm(length(base), 100, 15), 1)   # independent of age
+  rows <- lapply(seq_along(base), function(i)
+    list(time = base[[i]]$time, status = base[[i]]$status,
+         age = base[[i]]$age, age2 = noise[i]))
+  p <- .cox_prep(sc_cox(rows, covariates = c("age", "age2")))
+  fits <- .cox_fits(p$df, p$covs, p$cov_types)
+  svg <- .cox_forest_svg(p, fits)
+  expect_match(svg, "age2 (per 1 unit)", fixed = TRUE)
+})
