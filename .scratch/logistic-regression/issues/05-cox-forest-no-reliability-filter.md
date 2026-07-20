@@ -79,3 +79,12 @@ warns, forest must be empty), and a tiny-scale numeric covariate whose adjusted 
 reaches ~1e7 with no warning (that term drops, the well-behaved arm term stays).
 The healthy demo fit's forest SVG is byte-identical before and after (md5
 699ab9dc75ce7f80c76d9964f5f05303).
+
+## Scope note on closure (2026-07-20)
+
+Resolved **for the scenario this issue describes** — a warned joint fit, and an upper CI
+past 1e6. It does **not** close the axis-flattening class in general: a term whose CI sits
+far *below* 1 is finite, unwarned, and under the 1e6 bound, so it survives the filter and
+can span a comparable number of decades. Verified during review with the mirror of this
+branch's own fixture (`lp <- -15 * x`): adjusted CI `1.46e-11 – 1.78e-07`, kept and
+plotted, squashing a healthy `0.31 – 0.69` term to a hairline. Tracked as issue 08.
