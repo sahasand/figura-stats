@@ -15,7 +15,7 @@ Label: ready-for-agent. None are merge blockers; verdict was "Ready to merge" wi
 - [ ] e2e: understand test asserts only 2/5 headings; context-isolation test re-runs full demo path (suite time).
 
 ## From /design-review outside voice (2026-07-14, cross-file)
-- [ ] Label association: file inputs + textareas across web/forms/*.js use <p> captions, not <label for> (consort 0/2, roc 0/1, table1 1/2). Mechanical a11y batch with the WP6 items.
-- [ ] Unified error/render path: CSV parse errors (roc.js:22, correlation.js:24) write to #stats without .error class; two different "Rendering…" strings (app.js vs guided-analysis.js). One shared showError()/showRendering() helper.
-- [ ] Privacy promise stated 3 ways ("never uploaded" / "never leaves this browser" / "read locally") — consolidate to one constant.
+- [~] OBSOLETE (2026-07-21): named `web/forms/*.js` (consort, roc, table1), all deleted in the trim to guided analyses only — see git tag `pre-trim-8-analyses`. The label-association point may still hold for the guided analyze forms; re-audit there rather than resurrecting this item.
+- [~] PARTLY OBSOLETE (2026-07-21): `roc.js` and `correlation.js` no longer exist. The live half stands — `app.js` and `guided/shell.js` still carry two different "Rendering…" strings and duplicate error-painting; one shared showError()/showRendering() would still pay.
+- [ ] Privacy promise stated **four** ways as of the 2026-07-20 reskin — "NO DATA EGRESS" (top-bar pill) / "no backend that could receive your data" (rail invariant card) / "never uploaded" / "read locally". The reskin added the first two and deleted the footer's "never leaves this browser", so the count went up, not down. Consolidate to one constant.
 - [ ] a11y: KM analyze form — aria-describedby linking #km-event to its censored-hint and #km-render to #km-dropped-note.
