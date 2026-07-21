@@ -167,7 +167,12 @@ body {
 
 .brand h1 {
   margin: 0;
-  font: 600 1.0625rem/1 var(--serif);
+  /* line-height must clear the DESCENDER, not just the em box: at 1.0 the
+     content box is exactly font-size tall while Source Serif's ascent+descent
+     is ~1.2em, and the `overflow: hidden` below (there so a narrow viewport can
+     ellipsis the wordmark) then shears the g. IBM Plex Sans, the pre-reskin
+     wordmark face, has a shallower descender and never showed it. */
+  font: 600 1.0625rem/1.4 var(--serif);
   letter-spacing: -.01em;
   white-space: nowrap;
   overflow: hidden;
