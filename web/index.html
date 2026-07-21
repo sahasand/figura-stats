@@ -4,6 +4,31 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Figura — clinical manuscript figures &amp; statistics</title>
+  <meta name="description" content="Journal-ready tables and figures for clinical manuscripts — Kaplan–Meier, Cox regression, logistic regression, Table 1 — computed by real R running in your browser. Your data never leaves the tab." />
+  <link rel="canonical" href="https://figurastats.org/" />
+
+  <!-- Link-preview cards (LinkedIn, Slack, iMessage, …). These crawlers do not
+       run JavaScript, so the tags must be in the served HTML — they are, since
+       index.html is a real static file and the app only fills panes afterwards.
+       og:image MUST be absolute and publicly reachable; it lives in web/ so the
+       deploy artifact (`path: web`) actually publishes it, the same trap CNAME
+       hits. LinkedIn requires >= 1200x627 at ~1.91:1 and <= 5MB; this is
+       1200x630 / 81KB. The spec asks for og:image:alt whenever og:image is set.
+       LinkedIn caches a preview for 7 days — after changing any of this, clear
+       it at linkedin.com/post-inspector, and note the Inspector will not fix a
+       card on an ALREADY-published post, only new shares. -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Figura" />
+  <meta property="og:url" content="https://figurastats.org/" />
+  <meta property="og:title" content="Figura — clinical manuscript figures &amp; statistics" />
+  <meta property="og:description" content="Real R, running in your browser. Journal-ready tables and figures for clinical manuscripts. Your data never leaves the tab — there is no backend that could receive it." />
+  <meta property="og:image" content="https://figurastats.org/preview.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Figura: real R, running in your browser — beside a journal-style Table 1 of baseline characteristics." />
+  <meta name="twitter:card" content="summary_large_image" />
+
   <link rel="preconnect" href="https://webr.r-wasm.org" crossorigin>
   <link rel="stylesheet" href="styles.css" />
 </head>

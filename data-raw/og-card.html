@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>og-card source — regenerates web/preview.png</title>
+<!--
+  Source for web/preview.png, the link-preview card (LinkedIn et al).
+  Kept here for the same reason the demo generators are: the committed artifact
+  is the output, and without its source the next tagline change means rebuilding
+  the card from scratch.
+
+  Regenerate (1200x630, LinkedIn needs >=1200x627 at ~1.91:1, <=5MB):
+    browse goto file://./data-raw/og-card.html
+    browse screenshot web/preview.png --selector ".card"
+
+  It pulls ../web/styles.css so the card can never drift from the app's real
+  tokens — the type, the teal, the warm paper and the galley-proof rules are the
+  shipped ones, not a redrawing of them. The fonts resolve relative to that
+  stylesheet, so no CDN is involved here either.
+-->
+<link rel="stylesheet" href="../web/styles.css">
+<style>
+  body { margin: 0; background: #fff; }
+  .card {
+    width: 1200px; height: 630px; overflow: hidden;
+    background: var(--panel);
+    display: grid; grid-template-columns: 1fr 508px;
+    font-family: var(--sans); color: var(--ink);
+    position: relative;
+  }
+  .card::after {           /* the desk edge, so the card reads as paper on a surface */
+    content: ""; position: absolute; inset: 0; border: 14px solid var(--chrome);
+  }
+  .left { padding: 64px 40px 64px 72px; display: flex; flex-direction: column; }
+  .lockup { display: flex; align-items: center; gap: 16px; }
+  .lockup .tile {
+    width: 56px; height: 56px; border-radius: 15px; background: var(--accent);
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .lockup .tile svg { width: 30px; height: 30px; fill: #fff; }
+  .lockup h1 { margin: 0; font: 600 40px/1.4 var(--serif); letter-spacing: -.015em; }
+  h2 {
+    margin: 44px 0 0; font: 600 52px/1.16 var(--serif);
+    letter-spacing: -.02em; text-wrap: balance;
+  }
+  .lead {
+    margin: 22px 0 0; font: 400 21px/1.5 var(--serif);
+    color: var(--ink-muted); max-width: 30ch; text-wrap: pretty;
+  }
+  .pill {
+    margin-top: auto; align-self: flex-start;
+    display: inline-flex; align-items: center; gap: 9px;
+    font: 15px var(--mono); letter-spacing: .02em;
+    color: var(--accent-dark); background: var(--accent-wash);
+    border: 1px solid var(--accent-tint-border); border-radius: 999px;
+    padding: 9px 18px;
+  }
+  /* Right: a fragment of the real galley proof — the artifact, not a mockup. */
+  .right { position: relative; background: var(--output-canvas); overflow: hidden; }
+  .sheet {
+    position: absolute; top: 84px; left: 28px; width: 452px;
+    background: var(--sheet); border: 1px solid var(--sheet-border);
+    border-radius: 4px; padding: 26px 28px 22px;
+    box-shadow: 0 2px 0 #f0e9d8, 0 24px 50px -24px rgba(40,34,20,.45);
+  }
+  .sheet .cap { font: 600 15.5px/1.3 var(--serif); margin: 0 0 3px; }
+  .sheet .sub { font: italic 11.5px/1.4 var(--serif); color: var(--ink-muted); margin: 0 0 14px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 5px 9px; }
+  th:first-child, td:first-child { padding-left: 0; }
+  th:last-child, td:last-child { padding-right: 0; }
+  thead th {
+    font: 600 10.5px var(--mono); border-top: 1.5px solid var(--ink);
+    border-bottom: 1px solid var(--ink); padding-top: 8px; padding-bottom: 8px;
+  }
+  tbody tr:last-child td { border-bottom: 1.5px solid var(--ink); }
+  td:first-child { font: 11.5px/1.35 var(--serif); }
+  td:not(:first-child), th:not(:first-child) {
+    text-align: right; font-family: var(--mono); font-size: 10.5px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .why { font: italic 10.5px var(--serif); color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="left">
+    <div class="lockup">
+      <span class="tile">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="1" y="9" width="3" height="6"></rect>
+          <rect x="6" y="5" width="3" height="10"></rect>
+          <rect x="11" y="1" width="3" height="14"></rect>
+        </svg>
+      </span>
+      <h1>Figura</h1>
+    </div>
+    <h2>Real R, running in your browser.</h2>
+    <p class="lead">Journal-ready tables and figures for clinical manuscripts — Kaplan–Meier, Cox, logistic, Table 1.</p>
+    <span class="pill">◆ YOUR DATA NEVER LEAVES THE TAB</span>
+  </div>
+  <div class="right">
+    <div class="sheet">
+      <p class="cap">Table 1. Baseline characteristics</p>
+      <p class="sub">Values are mean ± SD or median (IQR), chosen per variable by normality.</p>
+      <table>
+        <thead>
+          <tr><th>Characteristic</th><th>Control</th><th>Treatment</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Age, mean ± SD<div class="why">approximately normal</div></td><td>59.6 ± 11.1</td><td>60.2 ± 11.4</td></tr>
+          <tr><td>Length of stay, median (IQR)<div class="why">right-skewed</div></td><td>3.7 (2.25–6)</td><td>4.1 (2–7.3)</td></tr>
+          <tr><td>CRP, median (IQR)<div class="why">right-skewed</div></td><td>4.5 (2.48–7.15)</td><td>4.85 (2.22–8.45)</td></tr>
+          <tr><td>Female</td><td>32 (53%)</td><td>28 (47%)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>
