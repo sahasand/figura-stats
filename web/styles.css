@@ -916,6 +916,16 @@ figcaption.synthetic {
 }
 @media (pointer: coarse) { .var-list .var-row { min-height: 44px; } }  /* touch targets */
 
+/* iOS Safari zooms the whole page when a form control under 16px is focused,
+   and never zooms back out — with type this small that turns every dropdown in
+   the analyze forms into a trap. 16px on touch devices is the documented floor. */
+@media (pointer: coarse) {
+  input, select, textarea,
+  .export-toolbar button, .export-toolbar select,
+  input[type="file"]::file-selector-button { font-size: 16px; }
+  .export-toolbar button, #export-panels button { min-height: 32px; }
+}
+
 .csv-help {
   border: 1px solid var(--line); border-radius: var(--radius-ctl);
   background: var(--panel-raised);
@@ -943,6 +953,11 @@ figcaption.synthetic {
   .invariant-card { margin: .5rem .875rem .875rem; }
   #preview { min-height: 10rem; }
   #stats { min-height: 6rem; }
+  /* "Journal-ready download:" wraps to two lines next to the dpi select and
+     reads as a broken header. The PNG/SVG buttons carry the same meaning. */
+  .export-toolbar .export-hint { display: none; }
+  .pane-head { row-gap: 0; }
+  #export-dpi { max-width: 11rem; }
   .summary-output .table-scroll { padding: 1rem 1.125rem; }
   .toolbar { height: auto; padding: .5rem 1rem; flex-wrap: wrap; gap: .5rem; }
 }
