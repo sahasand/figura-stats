@@ -321,10 +321,15 @@ body {
 .nav-pane nav button.active .nav-desc { color: var(--accent-on-dark); }
 .nav-pane nav button.active:hover { background: var(--accent-dark); }
 
+/* The invariant card + feedback link close the rail. The wrapper carries the
+   flex auto-margin that used to sit on the card, so the pair still hugs the
+   bottom of the sidebar as one cluster. */
+.rail-foot { margin-top: auto; }
+
 /* The invariant card closes the rail: the architecture *is* the privacy
    guarantee, so it is stated where it can't be mistaken for marketing. */
 .invariant-card {
-  margin: auto .875rem .875rem;
+  margin: 0 .875rem;
   padding: .8125rem .875rem;
   background: var(--panel);
   border: 1px solid var(--border-card);
@@ -345,6 +350,62 @@ body {
   line-height: 1.5;
   color: var(--ink-muted);
   text-wrap: pretty;
+}
+
+/* Feedback: the address shown as plain, copyable text — not a mailto link. A
+   mailto silently dead-ends for the many clinical users who live in webmail with
+   no default mail app; a visible address they can grab always works. Quiet
+   chrome beneath the card, not a second card competing with the invariant. */
+.rail-feedback {
+  margin: .625rem .875rem .875rem;
+  font-size: .71875rem;
+  line-height: 1.4;
+}
+
+.rail-feedback .fb-prompt {
+  margin: 0 0 .1875rem;
+  color: var(--ink-muted);
+}
+
+.fb-copy {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .4375rem;
+  max-width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fb-copy .fb-addr {
+  font-family: var(--mono);
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+/* Under 14px, so --ink-muted (not decorative --ink-faint) per the token rule. */
+.fb-copy .fb-copy-hint {
+  flex: none;
+  font-size: .625rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-muted);
+}
+
+.fb-copy:hover .fb-addr {
+  color: var(--accent-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fb-copy:hover .fb-copy-hint { color: var(--accent-dark); }
+
+.fb-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 /* ---- Configuration pane (forms are generated markup; style by element) -- */

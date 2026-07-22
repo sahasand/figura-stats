@@ -136,3 +136,32 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
 });
 
 initExportUI(() => currentFigure);
+
+// ---- Feedback address ----------------------------------------------------
+// The address is shown as plain copyable text, not a mailto link: a mailto
+// silently dead-ends for anyone without a default mail app (common for the
+// webmail-only clinical audience). Click-to-copy is the reliable action — no
+// backend, no data leaves the tab, works the same in webmail or a desktop app.
+const feedbackCopy = document.getElementById("feedback-copy");
+if (feedbackCopy) {
+  const hint = feedbackCopy.querySelector(".fb-copy-hint");
+  const address = "feedback@figurastats.org";
+  feedbackCopy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(address);
+      if (hint) {
+        hint.textContent = "Copied ✓";
+        setTimeout(() => { hint.textContent = "Copy"; }, 1800);
+      }
+    } catch {
+      // Clipboard blocked (rare) — select the address so the user can copy it
+      // by hand rather than leaving them with a button that did nothing.
+      const addr = feedbackCopy.querySelector(".fb-addr");
+      const range = document.createRange();
+      range.selectNodeContents(addr);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  });
+}
