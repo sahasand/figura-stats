@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "id": "logistic-confounding",
+      "kind": "ratio_table",
+      "compared": 35,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_or": 4,
+        "adjusted_ci": 12,
+        "adjusted_p": 4,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1
+      },
+      "findings": []
+    }
+  ],
+  "total_compared": 35,
+  "total_findings": 0
+}
