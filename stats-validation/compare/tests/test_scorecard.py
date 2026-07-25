@@ -46,9 +46,29 @@ FIXTURE = {
                 }
             ],
         },
+        {
+            "id": "case-missing-quantity",
+            "kind": "ratio_table",
+            "compared": 0,
+            "passed": False,
+            "targets_met": False,
+            "targets": {"adjusted_or": 0},
+            "findings": [
+                {
+                    "code": "MISSING_QUANTITY",
+                    "disposition": "defect",
+                    "term": "-",
+                    "quantity": "n",
+                    "figura": None,
+                    "python": None,
+                    "note": "Path B did not report n; the count could not "
+                             "be compared",
+                }
+            ],
+        },
     ],
     "total_compared": 15,
-    "total_findings": 1,
+    "total_findings": 2,
 }
 
 
@@ -64,8 +84,23 @@ def test_tile_counts_correct(tmp_path):
     html = _build(tmp_path)
     # values compared, differences, defects, cases-meet-targets tiles.
     assert "<b>15</b>" in html  # total_compared
-    assert "<b>1</b>" in html  # total_findings == defects here (one DEFECT)
-    assert "<b>1/2</b>" in html  # 1 of 2 cases meets targets
+    assert "<b>2</b>" in html  # total_findings == defects here (DEFECT + MISSING_QUANTITY)
+    assert "<b>1/3</b>" in html  # 1 of 3 cases meets targets
+
+
+def test_missing_quantity_counts_as_defect(tmp_path):
+    """Regression pin for the reviewed bug: MISSING_QUANTITY is disposition
+    "defect" per compare.py's own DISPOSITIONS mapping (compare.py classifies
+    a coverage-failure finding the same as a value disagreement), and the
+    scorecard's CSS styles .MISSING_QUANTITY identically red/bold to .DEFECT.
+    A hand-picked DEFECT_CODES tuple that omitted MISSING_QUANTITY would
+    render a red row while the defects tile claimed zero — this test fails
+    if that regresses."""
+    html = _build(tmp_path)
+    # Both the DEFECT and the MISSING_QUANTITY finding must be counted: with
+    # one of each, the defects tile reads 2, not 1.
+    assert "<b>2</b>" in html
+    assert "class='MISSING_QUANTITY'" in html
 
 
 def test_hostile_string_is_escaped(tmp_path):

@@ -21,9 +21,24 @@ from __future__ import annotations
 
 import html
 import json
+import sys
 from pathlib import Path
 
 RESULTS = Path(__file__).resolve().parent / "results"
+
+# DISPOSITIONS comes from compare.py itself, not a restated copy, so the
+# "defects" tile and compare.py's own finding taxonomy can never drift apart
+# (this was a real bug: a hand-picked DEFECT_CODES tuple here once omitted
+# MISSING_QUANTITY, which DISPOSITIONS classifies as a "defect" and the CSS
+# below styles identically red/bold — a MISSING_QUANTITY finding rendered a
+# red row while the tile claimed zero defects). compare/ is a sibling
+# directory, not a package (no __init__.py), so it needs a sys.path shim of
+# its own — mirroring the shim compare/tests/test_scorecard.py already uses
+# in the other direction to import this module.
+COMPARE_DIR = Path(__file__).resolve().parent / "compare"
+sys.path.insert(0, str(COMPARE_DIR))
+
+from compare import DISPOSITIONS  # noqa: E402
 
 CSS = """
 :root { --ink:#1a1a1a; --muted:#5b5b5b; --rule:#d8d4cc; --paper:#faf8f5;
@@ -67,7 +82,13 @@ def esc(v) -> str:
     return html.escape("" if v is None else str(v))
 
 
-DEFECT_CODES = ("DEFECT", "COUNT_MISMATCH", "SCRIPT_DIVERGENCE")
+# Every code whose disposition is "defect" per compare.py's own vocabulary —
+# currently DEFECT, COUNT_MISMATCH, SCRIPT_DIVERGENCE, and MISSING_QUANTITY —
+# derived, not hand-listed, so a future code compare.py adds under "defect"
+# is counted here automatically instead of silently undercounting.
+DEFECT_CODES = frozenset(
+    code for code, disposition in DISPOSITIONS.items() if disposition == "defect"
+)
 
 
 def _tiles(data: dict) -> str:
