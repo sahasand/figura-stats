@@ -34,5 +34,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error("usage: node build-spec.mjs <case-dir>");
     process.exit(2);
   }
+  // Writes to stdout only; piping this into results/<id>.spec.json is deferred
+  // to the Makefile task that wires the harness into the run pipeline.
   process.stdout.write(JSON.stringify(await buildSpecForCase(caseDir)));
 }
