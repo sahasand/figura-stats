@@ -1,0 +1,7 @@
+.venv/
+.sdd/
+results/*.done
+results/*.spec.json
+results/*.figura.json
+results/*.figura-exact.json
+results/*.python.json
