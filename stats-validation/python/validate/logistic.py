@@ -31,6 +31,13 @@ def _fit_one(y, X):
         se = result.bse[term]
         terms[term] = {
             "est": np.exp(coef),
+            # RAW log-scale standard error, reported alongside the interval it
+            # generates. lo/hi are exp(coef +/- 1.96*se) on both paths, so a
+            # CI comparison alone is partly tautological once est agrees; se
+            # is the primary standard-error evidence, and the harness's
+            # figura-exact.json carries R's `Std. Error` for exactly this
+            # comparison (stats-validation/harness/run-script.R).
+            "se": se,
             "lo": np.exp(coef - 1.96 * se),
             "hi": np.exp(coef + 1.96 * se),
             "p": result.pvalues[term],
