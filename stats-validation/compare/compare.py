@@ -60,9 +60,14 @@ TABLE_HEADER_FIRST_CELL = "Characteristic"
 
 # code -> disposition. `pass` codes never reach findings.json; `review` and
 # `defect` do, and a case with any finding at all is not `passed`.
+#
+# The plan's taxonomy also listed EXACT_PASS ("exact values agree"), but this
+# comparator never emits it: the exact tier counts an agreement in `compared`
+# and stays silent, exactly as the display tier does for PASS. A published
+# vocabulary entry that nothing can ever emit invites a reader to conclude a
+# tier ran when it did not, so it is not declared here.
 DISPOSITIONS = {
     "PASS": "pass",
-    "EXACT_PASS": "pass",
     "DISPLAY_ARTIFACT": "review",
     "SCRIPT_DIVERGENCE": "defect",
     "COUNT_MISMATCH": "defect",
@@ -167,9 +172,32 @@ def display_agrees(value: float, shown: float) -> bool:
     return abs(value - shown) <= DISPLAY_HALF_ULP + slack
 
 
+def cell_values(cell):
+    """est/lo/hi/p as floats, or None when the cell is not a usable cell.
+
+    A Path B cell missing a quantity (or carrying a non-numeric one) is a hole
+    in the evidence, not a crash: the script tier already maps that shape to
+    MISSING_QUANTITY, and the display tier does the same via this helper, so
+    the same malformed input never raises on one tier and reports on the other.
+    """
+    if not isinstance(cell, dict):
+        return None
+    try:
+        return {q: float(cell[q]) for q in ("est", "lo", "hi", "p")}
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def classify_cell(term: str, figura_cell: str, python: dict,
                   quantity: str = "displayed cell") -> dict:
     """One displayed cell, Path A vs Path B. Returns a finding (maybe PASS)."""
+    py = cell_values(python)
+    if py is None:
+        return finding(
+            "MISSING_QUANTITY", term, quantity, figura_cell, python,
+            "Path B's cell is missing est/lo/hi/p or carries a non-numeric "
+            "value; the displayed cell could not be compared")
+    python = py
     py_ok = reportable(python)
 
     # Addendum 7 — the unreportable disposition. Agreeing that a cell cannot be
@@ -378,6 +406,17 @@ class _Targets:
 
     def findings(self):
         out = []
+        # Vacuity guard, mirroring the empty-table and empty-harvest guards
+        # below: `all([])` is True, so a case.json that lost (or never grew)
+        # its exact_targets key would publish `targets_met: true` and exit 0
+        # while guaranteeing nothing. A coverage claim with no declared
+        # coverage is not a pass.
+        if not self.declared:
+            out.append(finding(
+                "MISSING_QUANTITY", "-", "exact_targets", None, None,
+                "the case declares no exact_targets; there is no coverage "
+                "contract for this case to meet"))
+            return out
         for target in self.declared:
             if target not in TARGET_QUANTITIES:
                 out.append(finding(
@@ -392,15 +431,19 @@ class _Targets:
 
     @property
     def met(self):
-        return all(t in TARGET_QUANTITIES and self.counts[t] > 0
-                   for t in self.declared)
+        # `bool(self.declared)` first: an empty contract is never "met".
+        return bool(self.declared) and all(
+            t in TARGET_QUANTITIES and self.counts[t] > 0
+            for t in self.declared)
 
 
 def compare_ratio_table(case, figura, exact, python):
     """The full ratio_table branch: display, exact, and script tiers."""
     findings = []
     compared = 0
-    targets = _Targets(case.get("exact_targets", []))
+    # `or []` so an explicit null reads as "no contract" and hits the vacuity
+    # guard, rather than raising inside _Targets.
+    targets = _Targets(case.get("exact_targets") or [])
     covariates = list(case["roles"]["covariates"])
 
     # -- counts. The highest-severity class: if the two paths disagree about
@@ -458,9 +501,15 @@ def compare_ratio_table(case, figura, exact, python):
                     row[cell_key], None,
                     f"no Path B {label} term maps to this displayed row"))
                 continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
-            compared += 1
             f = classify_cell(row["key"], row[cell_key], cell,
                               quantity=f"displayed {label} cell")
+            if f["code"] == "MISSING_QUANTITY":
+                # The cell was unusable, so no comparison happened: record the
+                # hole and do NOT credit `compared` with a comparison that was
+                # never performed.
+                findings.append(f)
+                continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+            compared += 1
             if f["code"] not in PASS_CODES:
                 findings.append(f)
 
@@ -607,7 +656,25 @@ def main(case_ids, results: Path = RESULTS, cases: Path = CASES) -> int:
         "total_compared": sum(c["compared"] for c in reports),
         "total_findings": sum(len(c["findings"]) for c in reports),
     }
-    (results / "findings.json").write_text(json.dumps(out, indent=2) + "\n")
+    # allow_nan=False: Python's json writes bare NaN/Infinity by default, which
+    # is not valid JSON and would hand every downstream reader (the scorecard,
+    # any jq) a file it cannot parse — or, worse, one it parses differently.
+    # A non-finite number in a finding means a path produced garbage; stop and
+    # say so rather than publishing an unparseable scorecard input.
+    try:
+        payload = json.dumps(out, indent=2, allow_nan=False) + "\n"
+    except ValueError as exc:
+        culprits = [
+            f"{c['id']} {f['term']}/{f['quantity']}"
+            for c in reports for f in c["findings"]
+            if any(isinstance(v, float) and not math.isfinite(v)
+                   for v in (f["figura"], f["python"]))
+        ]
+        raise SystemExit(
+            "comparator: refusing to write findings.json — a finding carries a "
+            f"non-finite number (NaN/Infinity is not valid JSON): {exc}"
+            + (f" [{', '.join(culprits)}]" if culprits else ""))
+    (results / "findings.json").write_text(payload)
     for c in reports:
         status = "PASS" if c["passed"] else f"{len(c['findings'])} finding(s)"
         met = "targets met" if c["targets_met"] else "TARGETS UNMET"

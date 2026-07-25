@@ -15,17 +15,20 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
 import pytest
 
 from compare import (
+    DISPOSITIONS,
     classify_cell,
     close_enough,
     compare_case,
     display_key,
     format_ratio_cell,
+    main,
     parse_ratio_tsv,
     reportable,
 )
@@ -278,6 +281,45 @@ def test_numeric_row_label_must_match_the_declared_increment():
     assert [r["key"] for r in rows] == ["arm:New treatment", "age"]
 
 
+def test_a_table_header_of_the_wrong_shape_is_a_finding():
+    # The parser reads the header positionally (label, unadjusted, adjusted);
+    # a header that is not that shape means the columns may not be what the
+    # rest of this function assumes, so it is recorded, never assumed away.
+    case, figura, _exact, _python = _base()
+    text = figura["text"].replace(
+        "Characteristic\tUnadjusted OR (95% CI, p)\tAdjusted OR (95% CI, p)",
+        "Variable\tUnadjusted OR (95% CI, p)\tAdjusted OR (95% CI, p)",
+    )
+    _rows, findings = parse_ratio_tsv(text, case)
+    assert [f["code"] for f in findings] == ["DEFECT"]
+    assert findings[0]["quantity"] == "table header"
+
+
+def test_a_row_without_three_cells_is_a_finding_not_a_crash():
+    case, figura, _exact, _python = _base()
+    text = figura["text"].replace(
+        f"New treatment\t1.02 (0.63{EN}1.66, p=0.932)\t0.50 (0.28{EN}0.91, p=0.023)",
+        f"New treatment\t0.50 (0.28{EN}0.91, p=0.023)",  # one cell short
+    )
+    rows, findings = parse_ratio_tsv(text, case)
+    assert [f["code"] for f in findings] == ["DEFECT"]
+    assert findings[0]["quantity"] == "displayed row"
+    assert [r["key"] for r in rows] == ["age"]  # the malformed row is not kept
+
+
+def test_two_rows_resolving_to_the_same_key_is_a_finding():
+    # Two level rows under one reference header with the same label would let
+    # a later row silently overwrite an earlier one in rows_by_key, so one
+    # comparison would quietly stand in for two.
+    case, figura, _exact, _python = _base()
+    dup = f"New treatment\t1.02 (0.63{EN}1.66, p=0.932)\t0.50 (0.28{EN}0.91, p=0.023)"
+    text = figura["text"].replace(dup, dup + "\n" + dup)
+    rows, findings = parse_ratio_tsv(text, case)
+    assert [f["code"] for f in findings] == ["DEFECT"]
+    assert "same key" in findings[0]["note"]
+    assert [r["key"] for r in rows] == ["arm:New treatment", "arm:New treatment", "age"]
+
+
 # --------------------------------------------------------------------------
 # addendum 4: longest-covariate-prefix term splitting
 # --------------------------------------------------------------------------
@@ -419,6 +461,105 @@ def test_unknown_display_kind_exits_loudly(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         _run(tmp_path, mutate)
     assert "km_summary" in str(excinfo.value)
+
+
+def test_a_figura_artifact_with_no_text_field_is_missing_quantity(tmp_path):
+    # The displayed artifact is the whole display tier's input. Losing it must
+    # read as "nothing was compared", never as a traceback and never as a pass.
+    report = _run(tmp_path, lambda c, f, e, p: f.pop("text"))
+    notes = [x["note"] for x in _by_code(report, "MISSING_QUANTITY")]
+    assert any("no `text` field" in n for n in notes), _codes(report)
+    assert report["passed"] is False
+
+
+# --------------------------------------------------------------------------
+# malformed Path B cells: the display tier reports, it does not raise
+# --------------------------------------------------------------------------
+
+def test_a_path_b_cell_missing_a_quantity_is_missing_quantity_not_a_keyerror():
+    f = classify_cell(
+        term="age", figura_cell=f"1.69 (1.26{EN}2.26, p<0.001)",
+        python={"est": 1.6884, "lo": 1.2620},  # no hi, no p
+    )
+    assert f["code"] == "MISSING_QUANTITY"
+    assert f["disposition"] == "defect"
+
+
+def test_a_path_b_cell_with_a_non_numeric_value_is_missing_quantity():
+    f = classify_cell(
+        term="age", figura_cell=f"1.69 (1.26{EN}2.26, p<0.001)",
+        python={"est": "NA", "lo": 1.2620, "hi": 2.2589, "p": 0.0004},
+    )
+    assert f["code"] == "MISSING_QUANTITY"
+
+
+def test_a_malformed_display_cell_is_not_credited_as_a_comparison(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["display_terms"]["age"].pop("p")
+    report = _run(tmp_path, mutate)
+    hits = [f for f in _by_code(report, "MISSING_QUANTITY")
+            if f["quantity"] == "displayed adjusted cell"]
+    assert len(hits) == 1 and hits[0]["term"] == "age"
+    # 19 in the agreeing fixture: the uncomparable cell must not be counted.
+    assert report["compared"] == 18
+
+
+# --------------------------------------------------------------------------
+# the exact-targets contract is never vacuous
+# --------------------------------------------------------------------------
+
+def test_a_case_with_no_exact_targets_is_never_targets_met(tmp_path):
+    # all([]) is True, so an absent contract would otherwise publish
+    # `targets_met: true` and exit 0 while guaranteeing nothing.
+    report = _run(tmp_path, lambda c, f, e, p: c.pop("exact_targets"))
+    assert report["targets_met"] is False
+    assert report["passed"] is False
+    hits = [f for f in _by_code(report, "MISSING_QUANTITY")
+            if f["quantity"] == "exact_targets"]
+    assert hits and "no coverage contract" in hits[0]["note"]
+
+
+def test_an_empty_exact_targets_list_is_treated_the_same(tmp_path):
+    report = _run(tmp_path, lambda c, f, e, p: c.__setitem__("exact_targets", []))
+    assert report["targets_met"] is False
+    assert [f["quantity"] for f in _by_code(report, "MISSING_QUANTITY")] == \
+        ["exact_targets"]
+
+
+# --------------------------------------------------------------------------
+# published output is strict JSON, and the vocabulary is honest
+# --------------------------------------------------------------------------
+
+def test_a_nan_is_never_published_as_bare_json(tmp_path):
+    case, figura, exact, python = _base()
+    exact["terms"]["age"]["est"] = float("nan")
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    with pytest.raises(SystemExit) as excinfo:
+        main([case["id"]], results=results, cases=cases)
+    assert "non-finite" in str(excinfo.value)
+    # Nothing partial on disk: a bare NaN in findings.json is not valid JSON
+    # and would break every downstream reader.
+    assert not (results / "findings.json").exists()
+
+
+def test_the_published_vocabulary_declares_only_codes_that_are_emitted():
+    src = (Path(__file__).resolve().parents[1] / "compare.py").read_text()
+    for code in DISPOSITIONS:
+        emitted = re.search(r"finding\(\s*[\"']" + code + r"[\"']", src)
+        assert emitted, f"{code} is declared but never emitted"
+    # EXACT_PASS was in the plan's table; nothing emits it, because the exact
+    # tier counts an agreement in `compared` and stays silent, exactly as the
+    # display tier does for PASS.
+    assert "EXACT_PASS" not in DISPOSITIONS
+
+
+def test_the_agreeing_fixture_still_writes_parseable_findings(tmp_path):
+    case, figura, exact, python = _base()
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    assert main([case["id"]], results=results, cases=cases) == 0
+    published = json.loads((results / "findings.json").read_text())
+    assert published["total_findings"] == 0
+    assert published["cases"][0]["targets_met"] is True
 
 
 def test_missing_artifact_exits_loudly(tmp_path):
