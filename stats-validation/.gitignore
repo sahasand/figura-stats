@@ -5,3 +5,5 @@ results/*.spec.json
 results/*.figura.json
 results/*.figura-exact.json
 results/*.python.json
+__pycache__/
+*.pyc
