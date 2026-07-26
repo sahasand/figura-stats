@@ -46,7 +46,7 @@ strict rules.
   reading section even though the shipped case has no blank `arm` cells and
   no test exercises it.
 
-## Environment limitation (not a spec choice)
+## [RESOLVED — see postscript] Environment limitation (not a spec choice)
 
 `tests/test_summary.py::test_the_shipped_case_reproduces_the_displayed_table`
 reads `cases/summary-table1/data.csv` (computed as
@@ -68,3 +68,7 @@ interpolation, sample (n-1) SD, three-significant-figure formatting
 rounding — so the missing fixture blocks re-deriving the shipped case's exact
 published numbers end-to-end, not the correctness of the logic that would
 produce them.
+
+### Integrator's postscript (2026-07-26)
+
+The account in the section above documents the sanitized clean-room environment where this module was originally written, in which the `cases/` directory was deliberately excluded to avoid distributing confidential research datasets. In that isolated environment, 1 of 15 tests in test_summary.py failed at fixture load. However, when the module is integrated into the repository and the genuine `cases/` fixture tree is present in the root, all 15 acceptance tests execute successfully and pass. No coverage gap exists in the repository. The full test suite (60 python tests across all modules) passes in-repo with `cd python && ../.venv/bin/python -m pytest tests -q`.

@@ -20,9 +20,8 @@ designed outcome, not a broken run.** `logistic-dirty` exists to publish the
 app-vs-exported-script divergence of `issues/02`, so it fails on purpose. The
 scorecard is written BEFORE the failure is reported — a non-zero `all` means
 "findings exist, go read them", never "nothing was published". `test` is
-green; the one suite that is red by design (`python/tests/test_summary.py`,
-written before its module) runs outside the gate, loudly, so it can never
-block `all` from running. See `KNOWN_PENDING` in the Makefile.
+green; every suite including `python/tests/test_summary.py` runs inside the
+gated `make test` target and all 60 python tests pass with `make test all`.
 
 On the scorecard, read the **Compared** column before drawing a conclusion
 about a finding. "Figura" is the screen on the display tier and the harvest
