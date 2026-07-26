@@ -378,6 +378,12 @@ body {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  /* The rail foot holds one button and one <a> wearing this same class. Without
+     this the anchor inherits the UA underline the button never had, so the pair
+     reads as two different things — and on hover a second underline stacks under
+     .fb-addr's own at a different offset. The hover rule below owns the
+     underline for both. */
+  text-decoration: none;
 }
 
 .fb-copy .fb-addr {

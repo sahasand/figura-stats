@@ -1287,8 +1287,15 @@ body { display: block; font-size: 14px; line-height: 1.6; }
   padding-bottom: .5rem;
   white-space: nowrap;
 }
-.val-table tbody tr:last-child td { border-bottom: 1.5px solid var(--ink); }
-.val-table tbody tr:hover td { background: var(--line-soft); }
+/* The row-identifying cell of every table here is a <th scope="row"> — a screen
+   reader announces it with each cell of its row, which is the whole point of a
+   table of case ids. Visually it must stay the quiet cell it always was, so the
+   UA's bold is dropped; the analysis column bolds its own name with <b>. */
+.val-table tbody th { font-weight: 400; }
+.val-table tbody tr:last-child td,
+.val-table tbody tr:last-child th { border-bottom: 1.5px solid var(--ink); }
+.val-table tbody tr:hover td,
+.val-table tbody tr:hover th { background: var(--line-soft); }
 .val-table ul { margin: .25rem 0 .5rem; padding-left: 1rem; }
 .val-table li { margin: .125rem 0; max-width: 34rem; }
 .val-table .case-id, .val-table .num {
@@ -1358,11 +1365,29 @@ body { display: block; font-size: 14px; line-height: 1.6; }
 """
 
 
+# Small counts read as prose on this page, not as figures; anything larger
+# falls back to digits rather than growing a spelling table nobody maintains.
+NUMBER_WORDS = {
+    0: "no", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
+    7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve",
+}
+
+
+def _count_word(n: int) -> str:
+    return NUMBER_WORDS.get(n, str(n))
+
+
 def _web_tiles(data: dict, pending: list[str]) -> str:
     """The headline counts. Same numbers as the scorecard's tiles, same
     refusal to let any of them read as complete: the denominator is every
     REGISTERED case, and a case with deferred targets does not count as
-    fully covered."""
+    fully covered.
+
+    The coverage tile borrows the case table's own wording ("declared coverage:
+    complete") deliberately. "8 of 8 cases fully covered", sitting beside "1 of
+    8 cases with differences", reads as "everything was checked" — which is the
+    one thing this page must never say, since coverage is what each case
+    DECLARED it would compare, not the whole of what the app computes."""
     cases = data["cases"]
     with_findings = [c for c in cases if c["findings"]]
     total = len(cases) + len(pending)
@@ -1386,7 +1411,7 @@ def _web_tiles(data: dict, pending: list[str]) -> str:
   <div class="tile"><b class="{cases_class}">{len(with_findings)} of {total}</b>
     <span>cases with differences</span></div>
   <div class="tile"><b>{met} of {total}</b>
-    <span>cases fully covered</span></div>{extra}
+    <span>cases with declared coverage complete</span></div>{extra}
 </div>"""
 
 
@@ -1467,16 +1492,17 @@ def _web_coverage_table(data: dict, cases_dir: Path) -> str:
         case_list = "".join(
             f"<span class='case-chip'>{esc(c['id'])}</span>" for c in cases)
         rows.append(
-            f"<tr><td><b>{esc(_analysis_name(figure))}</b><br>"
+            f"<tr><th scope=\"row\"><b>{esc(_analysis_name(figure))}</b><br>"
             f"<span class='tier'>{len(cases)} case"
-            f"{'s' if len(cases) != 1 else ''}</span>{case_list}</td>"
+            f"{'s' if len(cases) != 1 else ''}</span>{case_list}</th>"
             f"<td><ul>{''.join(items)}</ul></td>"
             f"<td>{not_compared or '&mdash;'}</td></tr>")
     return (
         "<div class=\"table-sheet\"><table class=\"val-table\">"
         "<colgroup><col style=\"width:20%\"><col style=\"width:48%\">"
         "<col style=\"width:32%\"></colgroup><thead><tr>"
-        "<th>Analysis</th><th>What is compared</th><th>What is not</th>"
+        "<th scope=\"col\">Analysis</th><th scope=\"col\">What is compared</th>"
+        "<th scope=\"col\">What is not</th>"
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
 
 
@@ -1504,13 +1530,13 @@ def _web_case_table(data: dict, pending: list[str], cases_dir: Path) -> str:
         else:
             coverage = "<span class='v-fail'>INCOMPLETE</span>"
         rows.append(
-            f"<tr><td class='case-id'>{esc(case['id'])}</td>"
+            f"<tr><th scope=\"row\" class='case-id'>{esc(case['id'])}</th>"
             f"<td>{esc(_analysis_name(_case_figure(cases_dir, case['id'])))}</td>"
             f"<td class='num'>{esc(case['compared'])}</td>"
             f"<td>{coverage}</td><td>{result}</td></tr>")
     for case_id in pending:
         rows.append(
-            f"<tr><td class='case-id'>{esc(case_id)}</td>"
+            f"<tr><th scope=\"row\" class='case-id'>{esc(case_id)}</th>"
             f"<td>{esc(_analysis_name(_case_figure(cases_dir, case_id)))}</td>"
             f"<td class='num'>0</td>"
             f"<td><span class='v-warn'>NONE</span></td>"
@@ -1519,8 +1545,9 @@ def _web_case_table(data: dict, pending: list[str], cases_dir: Path) -> str:
             f"other, so it carries no guarantee at all</td></tr>")
     return (
         "<div class=\"table-sheet\"><table class=\"val-table\"><thead><tr>"
-        "<th>Case</th><th>Analysis</th><th>Values compared</th>"
-        "<th>Declared coverage</th><th>Result</th>"
+        "<th scope=\"col\">Case</th><th scope=\"col\">Analysis</th>"
+        "<th scope=\"col\">Values compared</th>"
+        "<th scope=\"col\">Declared coverage</th><th scope=\"col\">Result</th>"
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
 
 
@@ -1558,15 +1585,15 @@ def _web_narrative(case: dict) -> str:
               "n_dropped": "rows dropped"}
     for quantity, (script, app) in counts.items():
         count_rows.append(
-            f"<tr><td>{esc(labels.get(quantity, quantity))}</td>"
+            f"<tr><th scope=\"row\">{esc(labels.get(quantity, quantity))}</th>"
             f"{_value_cell(app)}{_value_cell(script)}</tr>")
     for f in script_cells:
         count_rows.append(
-            f"<tr><td>{esc(_row_label(f))}</td>"
+            f"<tr><th scope=\"row\">{esc(_row_label(f))}</th>"
             f"{_value_cell(f['figura'])}{_value_cell(f['python'])}</tr>")
     for f in missing:
         count_rows.append(
-            f"<tr><td>{esc(_row_label(f))}</td>"
+            f"<tr><th scope=\"row\">{esc(_row_label(f))}</th>"
             f"<td class='num'>shown in the table</td>"
             f"<td class='num v-fail'>absent entirely</td></tr>")
     if count_rows:
@@ -1574,8 +1601,8 @@ def _web_narrative(case: dict) -> str:
             "<div class=\"table-sheet\"><table class=\"val-table\">"
             "<colgroup><col style=\"width:24%\"><col style=\"width:38%\">"
             "<col style=\"width:38%\"></colgroup><thead><tr>"
-            "<th>Quantity</th><th>Figura</th>"
-            "<th>The downloaded <code>.R</code></th></tr></thead>"
+            "<th scope=\"col\">Quantity</th><th scope=\"col\">Figura</th>"
+            "<th scope=\"col\">The downloaded <code>.R</code></th></tr></thead>"
             f"<tbody>{''.join(count_rows)}</tbody></table></div>"
             "<p class=\"aside\">For the estimates, the Figura column is the "
             "string the app displayed. For the counts, it is what the "
@@ -1609,8 +1636,8 @@ def _web_findings_table(data: dict) -> str:
     rows = []
     for case in failing:
         for f in case["findings"]:
-            case_cell = (f"<td class='case-id'>{esc(case['id'])}</td>"
-                         if show_case else "")
+            case_cell = (f"<th scope=\"row\" class='case-id'>"
+                         f"{esc(case['id'])}</th>" if show_case else "")
             rows.append(
                 f"<tr>{case_cell}"
                 f"<td class='v-code v-fail'>{esc(f['code'])}</td>"
@@ -1619,7 +1646,7 @@ def _web_findings_table(data: dict) -> str:
                 f"{_value_cell(f['figura'])}{_value_cell(f['python'])}</tr>")
     if not rows:
         return ""
-    case_header = "<th>Case</th>" if show_case else ""
+    case_header = "<th scope=\"col\">Case</th>" if show_case else ""
     case_note = ("" if show_case else
                  f"<p>Every row below is case "
                  f"<code>{esc(failing[0]['id'])}</code>.</p>")
@@ -1643,8 +1670,10 @@ def _web_findings_table(data: dict) -> str:
         f"<code>findings.json</code> uses:</p><ul>{code_legend}</ul>"
         f"{case_note}"
         "<div class=\"table-sheet\"><table class=\"val-table\"><thead><tr>"
-        f"{case_header}<th>Code</th><th>Comparison</th><th>Term</th>"
-        "<th>Quantity</th><th>Figura</th><th>Python</th></tr></thead>"
+        f"{case_header}<th scope=\"col\">Code</th>"
+        "<th scope=\"col\">Comparison</th><th scope=\"col\">Term</th>"
+        "<th scope=\"col\">Quantity</th><th scope=\"col\">Figura</th>"
+        "<th scope=\"col\">Python</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         f"<p class=\"aside\">Values are rounded to "
         f"{PUBLISHED_SIGNIFICANT_DIGITS} significant digits for publication. "
@@ -1708,7 +1737,7 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
     for c in cases:
         if c.get("aborted"):
             rows.append(
-                f"<tr><td class='case-id'>{esc(c.get('id'))}</td>"
+                f"<tr><th scope=\"row\" class='case-id'>{esc(c.get('id'))}</th>"
                 f"<td class='v-fail'>ABORTED</td><td class='num'>&mdash;</td>"
                 f"<td>The two runtimes disagreed on the shape of the output "
                 f"before any value was compared: {esc(c.get('reason'))}</td>"
@@ -1728,7 +1757,8 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
             detail = (f"{len(differing)} of {esc(c.get('cells_compared'))} "
                       f"strings differ<ul>{detail}</ul>")
         rows.append(
-            f"<tr><td class='case-id'>{esc(c.get('id'))}</td><td>{verdict}</td>"
+            f"<tr><th scope=\"row\" class='case-id'>{esc(c.get('id'))}</th>"
+            f"<td>{verdict}</td>"
             f"<td class='num'>{esc(c.get('cells_compared'))}</td>"
             f"<td>{detail}</td></tr>")
     if not rows:
@@ -1787,7 +1817,8 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
     return (
         f"{stale}{provenance}{coverage}{totals}"
         "<div class=\"table-sheet\"><table class=\"val-table\"><thead><tr>"
-        "<th>Case</th><th>Result</th><th>Strings compared</th><th>Detail</th>"
+        "<th scope=\"col\">Case</th><th scope=\"col\">Result</th>"
+        "<th scope=\"col\">Strings compared</th><th scope=\"col\">Detail</th>"
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
 
 
@@ -1845,15 +1876,25 @@ def build_web(findings_path: Path | str | None = None,
         f"currently finds." if findings_count else
         "This page is that comparison, including every difference it finds.")
 
+    # THE SCOPE OF EVERY CLAIM ON THIS PAGE, COMPUTED RATHER THAN WRITTEN DOWN.
+    # The comparison covers the registered cases and nothing else — not the
+    # file a reader is about to upload — so the lede and the meta description
+    # both say how many there are, from the same denominator the tiles use. A
+    # ninth case must not leave either of them saying "eight".
+    case_count = len(data["cases"]) + len(pending)
+    case_word = _count_word(case_count)
+
     doc = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Statistical validation &mdash; Figura</title>
-<meta name="description" content="How Figura's numbers are checked: every
-reported statistic re-derived from the same raw CSV by a second, independently
-written implementation, with every difference published.">
+<meta name="description" content="How Figura's numbers are checked: on
+{case_word} fixed test datasets its statistics are re-derived from the same raw
+CSV by a second Python implementation, built from a written spec rather than
+from Figura's R, with every difference published and each comparison's limits
+named.">
 <link rel="stylesheet" href="styles.css">
 <style>{WEB_CSS}</style>
 </head>
@@ -1875,9 +1916,12 @@ written implementation, with every difference published.">
 
 <p class="eyebrow">Published evidence</p>
 <h1>Statistical validation</h1>
-<p class="lede">Every number Figura reports is re-derived from the same raw CSV
-by a second implementation, written separately from the one that ships.
-{lede_tail}</p>
+<p class="lede">On {case_word} fixed test datasets, the statistics Figura
+reports are re-derived from the same raw CSV by a second implementation, written
+separately from the one that ships. What each comparison covers, and what it
+leaves out, is set out case by case in
+<a href="#checked">what was checked, and what was not</a> &mdash; the claim is
+about those {case_word} files, not about a file you upload. {lede_tail}</p>
 
 <div class="claim">
 <p><b>What was actually done, stated precisely.</b> One specification &mdash;

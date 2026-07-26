@@ -8,6 +8,7 @@ a leaf consumer of findings.json, not part of the comparator package.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -191,7 +192,16 @@ def test_webr_section_renders_honest_empty_state(tmp_path):
 # drifting values are the ones the tier's own negative-control run produced.
 WEBR_TIER = {
     "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
-    "runtime_source": "read from the WebR instance's own version fields",
+    # The REAL shape of this field, module URL and all — results/webr-tier.json
+    # records where the version string came from, and that provenance is a
+    # `https://` URL rendered as escaped text on the public page. A fixture that
+    # dropped it would let the no-egress test (which greps every href/src) run
+    # against a page containing no URL at all, and pass by having nothing to
+    # find. See test_web_page_issues_no_external_request.
+    "runtime_source": (
+        "read from the WebR instance's own version fields, from the module the "
+        "app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself "
+        "prints no version string."),
     "date": "2026-07-26",
     "cases": [
         {
@@ -901,30 +911,120 @@ def _build_web(tmp_path, findings=None, web_dir=None, cases_dir=None) -> str:
     return out_path.read_text()
 
 
+def _plain(fragment: str) -> str:
+    """Markup out, whitespace normalised — the sentence as a reader gets it.
+
+    The template is hard-wrapped and carries inline links, so assertions about
+    what the page SAYS must not be assertions about where its lines break or
+    where an <a> opens."""
+    return " ".join(re.sub(r"<[^>]+>", " ", fragment).split())
+
+
+# An absolute quantifier standing over a noun that means "a number Figura
+# shows". The page's own coverage table names things it does NOT compare (the
+# hazard-ratio clause of the KM sentence, the prose around the numbers, the
+# rendered plots), so any sentence matching this contradicts the table three
+# screens below it. "every difference published" is deliberately not caught:
+# that one is a promise about disclosure, and it is true.
+ABSOLUTE_OVER_NUMBERS = re.compile(
+    r"\b(every|all|each|any)\b[^.]{0,40}?\b(number|statistic|quantity|value)s?\b",
+    re.I)
+
+
 def test_web_page_links_the_stylesheet_rather_than_inlining_it(tmp_path):
     """The page ships inside the app. It must ride the app's own tokens, not a
     frozen copy of them — otherwise it drifts the first time styles.css moves,
     and a validation page that looks like a different product is a validation
-    page nobody believes."""
+    page nobody believes.
+
+    So: every colour in the page's own style block is a var(), and the ONLY
+    literals live inside the dark remap, which exists precisely to re-point
+    those variables (the app ships light-only, so there is nothing upstream to
+    read there). Scanned over the whole block rather than its first paragraph —
+    a hardcoded `color: #333` anywhere below the fold is the same drift."""
     html = _build_web(tmp_path)
     assert '<link rel="stylesheet" href="styles.css">' in html
     assert "@font-face" not in html          # fonts come from styles.css
-    assert "--accent" not in html.split("<style>")[1].split("</style>")[0].split(
-        "@media (prefers-color-scheme: dark)")[0], (
-        "page CSS must READ the tokens, not redefine them outside the dark remap")
+
+    css = html.split("<style>")[1].split("</style>")[0]
+    before, marker, after = css.partition("@media (prefers-color-scheme: dark)")
+    assert marker, "the dark remap is where the literals are allowed to live"
+    outside = before + after.partition("}\n}")[2]
+    literals = re.findall(r"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(", outside)
+    assert not literals, (
+        f"page CSS outside the dark remap must READ the app's tokens, never "
+        f"restate a colour: {literals}")
 
 
 def test_web_page_issues_no_external_request(tmp_path):
     """THE NO-EGRESS INVARIANT, on the one page that could most plausibly want
     an analytics tag. Every href/src must be same-origin and relative, and there
-    must be no script at all."""
-    import re
+    must be no script at all.
+
+    Built WITH the webR tier present, which is the only build that carries a
+    `https://` URL at all: the tier records where it read the runtime version
+    from, and that provenance names the module the app loads. It is escaped
+    text inside a paragraph — nothing fetches it — and this test is what keeps
+    it that way. Against the bare fixture the page renders the "not run"
+    branch, contains no URL of any kind, and this test passes by having nothing
+    to look at."""
+    (tmp_path / "webr-tier.json").write_text(json.dumps(WEBR_TIER))
     html = _build_web(tmp_path)
+    assert "https://webr.r-wasm.org/latest/webr.mjs" in html, (
+        "the provenance URL must be ON the page for this test to mean anything")
     for attr, value in re.findall(r'(href|src)="([^"]*)"', html):
         assert not value.startswith(("http://", "https://", "//")), \
             f"{attr}={value} leaves the origin"
     assert "<script" not in html
     assert "@import" not in html and "url(" not in html
+
+
+def test_web_meta_description_qualifies_the_claim_the_page_qualifies(tmp_path):
+    """THE ONE PLACE THE CLAIM TRAVELS WITHOUT ITS QUALIFICATIONS.
+
+    Search results and link previews show this string and nothing else — no
+    `.claim` block beside it, no coverage table below it. So it carries the
+    same two qualifications the page's own lede does: the second implementation
+    was built from a WRITTEN SPEC (not blind, not a certification), and the
+    comparison is over the fixed cases, not over the reader's own upload."""
+    desc = _plain(re.search(r'<meta name="description" content="(.*?)">',
+                            _build_web(tmp_path), re.S).group(1))
+    assert "independently validated" not in desc
+    for overclaim in ("independently written", "independently developed",
+                      "independently verified", "independent implementation"):
+        assert overclaim not in desc.lower(), (
+            f'"{overclaim}" in the meta description drops the qualification '
+            f"the page itself makes — the spec was transcribed FROM the R")
+    assert "written spec" in desc, "the qualification must travel with the claim"
+    assert "every difference published" in desc
+    assert "four fixed test datasets" in desc, (
+        "the scope is the registered cases, counted, not the reader's file")
+    assert not ABSOLUTE_OVER_NUMBERS.search(desc), desc
+
+
+def test_web_lede_cannot_contradict_the_coverage_table(tmp_path):
+    """The lede is read by everyone; the coverage table is read by the diligent.
+    They are three screens apart, so the lede is where an absolute claim goes
+    unchallenged — and the table underneath it lists, per analysis, exactly what
+    the comparison does NOT cover. One of them has to give, and it is not the
+    table: it is derived from the cases' own declared targets."""
+    html = _build_web(tmp_path)
+    assert '<th scope="col">What is not</th>' in html
+    assert "the prose wrapped around the numbers" in html   # a real exclusion
+    lede = _plain(re.search(r'<p class="lede">(.*?)</p>', html, re.S).group(1))
+    assert not ABSOLUTE_OVER_NUMBERS.search(lede), lede
+    assert "four fixed test datasets" in lede
+    assert "not about a file you upload" in lede
+
+    # ...and on the SHIPPED evidence, where the exclusion the reviewer caught
+    # is the KM hazard-ratio clause sitting under "What is not".
+    real = json.loads((STATS_VALIDATION / "results" / "findings.json").read_text())
+    shipped = _build_web(tmp_path, real, cases_dir=STATS_VALIDATION / "cases")
+    assert "the hazard-ratio clause of the displayed sentence" in shipped
+    shipped_lede = _plain(
+        re.search(r'<p class="lede">(.*?)</p>', shipped, re.S).group(1))
+    assert not ABSOLUTE_OVER_NUMBERS.search(shipped_lede), shipped_lede
+    assert "eight fixed test datasets" in shipped_lede
 
 
 def test_web_page_states_the_claim_and_its_limit(tmp_path):

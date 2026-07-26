@@ -1,9 +1,10 @@
 // web/sw.js
 // Figura service worker: makes repeat visits fast by caching the app shell and
-// the (no-cache) webR runtime. Three strategies, chosen by `routeFor` below:
-//   R/*.R        network-first  — statistics may never be stale, even once
-//   same-origin  stale-while-revalidate — chrome self-heals within a round trip
-//   webR static  cache-first    — the ~6MB runtime is the bandwidth win
+// the (no-cache) webR runtime. Four strategies, chosen by `routeFor` below:
+//   R/*.R            network-first  — statistics may never be stale, even once
+//   validation.html  network-first  — published evidence, same reasoning
+//   same-origin      stale-while-revalidate — chrome self-heals in a round trip
+//   webR static      cache-first    — the ~6MB runtime is the bandwidth win
 // Versioned: bump CACHE to hard-reset all caches on activate. Since R sources
 // are network-first, the bump is a convenience lever, not the guard standing
 // between a deploy and wrong output.
@@ -29,6 +30,8 @@ const scoped = (p) => new URL(p, self.registration.scope).toString();
 // from the rail. It is precached because it is small, it shares the shell's
 // stylesheet and fonts, and it is exactly the page a user opens when they are
 // deciding whether to trust the numbers — which is a bad moment to be offline.
+// Its cached copy is an OFFLINE FALLBACK ONLY: it is routed network-first
+// below, for the same reason R sources are.
 const PRECACHE = [
   "index.html", "validation.html", "app.js", "worker.js", "styles.css",
   "export-ui.js",
@@ -68,6 +71,18 @@ const STATIC_EXT = /\.(wasm|data|mjs|tgz|so)$/i;
 // `.scratch/logistic-regression/issues/10-sw-serves-stale-r-sources.md`.
 const R_SOURCE = /\/R\/[^/]+\.R$/i;
 
+// THE PUBLISHED EVIDENCE, network-first for the same reason. validation.html is
+// regenerated from findings.json on every push and byte-diffed in CI; the page
+// says so in its own text ("continuous integration regenerates it on every
+// push"), and its entire purpose is to be the CURRENT comparison. Under
+// stale-while-revalidate a returning user's first load after a deploy reads the
+// PREVIOUS evidence — a fixed defect still listed as open, or a difference that
+// has only just appeared still absent — which is the same failure the R/*.R
+// routing exists to prevent, on the page whose subject is trustworthiness. The
+// precached copy stays, purely as an offline fallback. It costs one HTML
+// round trip on a page nobody visits in a loop.
+const EVIDENCE = /\/validation\.html$/i;
+
 // The single routing decision, as a pure function of the request — the fetch
 // handler below only dispatches on its answer. Kept separate so the choice
 // that matters for correctness is directly testable (see web/sw.test.mjs);
@@ -76,7 +91,9 @@ function routeFor(req) {
   if (req.method !== "GET") return "pass";
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
-    return R_SOURCE.test(url.pathname) ? "r-source" : "same-origin";
+    if (R_SOURCE.test(url.pathname)) return "r-source";
+    if (EVIDENCE.test(url.pathname)) return "evidence";
+    return "same-origin";
   }
   if (WEBR_ORIGINS.includes(url.origin) && STATIC_EXT.test(url.pathname)) {
     return "webr-static";
@@ -105,6 +122,7 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   switch (routeFor(req)) {
     case "r-source":                                   // statistics: never stale
+    case "evidence":                                   // published evidence: ditto
       return event.respondWith(networkFirst(req));
     case "same-origin":
       return event.respondWith(staleWhileRevalidate(req)); // self-healing: never serves stale forever
@@ -115,10 +133,10 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Network-first, for R/*.R only. The cached copy exists purely so the app still
-// works offline; whenever the network answers, its copy wins and replaces the
-// cache. A few tens of KB of R next to the ~6MB runtime makes the bandwidth
-// cost of never trusting the cache here negligible.
+// Network-first, for R/*.R and validation.html. The cached copy exists purely
+// so the app still works offline; whenever the network answers, its copy wins
+// and replaces the cache. A few tens of KB of R (and one HTML page) next to the
+// ~6MB runtime makes the bandwidth cost of never trusting the cache negligible.
 //
 // `cache: "reload"` is load-bearing, not belt-and-braces: the browser's HTTP
 // cache sits in FRONT of this fetch, and a response with no Cache-Control gets
