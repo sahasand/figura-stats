@@ -237,6 +237,27 @@ async function detectRuntime(page, cdnUrls) {
 // commit whose R/web state no longer matches what is on disk). Read via `git`
 // rather than any bundled version, because the thing that must be pinned is
 // the actual working tree the browser was driven against.
+//
+// INVARIANT — do not violate this from an offline edit. `commit` records the
+// tree the BROWSER ACTUALLY RAN AGAINST, measured at the moment THIS function
+// is called from the test body below. It is not "whatever HEAD happens to be
+// right now" and must be written ONLY by a real run of this spec. An offline
+// patch script that touches results/webr-tier.json for any OTHER reason (a
+// formatting fix, an unrelated field, a bug fix in this very file) must carry
+// the existing `commit` value forward VERBATIM — never regenerate it by
+// re-invoking `git rev-parse HEAD`, because by patch time HEAD has moved past
+// the commit the browser was actually driven against, and that reinvocation
+// silently overwrites the true value with a wrong one. This happened for
+// real: commit 2997e1b's offline patch (fixing a NUL-byte bug introduced by
+// the previous commit, 6c7744d) re-derived `commit` this way and clobbered
+// 815fa79d40d5bcb1a9cd5e3115694e51d58bd7b2 (the tree the browser was actually
+// driven against) with 6c7744dfd642af01d525d4788e4b644b35938314 (the very
+// metadata-only commit that made the patch necessary, where the browser never
+// ran) — a silent regression of the exact staleness-honesty guarantee this
+// field exists to provide. See build_scorecard.py's `_current_head`/staleness
+// note for the safety net that now makes a mismatch like that visible instead
+// of silent, and prefer restoring a clobbered value (as that regression's fix
+// did) over ever recomputing it offline.
 function repoCommit() {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT })

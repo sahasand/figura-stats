@@ -112,13 +112,18 @@ starts) publishes nothing rather than last release's numbers under this
 release's date, and the scorecard's empty state says so.
 
 **The evidence is bound to the code it measured.** `webr-tier.json` also
-records `commit` (the repo `HEAD` at run time) and `native_digest` (a sha256 of
-the native `text` strings — from `results/<id>.figura.json` — that were
-actually compared against). A later `make all` that changes native output
-changes the digest, so previously-published webR evidence becomes visibly
-stale instead of silently continuing to claim parity with numbers that no
-longer exist. The scorecard shows the commit (short form) next to the runtime
-line.
+records `commit` (the repo `HEAD` at run time, written ONLY by a real run of
+`e2e/webr-parity.spec.js` — see that file's `repoCommit()` for the invariant
+and the regression that once broke it) and `native_digest` (a sha256 of the
+native `text` strings — from `results/<id>.figura.json` — that were actually
+compared against). A later `make all` that changes native output changes the
+digest, so previously-published webR evidence becomes visibly stale instead of
+silently continuing to claim parity with numbers that no longer exist. The
+scorecard shows the commit (short form) next to the runtime line, and — since
+`commit` binding is only useful if staleness is actually visible, not just
+theoretically detectable — when that commit differs from the repo's current
+`HEAD` the scorecard says so on the page ("gate last run at `<hash>`; HEAD is
+now `<hash>`"), rather than requiring a reader to `git diff` it by hand.
 
 Coverage is the two ratio-table cases with a full native-R display artifact,
 `logistic-confounding` and `cox-adjusted`. The rest of the roster is Phase 2 —

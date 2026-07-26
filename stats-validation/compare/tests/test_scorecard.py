@@ -359,6 +359,51 @@ def test_webr_missing_commit_renders_without_crashing_or_a_stray_dot(tmp_path):
     assert "commit <code>" not in html
 
 
+# THE GUARD's own tests. The regression this defends against was real: commit
+# 2997e1b's offline patch to webr-tier.json re-ran `git rev-parse HEAD` and
+# clobbered `commit` from 815fa79d40d5bcb1a9cd5e3115694e51d58bd7b2 (the tree
+# the browser actually ran against) to 6c7744dfd642af01d525d4788e4b644b35938314
+# (a later, metadata-only commit the browser never saw) — a silent wrong
+# claim. Rather than relying on a reader to manually `git diff` the shown
+# commit against HEAD, the scorecard now says so on the page. Both directions
+# are pinned against `build_scorecard._current_head()` itself (not a
+# hardcoded hash), so the tests stay correct as this checkout's HEAD moves.
+def test_webr_commit_matching_head_shows_no_staleness_note(tmp_path):
+    """The gate's `commit` IS the repo's current HEAD: the evidence is
+    current, so no staleness note — just the plain commit line."""
+    import pytest
+    real_head = build_scorecard._current_head()
+    if real_head is None:
+        pytest.skip("git unavailable in this environment")
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["commit"] = real_head
+    html = _build_with_webr(tmp_path, payload)
+    assert "Gate last run at" not in html
+    # The CSS rule (".webr-stale { ... }") is always present in the stylesheet
+    # — only the RENDERED marker (the class attribute on a <p>) must be absent.
+    assert 'class="webr-stale"' not in html
+
+
+def test_webr_commit_differing_from_head_shows_staleness_note(tmp_path):
+    """The gate's `commit` differs from current HEAD (the exact shape of the
+    2997e1b regression, and also the ordinary case of a later commit landing
+    after the gate ran): the page must say so plainly, naming both hashes,
+    instead of silently rendering a commit that no longer describes what is
+    on disk."""
+    import pytest
+    real_head = build_scorecard._current_head()
+    if real_head is None:
+        pytest.skip("git unavailable in this environment")
+    stale_commit = "0" * 40 if real_head != "0" * 40 else "1" * 40
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["commit"] = stale_commit
+    html = _build_with_webr(tmp_path, payload)
+    assert "class=\"webr-stale\"" in html
+    assert "Gate last run at" in html
+    assert stale_commit[:12] in html
+    assert real_head[:12] in html
+
+
 def test_webr_honest_cells_with_numbers_phrasing_is_rendered(tmp_path):
     """The '36 cells' fix: the scorecard must say how many of the compared
     cells actually carry a number, in the reader's terms, not just print a

@@ -42,10 +42,16 @@ from __future__ import annotations
 
 import html
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 RESULTS = Path(__file__).resolve().parent / "results"
+# The actual repo checkout this file lives in — one level above
+# stats-validation/ — used ONLY to read current HEAD for the webR staleness
+# note below. Never used to WRITE `commit`; only a real browser run
+# (e2e/webr-parity.spec.js's repoCommit()) may do that.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # DISPOSITIONS comes from compare.py itself, not a restated copy, so the
 # "defects" tile and compare.py's own finding taxonomy can never drift apart
@@ -118,6 +124,11 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 .webr-aborted { color:var(--fail); font-weight:600; font-style:italic; }
 .webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
 .webr-totals { margin:0 0 1rem; }
+/* The staleness note: turns "commit clobbered/stale" from a silent wrong
+   claim into visible information (see _current_head's docstring). Same warn
+   colour as .DISPLAY_ARTIFACT/.NOT_COMPARED above, not fail — an out-of-date
+   gate is a thing to notice, not a defect the gate itself found. */
+.webr-stale { color:var(--warn); font-size:.85rem; margin:0 0 1rem; }
 """
 
 
@@ -271,6 +282,32 @@ def _rows(data: dict) -> str:
     return "".join(rows)
 
 
+def _current_head(repo_root: Path = REPO_ROOT) -> str | None:
+    """Best-effort current repo HEAD, for the webR staleness note only.
+
+    THE GUARD, not the write path. webr-tier.json's `commit` field must only
+    ever be written by a real run of e2e/webr-parity.spec.js's repoCommit() —
+    see that function's docstring for the regression this is defending
+    against (an offline patch script once re-derived `commit` this same way
+    and clobbered the true value). This function never touches the artifact;
+    it only reads HEAD, once, to let _webr_section say when the two disagree.
+    Returns None (never a fabricated hash) if git is unavailable, this isn't a
+    checkout, or anything else goes wrong — the staleness note is then simply
+    omitted rather than guessed at.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo_root,
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    head = out.stdout.strip()
+    return head or None
+
+
 def _webr_section(results_dir: Path) -> str:
     """The webR-vs-native-R release gate, read from results/webr-tier.json.
 
@@ -354,11 +391,9 @@ def _webr_section(results_dir: Path) -> str:
     source = raw.get("runtime_source")
     source_html = f"<br>{esc(source)}" if source else ""
     # `commit` binds this evidence to the repo state it was measured against
-    # (finding: "the artifact binds to no app version/native baseline"). A
-    # later `make all` that changes native output leaves this commit visibly
-    # stale — the reader can `git diff` it against HEAD. Shown short (12 hex
-    # chars, same convention as `git rev-parse --short`) but the field itself
-    # stores the full hash.
+    # (finding: "the artifact binds to no app version/native baseline"). Shown
+    # short (12 hex chars, same convention as `git rev-parse --short`) but the
+    # field itself stores the full hash.
     commit = raw.get("commit")
     commit_html = (f" &middot; commit <code>{esc(str(commit)[:12])}</code>"
                     if commit else "")
@@ -367,6 +402,26 @@ def _webr_section(results_dir: Path) -> str:
         f"{esc(raw.get('runtime'))}</code> &middot; run "
         f"{esc(raw.get('date'))}{commit_html}{source_html}</p>"
     )
+
+    # THE GUARD (fix for a real regression — see repoCommit()'s docstring in
+    # e2e/webr-parity.spec.js): a later `make all` that changes native output,
+    # OR an offline edit to webr-tier.json that clobbers `commit` outright,
+    # must never be able to leave this evidence silently claiming parity with
+    # a commit the browser was not actually run against. Rather than relying
+    # on a reader to manually `git diff` the shown commit against HEAD, say it
+    # on the page: when the gate's `commit` differs from the repo's current
+    # HEAD, render a plain staleness note. Equal (including the common case of
+    # `_current_head` failing to resolve, e.g. no git available) renders
+    # nothing extra — this is additive information, never a fabricated claim.
+    staleness_html = ""
+    current_head = _current_head()
+    if commit and current_head and str(commit) != current_head:
+        staleness_html = (
+            f"<p class=\"webr-stale\">Gate last run at "
+            f"<code>{esc(str(commit)[:12])}</code>; HEAD is now "
+            f"<code>{esc(current_head[:12])}</code> &mdash; this evidence "
+            f"predates the current commit.</p>"
+        )
 
     # The honest "36 cells" fix: not every compared cell is a number that
     # could drift (most are static labels, headers, and intentionally-blank
@@ -389,7 +444,7 @@ def _webr_section(results_dir: Path) -> str:
         )
 
     return (
-        f"{header_html}{totals_html}"
+        f"{header_html}{staleness_html}{totals_html}"
         "<div class=\"scroll\"><table><thead><tr><th>Case</th>"
         "<th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>")
