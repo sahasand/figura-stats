@@ -31,7 +31,31 @@ call signatures and return shapes the harness and comparator depend on.
     (e.g. `armNew treatment`).
   - `unadjusted`: same shape, one univariable model per covariate.
   - `n`, `n_event`, `n_dropped`: integers.
-  - `c_statistic`: float.
+  - `c_statistic`: float. **Superseded by `diagnostics["c_statistic"]` below**
+    and kept only so an older caller does not break; the comparator reads the
+    `diagnostics` block, never this key.
+  - `diagnostics`: dict — the advisory block, per `spec/logistic-confounding.md`'s
+    Diagnostics section. Exactly these keys, all describing the JOINT model:
+    - `c_statistic`: `float | None` — normalised Mann-Whitney U of the fitted
+      probabilities, average ranks at ties. `None` when either outcome class is
+      empty.
+    - `vif`: `{covariate: float} | None` — one entry per CONTINUOUS covariate,
+      keyed by the bare column name (never a coefficient name; VIF is not
+      computed for categorical covariates at all). **`None`, not `{}`, when
+      there are fewer than two continuous covariates** — "the diagnostic did
+      not run" and "it ran and found nothing" are different claims and the
+      comparator reads them differently. A duplicated covariate gives
+      `float("inf")`, which must survive to JSON as a number, not a string.
+    - `vif_triggered`: `bool` — `vif is not None and any(v > 5)`.
+    - `epv`: `float` — `min(n_event, n - n_event) / (number of non-intercept
+      coefficients)`.
+    - `epv_triggered`: `bool` — `epv < 10`.
+    - `cooks_influential`: `int` — rows whose Cook's distance exceeds `4/n`,
+      non-finite distances excluded.
+    - `cooks_triggered`: `bool` — `cooks_influential > 0`.
+    - `separation_caution`: `bool` — the spec's two-clause rule (an
+      unreportable cell in EITHER column, or fitted probabilities numerically
+      0 or 1).
 - `reportable(cell) -> bool` — whether a `{est, lo, hi, p}` cell is reportable
   per the spec's Reportability rule.
 
@@ -48,8 +72,33 @@ Report all floats at full precision — never round inside the module.
     by the level string (e.g. `armNew treatment`).
   - `unadjusted`: same shape, one univariable Cox model per covariate.
   - `n`, `n_event`, `n_dropped`: integers.
+  - `diagnostics`: dict — the advisory block, per `spec/cox-adjusted.md`'s
+    Diagnostics section. Exactly these keys:
+    - `zph_global_p`: `float | None` — the GLOBAL proportional-hazards score
+      test's p-value, with the `km` time transform the spec pins. `None` only
+      when the test cannot be computed at all.
+    - `zph_terms`: `{covariate: float}` — the per-term p-values, **keyed by
+      COVARIATE (model term), not by coefficient level**: a categorical
+      covariate with three levels contributes ONE entry on 2 degrees of
+      freedom, not two entries. Keys are the bare column names, so they do NOT
+      match `terms`' coefficient keys, and that asymmetry is deliberate.
+    - `ph_violation`: `bool` — `zph_global_p < 0.05`.
+    - `epv`: `float` — `n_event / (number of coefficients)`. Cox counts EVENTS,
+      unlike logistic's smaller-outcome-group rule; the two are different
+      quantities under one name.
+    - `epv_triggered`: `bool` — `epv < 10`.
+    - `separation_caution`: `bool` — any cell in either column fails the
+      Reportability rule.
 
 Report all floats at full precision — never round inside the module.
+
+**The proportional-hazards test is not a library default.** `spec/cox-adjusted.md`
+pins both the transform (`km`, R's default) and the test (the modern score test
+on the extended time-varying model, Efron risk sets). lifelines'
+`proportional_hazard_test` defaults to `time_transform="rank"` AND implements the
+older correlation form, so neither its default nor its `time_transform="km"`
+setting can be assumed to clear the 1e-6 exact tier. Read the spec's formula and
+verify against it, exactly as the Efron partial likelihood was verified.
 
 **Numerical precision.** Cox's partial-likelihood optimum is found
 iteratively, unlike logistic's closed-form-per-step IRLS — verified

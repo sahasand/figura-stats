@@ -271,3 +271,48 @@ def test_decision_mismatch_is_styled_and_counted_as_a_defect(tmp_path):
     assert "DECISION_MISMATCH" in build_scorecard.DEFECT_CODES
     # ...and it is explained in the legend, not left as a bare code.
     assert "Decision mismatch" in html
+
+
+def test_diagnostic_mismatch_is_styled_and_counted_as_a_defect(tmp_path):
+    """Task A14's new code, same requirement DECISION_MISMATCH has: reach the
+    CSS, reach the defects tile (derived from compare.py's DISPOSITIONS, not
+    hand-listed), and be explained in the legend rather than left as a bare
+    code."""
+    assert "DIAGNOSTIC_MISMATCH" in build_scorecard.DEFECT_CODES
+    html = _build(tmp_path)
+    assert ".DIAGNOSTIC_MISMATCH" in html
+    assert "Diagnostic mismatch" in html
+
+
+def test_deferred_targets_are_named_in_the_coverage_cell(tmp_path):
+    """A target the case declares but this run did not enforce is neither met
+    nor failed. Left out of the cell, a case would read "targets met" in green
+    while part of its published contract went unexamined."""
+    case = {
+        "id": "case-deferred",
+        "kind": "ratio_table",
+        "compared": 35,
+        "passed": True,
+        "targets_met": True,
+        "targets": {"adjusted_or": 4},
+        "deferred_targets": ["c_statistic", "vif_note"],
+        "findings": [],
+    }
+    payload = {"cases": [case], "total_compared": 35, "total_findings": 0}
+    findings_path = tmp_path / "findings.json"
+    findings_path.write_text(json.dumps(payload))
+    html = build_scorecard.build(
+        findings_path=findings_path,
+        out_path=tmp_path / "scorecard.html").read_text()
+    assert "2 DEFERRED: c_statistic, vif_note" in html
+    assert "targets-deferred" in html
+    # ...and the legend says what DEFERRED means.
+    assert "<b>DEFERRED</b>" in html
+
+
+def test_a_case_without_the_deferred_field_renders_as_before(tmp_path):
+    """Every case in the main fixture predates `deferred_targets`; none may
+    grow a stray marker. The legend's explanation of DEFERRED and the CSS rule
+    for it are always present, so the assertion is on the per-case SPAN's class
+    ATTRIBUTE — the only thing that could misreport a row."""
+    assert "class='targets-deferred'" not in _build(tmp_path)

@@ -14,6 +14,13 @@
         "n_event": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [
+        "c_statistic",
+        "vif_note",
+        "epv_note",
+        "cooks_note",
+        "separation_note"
+      ],
       "findings": []
     },
     {
@@ -30,6 +37,12 @@
         "n_event": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [
+        "zph",
+        "ph_note",
+        "epv_note",
+        "separation_note"
+      ],
       "findings": []
     },
     {
@@ -46,6 +59,7 @@
         "n_event": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [],
       "findings": []
     },
     {
@@ -60,6 +74,7 @@
         "n": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [],
       "findings": []
     },
     {
@@ -74,6 +89,7 @@
         "n": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [],
       "findings": []
     },
     {
@@ -88,6 +104,7 @@
         "n": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [],
       "findings": []
     },
     {
@@ -104,6 +121,13 @@
         "n_event": 1,
         "n_dropped": 1
       },
+      "deferred_targets": [
+        "c_statistic",
+        "vif_note",
+        "epv_note",
+        "cooks_note",
+        "separation_note"
+      ],
       "findings": [
         {
           "code": "COUNT_MISMATCH",
@@ -398,6 +422,7 @@
         "n_dropped": 1,
         "decisions": 5
       },
+      "deferred_targets": [],
       "findings": []
     }
   ],

@@ -9,5 +9,8 @@
     "increments": { "age": 10 }
   },
   "display": { "kind": "ratio_table" },
-  "exact_targets": ["adjusted_or", "adjusted_ci", "adjusted_p", "n", "n_event", "n_dropped"]
+  "exact_targets": [
+    "adjusted_or", "adjusted_ci", "adjusted_p", "n", "n_event", "n_dropped",
+    "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"
+  ]
 }

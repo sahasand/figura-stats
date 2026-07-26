@@ -19,9 +19,20 @@ from `file://`.
 designed outcome, not a broken run.** `logistic-dirty` exists to publish the
 app-vs-exported-script divergence of `issues/02`, so it fails on purpose. The
 scorecard is written BEFORE the failure is reported — a non-zero `all` means
-"findings exist, go read them", never "nothing was published". `test` is
-green; every suite including `python/tests/test_summary.py` runs inside the
-gated `make test` target and all 60 python tests pass with `make test all`.
+"findings exist, go read them", never "nothing was published".
+
+**`test` is currently red on 17 diagnostics acceptance tests, by design.**
+Task A14's in-repo half published the advisory-diagnostics contract — the
+specs, `INTERFACES.md`, the harvester, the comparator and the case files —
+ahead of the clean-room implementation, exactly as every earlier analysis was
+staged. `python/tests/test_logistic.py` and `python/tests/test_cox.py` fail
+with `KeyError: 'diagnostics'` and nothing else; the other 60 python tests, all
+191 comparator tests and both JS suites are green. Two lines activate the rest
+when `validate/logistic.py` and `validate/cox.py` return their `diagnostics`
+blocks: the entries in `compare.py`'s `PENDING_PATH_B_DIAGNOSTICS`. Until then
+the three affected cases show their diagnostics coverage as **DEFERRED** on
+the scorecard rather than as met, so nothing claims to have been checked that
+was not.
 
 On the scorecard, read the **Compared** column before drawing a conclusion
 about a finding. "Figura" is the screen on the display tier and the harvest

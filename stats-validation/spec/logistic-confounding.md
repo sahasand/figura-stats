@@ -51,3 +51,189 @@ finite and the interval lies within [1e-6, 1e6]. Otherwise the cell reads
 ## Display
 `%.2f (%.2f–%.2f, p=%.3f)` with an en-dash separator; when p < 0.001 the
 p-part reads `p<0.001`.
+
+## Diagnostics (advisory)
+
+Figura appends advisory sentences to the methods text. **Not one of them gates
+a fit or changes a reported estimate** — every odds ratio above is the same
+number whether they fire or not. They are nonetheless published claims about
+the model, pasted into a manuscript alongside the estimates, so they are
+validated: the numeric ones by value, and every one of them by whether the
+sentence FIRES AT ALL.
+
+Report them in a `diagnostics` block; `stats-validation/python/INTERFACES.md`
+pins the key names and types. All of them describe the JOINT (adjusted) model
+fitted on the complete-case rows of the Population section, after the increment
+rescaling and the reference releveling of the Covariates section.
+
+Every threshold below is a strict inequality, exactly as written.
+
+### C-statistic — `c_statistic`
+
+Apparent (in-sample) discrimination: no split-sample and no bootstrap
+correction, measured on the same rows the model was fitted to, so it is
+optimistically biased. It is the normalised Mann-Whitney U statistic of the
+joint model's fitted probabilities against the observed outcome.
+
+Let `p_i` be the joint model's fitted probability for row `i`, `n1` the number
+of rows with y = 1 and `n0` the number with y = 0. Rank all n = n1 + n0 fitted
+probabilities together in ascending order, **assigning tied values their
+average rank** (midranks — the tie rule matters: with a single two-level
+categorical covariate every row takes one of two fitted probabilities, so
+almost every pair is tied). Then
+
+    C = ( sum of the ranks of the y = 1 rows  -  n1 * (n1 + 1) / 2 ) / (n1 * n0)
+
+That is Mann-Whitney U divided by n1 * n0, so a tied event/non-event pair
+contributes exactly 0.5 to the concordance count. `None` when either class is
+empty.
+
+Displayed, whenever C is finite:
+
+    " Overall model discrimination: apparent (in-sample) C-statistic = %.2f."
+
+### Variance inflation — `vif`, `vif_triggered`
+
+Computed for **CONTINUOUS covariates only**. Categorical covariates take no
+part at all: not as the regressand, not as a regressor. Collinearity among
+categorical terms (which would need a generalised VIF) is not assessed, and
+this is a limit of the diagnostic as shipped, not an omission to repair.
+
+- With fewer than **two** continuous covariates there is nothing to regress
+  against, so **no VIF is computed at all**: `vif` is `None` (not an empty
+  map — "the diagnostic did not run" and "it ran and found nothing" are
+  different claims), and the note can never fire.
+- Otherwise, for each continuous covariate j, fit an ordinary least-squares
+  regression **with an intercept** of column j on every OTHER continuous
+  covariate, over the same complete-case rows the logistic model used. Let
+  `R²_j` be that fit's multiple R-squared (1 - RSS/TSS, TSS about the mean).
+  Then
+
+      VIF_j = 1 / (1 - R²_j)
+
+  When `R²_j` is not finite or is >= 1 — an exactly duplicated covariate —
+  `VIF_j` is **positive infinity**.
+- The increment rescaling of the Covariates section divides a column by a
+  positive constant, which leaves `R²_j` unchanged, so VIF is the same
+  before and after it.
+
+`vif_triggered` is true when `vif` is not `None` and **any** VIF > 5.
+
+Displayed, when triggered:
+
+    " CAUTION: multicollinearity among continuous covariates (largest VIF =
+      %s, above the usual threshold of 5); consider dropping a redundant
+      variable."
+
+where `%s` is the literal string `effectively infinite` when **any** VIF is
+non-finite, and otherwise `sprintf("%.1f", max(VIF))`. The infinite case is
+keyed off the presence of a non-finite VIF, not off the absence of finite
+ones: with a third, independent covariate a finite VIF near 1.0 also exists,
+and reporting that one would read "largest VIF = 1.0, above the usual
+threshold of 5".
+
+### Events per variable — `epv`, `epv_triggered`
+
+Let `terms` be the number of model coefficients **excluding the intercept**:
+one per continuous covariate, and (number of levels - 1) per categorical
+covariate, levels counted **after** the complete-case filter. Let
+
+    n_min = min(n_event, n - n_event)
+
+— the smaller outcome group, not the event count, so an outcome that is mostly
+events is judged on its rarer class. Then
+
+    epv = n_min / terms
+
+`epv_triggered` is true when `epv` < 10.
+
+Displayed, when triggered:
+
+    " CAUTION: about %.1f events per model term (EPV < 10); the adjusted
+      estimates may be unstable and are best treated as exploratory."
+
+### Influential observations — `cooks_influential`, `cooks_triggered`
+
+Cook's distance for the joint model, at the conventional 4/n cut-off.
+
+For row i, with `μ_i` the fitted probability, `y_i` the 0/1 outcome, and `p`
+the number of estimated coefficients **including the intercept**:
+
+- Pearson residual `r_i = (y_i - μ_i) / sqrt(μ_i * (1 - μ_i))`.
+- IRLS working weight `w_i = μ_i * (1 - μ_i)`; hat value `h_i` is the i-th
+  diagonal of `W^(1/2) X (X' W X)^(-1) X' W^(1/2)` with `W = diag(w)` and `X`
+  the design matrix including the intercept column — that is, the leverage of
+  the final weighted least-squares step.
+- Dispersion is **1** (binomial family), so it drops out:
+
+      D_i = ( r_i / (1 - h_i) )^2 * h_i / p
+
+- A row whose `D_i` is not finite (h_i == 1) is **not counted** — treat it as
+  missing, never as influential.
+
+`cooks_influential` is the number of rows with `D_i > 4 / n`, where n is the
+number of rows in the fit. `cooks_triggered` is true when that count > 0.
+
+Displayed, when triggered:
+
+    " %d observation(s) were flagged as influential (Cook's distance > 4/n);
+      inspect them for data-entry errors."
+
+### Separation / collinearity caution — `separation_caution`
+
+True when **either** of:
+
+1. any displayed cell in **either** column — unadjusted or adjusted — fails the
+   Reportability rule above (the interval ran away in either tail); or
+2. the joint fit's fitted probabilities are numerically 0 or 1: any `μ_i` >
+   1 - 10ε or < 10ε, with ε the machine epsilon for a double
+   (2.220446049250313e-16). This is exactly the condition R's `glm.fit` warns
+   on.
+
+Both columns are inspected in clause 1 because an unadjusted cell can run away
+while the adjusted one stays finite (a crude effect that is explained away),
+and that cell would otherwise sit in the table with no sentence explaining it.
+
+Displayed, when triggered:
+
+    " CAUTION: separation or severe collinearity was detected — one or more
+      covariates either predict the outcome (near-)perfectly or duplicate
+      information already carried by another covariate, so those odds ratios
+      are not reliably estimated by standard logistic regression. Consider
+      collapsing sparse categories, dropping or combining a redundant
+      variable, or a penalized (Firth) fit, and seek statistical review."
+
+**Known sensitivity, measured.** Clause 2 is evaluated wherever the iterative
+fit stopped, so it is solver-dependent: on a perfectly separated 15-vs-15
+fixture R's own IRLS stops with `min(μ) = 7.9e-12`, four orders of magnitude
+ABOVE 10ε, so R issues no warning and the caution comes entirely from clause 1.
+Clause 1 is the clause that fires in practice. Do not tune clause 2's threshold
+to make a case agree — 10ε is the shipped rule.
+
+### Two notes deliberately outside this contract
+
+- **The numerical-warning fallback.** When no separation caution is printed,
+  the app prints ` CAUTION: fitting reported a numerical warning ("<message>");
+  ...` embedding R's own verbatim warning text. That string is an artifact of
+  one implementation's warning catalogue, not a statistical quantity, so no
+  independent implementation can be asked to reproduce it. It is outside this
+  contract; the comparator detects the clause in the displayed text and reports
+  MISSING_QUANTITY rather than ignoring it, so a case that provokes it requires
+  this contract to be extended first.
+- **The dropped-row note** (` %d row(s) with missing values were excluded.`) is
+  not a diagnostic: `n_dropped` is already compared as a count.
+
+### Which tier judges which diagnostic
+
+The exported `.R` script computes and prints the C-statistic with the identical
+expression given above, from objects it assigns (`prob`, `n1`, `n0`, `dat$.y`),
+so the C-statistic **has a full-precision Path A value** and is compared at rel
+1e-6 / abs 1e-9 like any estimate, plus a script-tier check that the exported
+script's C-statistic re-renders the sentence the screen showed.
+
+The exported script computes **no VIF, no Cook's distance, no EPV and no
+separation check** — there is no `lm()`, no `cooks.distance()` and no fitted-
+probability inspection anywhere in it. Those four diagnostics therefore have
+**no exact-tier Path A value at all**, and none is manufactured: they are judged
+against the DISPLAY tier only — the sentence Figura actually printed — which is
+honest evidence about the artifact the user was given.

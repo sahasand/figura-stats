@@ -7,7 +7,8 @@
 # usage (from the repo root):
 #   Rscript stats-validation/harness/run-script.R <id> <figura.json> <case-dir> <out.json>
 #
-# Output: {id, figure, terms: {term: {est, se, lo, hi, p}}, n, n_event, n_dropped}
+# Output: {id, figure, terms: {term: {est, se, lo, hi, p}}, n, n_event, n_dropped,
+#          diagnostics: {...}}
 # Ratio scale, Wald, literal 1.96 — the pinned convention. `se` is the RAW
 # log-scale standard error (lo/hi are derived from it and kept for convenience);
 # a checker that wants a different interval can rebuild it from est + se.
@@ -34,6 +35,16 @@
 # HARVEST BY COLUMN NAME, NEVER BY POSITION. Column order differs between model
 # classes and a positional harvest returns a plausible wrong number in silence;
 # ratio_terms() below stops instead when a named column is absent.
+#
+# HARVEST ONLY WHAT THE EXPORTED SCRIPT COMPUTES. `diagnostics` is the one block
+# where the temptation to do otherwise is real: the app displays advisory
+# diagnostics (VIF, Cook's distance, EPV, separation) that the exported script
+# does NOT compute, and every one of them could be recomputed here from the
+# script's own `fit`. Doing so would file a number under "exported script" that
+# the exported script never produced — the exact misattribution the SRC_*
+# vocabulary in compare.py exists to prevent. A diagnostic the script does not
+# compute has no Path A exact value; it is judged on the display tier instead,
+# and each harvester below names which of its diagnostics are which and why.
 # ---------------------------------------------------------------------------
 
 # ---- shared helpers -------------------------------------------------------
@@ -90,14 +101,42 @@ n_dropped_vs_csv <- function(dat) {
 # glm: summary()$coefficients columns are "Estimate" / "Std. Error" /
 # "Pr(>|z|)". `dat` is the script's complete-case frame; `.y` is its 0/1 outcome
 # (both names come from .logistic_script in R/logistic.R).
+#
+# DIAGNOSTICS, and the one rule that governs which of them appear here.
+# `diagnostics` carries ONLY what the exported script itself computes. The
+# script's joint-model block ends with
+#
+#   prob <- fitted(fit); n1 <- sum(dat$.y == 1); n0 <- sum(dat$.y == 0)
+#   (sum(rank(prob)[dat$.y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+#
+# — the C-statistic, computed and PRINTED, just never assigned to a name. So it
+# is re-evaluated below from the script's own `prob`/`n1`/`n0`/`dat$.y` with the
+# identical expression, exactly as harvest_km recomputes the log-rank p from the
+# script's own `lr` (same situation, same treatment: a value the script produced
+# for the user but did not bind).
+#
+# The script computes NO VIF, NO Cook's distance, NO EPV and NO separation
+# check — there is no lm(), no cooks.distance() and no fitted-probability
+# inspection anywhere in .logistic_script. Those four diagnostics therefore have
+# NO Path A full-precision value, and none is invented here: running
+# cooks.distance(fit) or an lm() of our own would publish a number under
+# "exported script" that the exported script never produced, which is the one
+# thing this artifact must never do. The comparator judges them on the DISPLAY
+# tier instead — the sentence Figura actually printed — and says so
+# (spec/logistic-confounding.md, "Which tier judges which diagnostic").
 harvest_logistic <- function(env, id) {
   fit <- need(env, "fit", id)
   dat <- need(env, "dat", id)
   sm <- summary(fit)$coefficients
+  prob <- need(env, "prob", id)
+  n1 <- need(env, "n1", id); n0 <- need(env, "n0", id)
+  c_stat <- if (n1 == 0 || n0 == 0) NA_real_
+            else (sum(rank(prob)[dat$.y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
   list(terms = ratio_terms(sm, "Estimate", "Std. Error", "Pr(>|z|)"),
        n = nrow(dat),
        n_event = sum(dat$.y == 1),
-       n_dropped = n_dropped_vs_csv(dat))
+       n_dropped = n_dropped_vs_csv(dat),
+       diagnostics = list(c_statistic = c_stat))
 }
 
 # coxph: summary()$coefficients columns are "coef" / "se(coef)" / "Pr(>|z|)"
@@ -121,14 +160,50 @@ harvest_logistic <- function(env, id) {
 # rendered cell against the app's displayed cell). Do NOT change the literal
 # 1.96 here to "fix" that; see spec/cox-adjusted.md's "Known display
 # nuance" section.
+#
+# DIAGNOSTICS. Same rule as harvest_logistic: only what the exported script
+# itself computes. .cox_script's joint block is
+#
+#   fit <- coxph(Surv(time, status) ~ ..., data = dat)
+#   summary(fit)
+#   # Proportional-hazards check:
+#   cox.zph(fit)
+#
+# so cox.zph IS in the script — printed, never assigned — and re-evaluating it
+# on the script's own `fit` harvests a value the script really produced. The
+# call is left at its DEFAULTS on purpose: `cox.zph(fit)` is literally what the
+# script runs, and R's default is transform = "km" (verified in the installed
+# package's signature), which is what spec/cox-adjusted.md pins. Passing an
+# explicit transform here would be harvesting a different call than the one the
+# user downloaded. tryCatch mirrors fig_cox's own guard (R/cox.R wraps the same
+# call and prints nothing when it fails), so a model cox.zph cannot handle
+# harvests as NA rather than killing the whole case's artifact.
+#
+# The script computes NO EPV and NO separation check; neither is manufactured
+# here, and the comparator judges both on the DISPLAY tier (see
+# spec/cox-adjusted.md, "Which tier judges which diagnostic").
 harvest_cox <- function(env, id) {
   fit <- need(env, "fit", id)
   dat <- need(env, "dat", id)
   sm <- summary(fit)$coefficients
+  zph <- tryCatch(survival::cox.zph(fit), error = function(e) NULL)
+  # `zph$table` rownames are the model TERMS plus "GLOBAL" — a categorical
+  # covariate contributes ONE row on (levels - 1) df, not one row per level, so
+  # these keys are covariate names and deliberately do NOT match `terms`'
+  # coefficient keys (INTERFACES.md pins the same asymmetry on the Path B side).
+  zph_global <- NA_real_
+  zph_terms <- list()
+  if (!is.null(zph)) {
+    tb <- zph$table
+    keys <- setdiff(rownames(tb), "GLOBAL")
+    zph_global <- unname(tb["GLOBAL", "p"])
+    zph_terms <- as.list(setNames(unname(tb[keys, "p"]), keys))
+  }
   list(terms = ratio_terms(sm, "coef", "se(coef)", "Pr(>|z|)"),
        n = nrow(dat),
        n_event = sum(dat$status == 1),
-       n_dropped = n_dropped_vs_csv(dat))
+       n_dropped = n_dropped_vs_csv(dat),
+       diagnostics = list(zph_global_p = zph_global, zph_terms = zph_terms))
 }
 
 # survfit + survdiff. Verified against R/km.R's .km_script (both the

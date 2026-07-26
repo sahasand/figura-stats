@@ -132,3 +132,114 @@ def test_tied_times_match_r_efron_at_full_precision():
     assert math.isclose(t["hi"], _R_HI, rel_tol=1e-6)
     assert out["n"] == 40
     assert out["n_event"] == 29
+
+
+# ---------------------------------------------------------------------------
+# A14: the advisory DIAGNOSTICS block.
+#
+# Red until the clean-room round adds `diagnostics` to fit_cox's return, which
+# is the designed state: the contract is published (INTERFACES.md) and the test
+# is specified (spec/cox-adjusted.md's Diagnostics section, which writes the
+# score statistic out in full) before it is implemented.
+#
+# THE PROPORTIONAL-HAZARDS TEST IS NOT A LIBRARY DEFAULT, and this fixture is
+# built to catch exactly that. It is 50 rows with integer times drawn from 1..9,
+# so ties are everywhere and the Efron risk-set construction the spec pins is
+# doing real work; and `arm` genuinely violates proportional hazards (its p is
+# 0.013), so a wrong transform or a wrong test does not merely shift a digit —
+# it can flip `ph_violation`.
+#
+# Two known ways to fail it, both worth stating because both are one-liners in a
+# library: lifelines' `proportional_hazard_test` defaults to
+# `time_transform="rank"`, not the `km` transform R defaults to and the spec
+# pins; and it implements the OLDER correlation form of the test rather than the
+# score test on the extended time-varying model. Neither reproduces the numbers
+# below.
+#
+# Precomputed once with:
+#
+#   Rscript -e '
+#   library(survival)
+#   set.seed(202); n <- 50
+#   arm <- rep(c("Control","Treated"), each = n/2)
+#   age <- round(rnorm(n, 62, 8), 1)
+#   time <- sample(1:9, n, replace = TRUE)
+#   status <- rbinom(n, 1, 0.6)
+#   d <- data.frame(time, status, arm = relevel(factor(arm), ref = "Control"), age)
+#   f <- coxph(Surv(time, status) ~ arm + age, data = d)
+#   z <- cox.zph(f)          # transform = "km" is the default; verified in args()
+#   sprintf("%.17g", z$table[, "p"])
+#   '
+#
+# -> arm 0.013236251207516418, age 0.20463625578319466,
+#    GLOBAL 0.02750379169749223  (survival 3.x). 31 events over 2 coefficients,
+#    so EPV is 15.5 and its note does NOT fire; the logistic suite pins the
+#    triggered side of the same threshold.
+# ---------------------------------------------------------------------------
+
+_ZPH_TIME = [8, 6, 1, 3, 2, 6, 3, 9, 2, 3, 9, 4, 4, 8, 5, 1, 2, 5, 4, 2,
+             5, 8, 9, 3, 1, 9, 4, 3, 7, 7, 2, 3, 4, 9, 8, 1, 8, 3, 3, 4,
+             7, 8, 9, 8, 6, 5, 8, 8, 8, 9]
+_ZPH_STATUS = [1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1,
+               1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0,
+               1, 0, 1, 1, 0, 1, 1, 1, 1, 1]
+_ZPH_ARM = ["Control"] * 25 + ["Treated"] * 25
+_ZPH_AGE = [52.9, 58.5, 59.3, 55.2, 60.8, 50.6, 55.8, 46.5, 64.5, 65.7, 60.9,
+            71.4, 55.8, 61.1, 75.4, 59.9, 77.8, 57.5, 69.7, 73.6, 64.7, 69,
+            69.2, 68, 64.9, 64, 66.6, 65.3, 56.7, 84, 76.1, 69.5, 55.7, 50.7,
+            59.1, 66, 55.1, 66.1, 48, 56.1, 76.7, 66.8, 61.1, 66.1, 70.7,
+            64.7, 76.8, 53, 64, 56.7]
+
+_R_ZPH_ARM = 0.013236251207516418
+_R_ZPH_AGE = 0.20463625578319466
+_R_ZPH_GLOBAL = 0.02750379169749223
+_R_ZPH_EPV = 15.5
+
+
+def _zph_frame():
+    return pd.DataFrame({
+        "time": _ZPH_TIME,
+        "status": [str(s) for s in _ZPH_STATUS],
+        "arm": _ZPH_ARM,
+        "age": _ZPH_AGE,
+    })
+
+
+def _zph_fit():
+    return fit_cox(_zph_frame(), "time", "status", "1", ["arm", "age"],
+                   {"arm": "Control"})
+
+
+def test_diagnostics_block_is_present_with_every_contract_key():
+    d = _zph_fit()["diagnostics"]
+    for key in ("zph_global_p", "zph_terms", "ph_violation", "epv",
+                "epv_triggered", "separation_caution"):
+        assert key in d, key
+
+
+def test_zph_global_p_matches_r_with_the_km_transform():
+    d = _zph_fit()["diagnostics"]
+    assert math.isclose(d["zph_global_p"], _R_ZPH_GLOBAL, rel_tol=1e-6)
+
+
+def test_zph_per_covariate_p_matches_r():
+    d = _zph_fit()["diagnostics"]
+    # Keyed by COVARIATE, never by coefficient level: `arm`, not `armTreated`.
+    assert set(d["zph_terms"]) == {"arm", "age"}
+    assert math.isclose(d["zph_terms"]["arm"], _R_ZPH_ARM, rel_tol=1e-6)
+    assert math.isclose(d["zph_terms"]["age"], _R_ZPH_AGE, rel_tol=1e-6)
+
+
+def test_ph_violation_follows_the_global_p():
+    d = _zph_fit()["diagnostics"]
+    assert d["ph_violation"] is True          # global p = 0.0275 < 0.05
+
+
+def test_cox_epv_counts_events_not_the_smaller_outcome_group():
+    d = _zph_fit()["diagnostics"]
+    assert math.isclose(d["epv"], _R_ZPH_EPV, rel_tol=1e-9)
+    assert d["epv_triggered"] is False
+
+
+def test_separation_caution_is_false_on_a_clean_fit():
+    assert _zph_fit()["diagnostics"]["separation_caution"] is False

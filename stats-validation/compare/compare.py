@@ -26,6 +26,12 @@ Three comparison tiers, each answering a different question:
                  user cannot reproduce what they saw.
                  (screen vs exported script)
 
+The advisory DIAGNOSTICS (C-statistic, VIF, EPV, Cook's distance, the
+separation caution, cox.zph) are judged on the same three tiers where the
+evidence for each exists, plus one claim the estimates do not have: whether the
+advisory SENTENCE fires at all, which is its own finding code
+(DIAGNOSTIC_MISMATCH). See the diagnostics section further down.
+
 Every finding therefore carries a `source` naming which two things it compared
 — see the SRC_* constants. "Figura" alone is ambiguous, and the ambiguity is
 not academic: logistic-dirty's display tier PASSES while its exact tier fails,
@@ -95,6 +101,7 @@ DISPOSITIONS = {
     "SCRIPT_DIVERGENCE": "defect",
     "COUNT_MISMATCH": "defect",
     "DECISION_MISMATCH": "defect",
+    "DIAGNOSTIC_MISMATCH": "defect",
     "DEFECT": "defect",
     "MISSING_QUANTITY": "defect",
 }
@@ -109,8 +116,26 @@ PASS_CODES = {c for c, d in DISPOSITIONS.items() if d == "pass"}
 # mean +/- SD vs median (IQR) is itself a published output, and a wrong CHOICE
 # invalidates the whole row even when every number in it is individually
 # correct. It is a claim about the variable, not about one cell.
+#
+# DIAGNOSTIC_MISMATCH sits BELOW DEFECT, and the ordering is the argument for
+# the code existing at all. The advisory diagnostics (C-statistic, VIF, EPV,
+# Cook's distance, the separation caution, cox.zph) never gate a fit and never
+# change a reported estimate — R/logistic.R and R/cox.R both say so in as many
+# words — so a disagreement about whether one of their sentences FIRES is
+# strictly less grave than a disagreement about a published odds ratio. It is
+# still a defect: the sentence is printed for the user and pasted into a
+# manuscript, and "the assumption may not hold" appearing on one path and not
+# the other is a real, publishable disagreement.
+#
+# It is a SEPARATE code rather than DEFECT for the same reason DECISION_MISMATCH
+# is: the scorecard groups by code, and a reader must be able to tell at a
+# glance that the failure is in an advisory sentence rather than in an estimate.
+# Values INSIDE a note both paths agree fires stay DEFECT/DISPLAY_ARTIFACT —
+# those are numbers disagreeing, which is what those codes already mean.
+# DIAGNOSTIC_MISMATCH is reserved for the note's triggered/not-triggered STATE.
 SEVERITY = ["COUNT_MISMATCH", "MISSING_QUANTITY", "DECISION_MISMATCH",
-            "SCRIPT_DIVERGENCE", "DEFECT", "DISPLAY_ARTIFACT"]
+            "SCRIPT_DIVERGENCE", "DEFECT", "DIAGNOSTIC_MISMATCH",
+            "DISPLAY_ARTIFACT"]
 
 # case.json `exact_targets` -> the exact-tier quantities that discharge them.
 # This is the wired contract: a declared target that no performed comparison
@@ -141,6 +166,29 @@ TARGET_QUANTITIES = {
     # mean-vs-median-vs-count comparison (see compare_table1), because for
     # Table 1 the CHOICE of summary statistic is itself a validated output.
     "decisions": ("decisions",),
+    # ---- the advisory diagnostics (task A14).
+    #
+    # Two classes, and the split is not cosmetic. `c_statistic` and `zph` are
+    # credited by the EXACT tier, because the exported .R really computes those
+    # two (the C-statistic as a printed expression, cox.zph as a printed call),
+    # so a full-precision Path A value exists for them.
+    #
+    # The `*_note` targets are credited by the DISPLAY tier instead — the
+    # note's triggered/not-triggered state, checked against the sentence Figura
+    # printed. The exported script computes no VIF, no Cook's distance, no EPV
+    # and no separation check, so those diagnostics have NO exact-tier Path A
+    # value and none is invented (harness/run-script.R says the same thing at
+    # the harvest end). Naming them `*_note` keeps the distinction visible in
+    # the case file: a case declaring `vif_note` is claiming its VIF SENTENCE is
+    # under comparison, not its VIF number against a Path A number that does
+    # not exist.
+    "c_statistic": ("c_statistic",),
+    "zph": ("zph_global_p",),
+    "vif_note": ("VIF note",),
+    "epv_note": ("EPV note",),
+    "cooks_note": ("Cook's distance note",),
+    "separation_note": ("separation note",),
+    "ph_note": ("proportional-hazards note",),
 }
 
 
@@ -488,10 +536,20 @@ def parse_ratio_tsv(text: str, case: dict):
 # ---------------------------------------------------------------------------
 
 class _Targets:
-    """Credits exact_targets as comparisons are actually performed."""
+    """Credits exact_targets as comparisons are actually performed.
 
-    def __init__(self, declared):
-        self.declared = list(declared)
+    `deferred` names targets whose comparison BLOCK has not landed yet (see
+    PENDING_PATH_B_DIAGNOSTICS). They are removed from the contract this run
+    enforces and published separately, so a not-yet-implemented comparison
+    reads as "not checked yet" rather than as either a pass or a failure. The
+    accounting below is untouched by the mechanism: everything still declared
+    must still be credited.
+    """
+
+    def __init__(self, declared, deferred=()):
+        deferred = set(deferred)
+        self.deferred = [t for t in declared if t in deferred]
+        self.declared = [t for t in declared if t not in deferred]
         self.counts = {t: 0 for t in self.declared}
         self.by_quantity = {}
         for target, quantities in TARGET_QUANTITIES.items():
@@ -510,7 +568,12 @@ class _Targets:
         # its exact_targets key would publish `targets_met: true` and exit 0
         # while guaranteeing nothing. A coverage claim with no declared
         # coverage is not a pass.
-        if not self.declared:
+        #
+        # `self.deferred` is checked too: a case whose whole contract happens to
+        # be deferred DID declare one, so calling it contract-less would be
+        # false. It still fails `met` below, which is the honest reading —
+        # nothing was checked — and `deferred_targets` says why.
+        if not self.declared and not self.deferred:
             out.append(finding(
                 "MISSING_QUANTITY", "-", "exact_targets", None, None,
                 "the case declares no exact_targets; there is no coverage "
@@ -536,13 +599,527 @@ class _Targets:
             for t in self.declared)
 
 
+# ---------------------------------------------------------------------------
+# the ADVISORY DIAGNOSTICS (task A14)
+#
+# Figura appends advisory sentences to the methods text of both ratio_table
+# figures. Not one of them gates a fit or changes an estimate, and every one of
+# them is displayed to the user and pasted into a manuscript, so each is
+# validated on two claims:
+#
+#   the NOTE'S STATE   does the sentence fire on both paths?  -> DIAGNOSTIC_MISMATCH
+#   the NOTE'S VALUE   when both agree it fires, does Path B's number pushed
+#                      through Figura's own sprintf produce the identical
+#                      string?                                -> DEFECT / DISPLAY_ARTIFACT
+#
+# plus, for the two diagnostics the exported .R actually computes, an exact tier
+# (rel 1e-6) and a script tier, exactly like the estimates.
+#
+# WHICH DIAGNOSTICS HAVE AN EXACT-TIER PATH A VALUE, and why the others do not.
+# The exported logistic script prints the C-statistic (its own expression, on
+# its own `prob`/`n1`/`n0`); the exported cox script prints `cox.zph(fit)`. Both
+# are harvested. The exported scripts compute NO VIF, NO Cook's distance, NO EPV
+# and NO separation check — nothing in them touches lm(), cooks.distance(), or
+# the fitted probabilities. Those diagnostics therefore have no Path A number at
+# all, and this comparator does not conjure one from the harvest's `fit`: they
+# are judged on the DISPLAY tier, against the sentence Figura really printed,
+# which is honest evidence about the artifact the user was handed. See
+# harness/run-script.R's harvesters and spec/*.md's "Which tier judges which
+# diagnostic".
+#
+# The sentence formats below are restatements of R/logistic.R's and R/cox.R's
+# own sprintf calls, written out here for the same reason format_ratio_cell is —
+# the judge shares no code with either path it judges.
+# ---------------------------------------------------------------------------
+
+# Path B's `diagnostics` block is written by the CLEAN-ROOM half of task A14.
+# Until it lands, python.json carries no `diagnostics` key at all, and this set
+# names the figures whose diagnostics comparison is therefore NOT YET PERFORMED.
+#
+# It is a published deferral, not a silent skip, and it is narrow in three ways
+# that matter:
+#   * it is per FIGURE and by NAME, so it can never quietly widen;
+#   * it only fires when Path B's `diagnostics` key is ABSENT ENTIRELY. The
+#     moment Path B emits the block, the gate is inert even before this constant
+#     is emptied, and a partial or malformed block goes through the normal
+#     MISSING_QUANTITY path like any other hole;
+#   * the case's diagnostics exact_targets are reported as DEFERRED rather than
+#     as met, so the coverage claim never overstates what ran.
+# Delete the entries when validate/logistic.py and validate/cox.py return their
+# diagnostics blocks — that is the whole activation step, and the acceptance
+# tests in python/tests/ are already red until then.
+PENDING_PATH_B_DIAGNOSTICS = {"logistic", "cox"}
+
+# exact_targets discharged ONLY by the diagnostics block, per figure. Used to
+# mark them deferred while the block is; nothing else keys off it.
+DIAGNOSTIC_TARGETS = {
+    "logistic": ("c_statistic", "vif_note", "epv_note", "cooks_note",
+                 "separation_note"),
+    "cox": ("zph", "ph_note", "epv_note", "separation_note"),
+}
+
+# R/logistic.R: sprintf(" Overall model discrimination: apparent (in-sample)
+# C-statistic = %.2f.", auc) — printed whenever the C-statistic is finite.
+C_STAT_RE = re.compile(
+    r"Overall model discrimination: apparent \(in-sample\) "
+    r"C-statistic = (-?\d+\.\d{2})\.")
+# R/logistic.R: sprintf(" CAUTION: about %.1f events per model term (EPV < 10);
+# ...") — the ONE advisory sentence that carries its own number at 1 dp.
+EPV_LOGISTIC_RE = re.compile(
+    r"CAUTION: about (\d+\.\d) events per model term \(EPV < 10\)")
+# R/cox.R's EPV sentence carries NO number at all — a fixed string. The two
+# figures' EPV notes are deliberately not one rule.
+EPV_COX_TEXT = ("CAUTION: fewer than 10 events per model term (EPV < 10); "
+                "the adjusted estimates may be unstable.")
+# R/logistic.R: "largest VIF = %s", where %s is sprintf("%.1f", max(vif)) or the
+# literal words when any VIF is non-finite.
+VIF_RE = re.compile(
+    r"CAUTION: multicollinearity among continuous covariates "
+    r"\(largest VIF = (effectively infinite|-?\d+\.\d), "
+    r"above the usual threshold of 5\)")
+VIF_INFINITE = "effectively infinite"
+# R/logistic.R: sprintf(" %d observation(s) were flagged as influential "
+# "(Cook's distance > 4/n); ...")
+COOKS_RE = re.compile(
+    r"(\d+) observation\(s\) were flagged as influential "
+    r"\(Cook's distance > 4/n\)")
+# Both figures open the separation caution with the same clause; R/logistic.R
+# and R/cox.R diverge only in the remedies they go on to suggest, so the opening
+# is what is matched.
+SEPARATION_TEXT = "CAUTION: separation or severe collinearity was detected"
+# R/cox.R: sprintf(" The proportional-hazards assumption was assessed with
+# scaled Schoenfeld residuals (global %s).", <the ratio-table p rule>)
+ZPH_RE = re.compile(
+    r"scaled Schoenfeld residuals \(global (p<0\.001|p=\d+\.\d{3})\)")
+ZPH_VIOLATION_TEXT = ("CAUTION: the assumption may not hold (global p<0.05)")
+# R/logistic.R's .logistic_other_warn fallback embeds R's OWN verbatim warning
+# text. That is one implementation's warning catalogue, not a statistical
+# quantity, so no independent implementation can be asked to reproduce it and it
+# is outside the contract. Detected and reported (mirroring GC_OR_CLAUSE), never
+# ignored: a case that provokes it needs the contract extended first.
+OTHER_WARN_CLAUSE = "CAUTION: fitting reported a numerical warning"
+
+# The C-statistic is displayed at 2 dp, like the ratio cells, so it shares
+# DISPLAY_HALF_ULP. The logistic EPV note is at 1 dp and the VIF note at 1 dp;
+# both get km's constant, which is the same 1-dp half step under a name that
+# says what it is here.
+DIAG_1DP_HALF_ULP = KM_DISPLAY_HALF_ULP
+
+
+def methods_text(text: str) -> str:
+    """The methods paragraph of a ratio_table `text` field.
+
+    fig_logistic/fig_cox emit `"<TSV>\\n\\n<methods sentence>"`. The diagnostics
+    live only in the sentence, and a TSV cell could in principle contain a
+    substring one of the patterns above would match, so the paragraph is split
+    off rather than searched whole.
+    """
+    if not isinstance(text, str):
+        return ""
+    parts = text.split("\n\n", 1)
+    return parts[1] if len(parts) == 2 else parts[0]
+
+
+def _note(findings, targets, term, quantity, target_quantity,
+          shown_fires: bool, py_fires, shown_raw, note_subject: str):
+    """Compare one advisory note's TRIGGERED STATE, screen vs Path B.
+
+    Tri-state return, so the caller's `compared` counter never credits a
+    comparison that did not happen (the rule the whole file follows):
+
+        None   Path B published no usable claim -> MISSING_QUANTITY, no
+               comparison performed, nothing credited.
+        False  compared; the two paths disagree, or agree the note is silent.
+        True   compared; both agree it fires, so the caller may go on to judge
+               the value inside it.
+
+    `target_quantity` may be None for a note whose exact_targets credit belongs
+    to another tier — the C-statistic's does, since it has a real exact tier and
+    `c_statistic` follows `adjusted_or`'s convention of being credited there.
+    """
+    if not isinstance(py_fires, bool):
+        findings.append(finding(
+            "MISSING_QUANTITY", term, quantity,
+            shown_raw if shown_fires else "(no sentence)", py_fires,
+            f"Path B reports no boolean for whether the {note_subject} fires"))
+        return None
+    if target_quantity is not None:
+        targets.credit(target_quantity)
+    if shown_fires != py_fires:
+        fired, silent = (("Figura", "Python") if shown_fires
+                         else ("Python", "Figura"))
+        findings.append(finding(
+            "DIAGNOSTIC_MISMATCH", term, quantity,
+            shown_raw if shown_fires else "(no sentence)", py_fires,
+            f"{fired} raises the {note_subject} and {silent} does not; the two "
+            "paths disagree about whether the advisory applies"))
+        return False
+    return shown_fires
+
+
+def _diag_value(findings, term, quantity, shown_value, py_value, rendered,
+                shown_raw, half_ulp):
+    """Compare the number inside a note both paths agree fires.
+
+    Same three-way disposition as classify_cell: identical string is a pass,
+    within half a display step is a DISPLAY_ARTIFACT, anything else a DEFECT.
+    Deliberately NOT DIAGNOSTIC_MISMATCH — the note fired on both sides, so what
+    disagrees here is a number, which is what DEFECT already means.
+    """
+    if py_value is None:
+        findings.append(finding(
+            "MISSING_QUANTITY", term, quantity, shown_raw, None,
+            "Path B raises this advisory but reports no value behind it"))
+        return
+    if rendered == shown_raw:
+        return
+    if shown_value is None:
+        findings.append(finding(
+            "DEFECT", term, quantity, shown_raw, rendered,
+            "the displayed sentence does not match the display rule and its "
+            "value could not be read back"))
+        return
+    slack = max(ABS_TOL, REL_TOL * max(abs(py_value), abs(shown_value)))
+    if abs(py_value - shown_value) <= half_ulp + slack:
+        findings.append(finding(
+            "DISPLAY_ARTIFACT", term, quantity, shown_raw, rendered,
+            "values agree to within half a display step; the rendered strings "
+            "differ"))
+        return
+    findings.append(finding(
+        "DEFECT", term, quantity, shown_raw, rendered,
+        "displayed values disagree by more than a rounding boundary"))
+
+
+def format_vif_largest(vif) -> str:
+    """R/logistic.R: `if (any(!is.finite(vif))) "effectively infinite" else
+    sprintf("%.1f", max(vif))`.
+
+    Keyed off the PRESENCE of a non-finite VIF, not off the absence of finite
+    ones: with a third independent covariate a finite VIF near 1.0 also exists,
+    and reporting that would read "largest VIF = 1.0, above the usual threshold
+    of 5".
+    """
+    values = [float(v) for v in vif.values()]
+    if any(not math.isfinite(v) for v in values):
+        return VIF_INFINITE
+    return f"{max(values):.1f}"
+
+
+def _compare_logistic_diagnostics(text, exact, python, targets):
+    """(findings, comparisons performed) for fig_logistic's advisory block."""
+    findings = []
+    compared = 0
+    py = python.get("diagnostics")
+    if not isinstance(py, dict):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "diagnostics", None, py,
+            "Path B produced no `diagnostics` block; none of the advisory "
+            "diagnostics could be compared", source=SRC_PATH_B))
+        return findings, compared
+
+    mark = len(findings)
+    if OTHER_WARN_CLAUSE in text:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "numerical-warning note", OTHER_WARN_CLAUSE,
+            None,
+            "the displayed text carries the numerical-warning fallback, which "
+            "embeds R's own verbatim warning string; fit_logistic's contract "
+            "does not report it, so the contract must be extended before this "
+            "case can be judged"))
+
+    # -- C-statistic. Note state, then the 2-dp value inside it. R prints the
+    # sentence only when the statistic `is.finite`, so a non-finite Path B value
+    # is the claim "no sentence", not a sentence carrying a nan.
+    m = C_STAT_RE.search(text)
+    shown_c = float(m.group(1)) if m else None
+    py_c = py.get("c_statistic")
+    py_c_fires = py_c is not None and math.isfinite(float(py_c))
+    state = _note(findings, targets, "-", "C-statistic note", None,
+                  m is not None, py_c_fires,
+                  m.group(0) if m else None, "C-statistic sentence")
+    compared += state is not None
+    if state:
+        compared += 1
+        _diag_value(findings, "-", "C-statistic note", shown_c, float(py_c),
+                    f"Overall model discrimination: apparent (in-sample) "
+                    f"C-statistic = {float(py_c):.2f}.",
+                    m.group(0), DISPLAY_HALF_ULP)
+
+    # -- VIF. `None` (fewer than two continuous covariates) and `{}` are
+    # different claims on the Path B side; only the trigger reaches the screen.
+    m = VIF_RE.search(text)
+    py_vif = py.get("vif")
+    py_vif_fires = py.get("vif_triggered")
+    state = _note(findings, targets, "-", "VIF note", "VIF note", m is not None,
+                  py_vif_fires, m.group(0) if m else None, "VIF caution")
+    compared += state is not None
+    if state:
+        if not isinstance(py_vif, dict) or not py_vif:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "VIF note", m.group(0), py_vif,
+                "Path B raises the VIF caution but reports no per-covariate "
+                "VIF map behind it"))
+        else:
+            compared += 1
+            rendered = format_vif_largest(py_vif)
+            shown = m.group(1)
+            if rendered != shown:
+                # The infinite branch is a WORD, not a number, so there is no
+                # half-display-step story available in either direction.
+                if VIF_INFINITE in (rendered, shown):
+                    findings.append(finding(
+                        "DEFECT", "-", "VIF note", shown, rendered,
+                        "one path reports an effectively infinite VIF and the "
+                        "other a finite one"))
+                else:
+                    _diag_value(findings, "-", "VIF note", float(shown),
+                                max(float(v) for v in py_vif.values()),
+                                rendered, shown, DIAG_1DP_HALF_ULP)
+
+    # -- EPV.
+    m = EPV_LOGISTIC_RE.search(text)
+    py_epv = py.get("epv")
+    state = _note(findings, targets, "-", "EPV note", "EPV note", m is not None,
+                  py.get("epv_triggered"), m.group(0) if m else None,
+                  "EPV caution")
+    compared += state is not None
+    if state:
+        compared += 1
+        _diag_value(findings, "-", "EPV note",
+                    float(m.group(1)),
+                    None if py_epv is None else float(py_epv),
+                    None if py_epv is None
+                    else f"about {float(py_epv):.1f} events per model term",
+                    f"about {m.group(1)} events per model term",
+                    DIAG_1DP_HALF_ULP)
+
+    # -- Cook's distance. The value inside the sentence is an INTEGER count, so
+    # there is no rounding tier: it agrees or it does not.
+    m = COOKS_RE.search(text)
+    py_cooks = py.get("cooks_influential")
+    state = _note(findings, targets, "-", "Cook's distance note",
+                  "Cook's distance note", m is not None,
+                  py.get("cooks_triggered"), m.group(0) if m else None,
+                  "Cook's-distance caution")
+    compared += state is not None
+    if state:
+        if py_cooks is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "Cook's distance note", m.group(0),
+                None, "Path B raises the Cook's-distance caution but reports "
+                "no influential-observation count"))
+        else:
+            compared += 1
+            if int(py_cooks) != int(m.group(1)):
+                findings.append(finding(
+                    "DEFECT", "-", "Cook's distance note", int(m.group(1)),
+                    int(py_cooks),
+                    "the two paths flagged different numbers of influential "
+                    "observations"))
+
+    # -- separation. A fixed sentence: state is the whole claim.
+    compared += _note(
+        findings, targets, "-", "separation note", "separation note",
+        SEPARATION_TEXT in text, py.get("separation_caution"),
+        SEPARATION_TEXT if SEPARATION_TEXT in text else None,
+        "separation/collinearity caution") is not None
+    _source(findings[mark:], SRC_DISPLAY)
+
+    # -- exact tier: the one diagnostic the exported script computes.
+    mark = len(findings)
+    a = (exact.get("diagnostics") or {}).get("c_statistic")
+    if a is None or py_c is None:
+        missing = "Path A" if a is None else "Path B"
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "c_statistic", a, py_c,
+            f"{missing} did not report a C-statistic at full precision"))
+    else:
+        compared += 1
+        targets.credit("c_statistic")
+        if not close_enough(float(a), float(py_c)):
+            findings.append(finding(
+                "DEFECT", "-", "c_statistic", a, py_c,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+    _source(findings[mark:], SRC_EXACT)
+
+    # -- script tier: does the exported .R's C-statistic re-render the sentence
+    # the screen showed? Never touches Path B.
+    mark = len(findings)
+    shown = C_STAT_RE.search(text)
+    if a is not None and shown is not None:
+        compared += 1
+        if f"{float(a):.2f}" != shown.group(1):
+            findings.append(finding(
+                "SCRIPT_DIVERGENCE", "-", "exported script C-statistic",
+                shown.group(0), f"C-statistic = {float(a):.2f}.",
+                "the exported .R's C-statistic does not reproduce the value "
+                "the screen showed"))
+    _source(findings[mark:], SRC_SCRIPT)
+    return findings, compared
+
+
+def _compare_cox_diagnostics(text, exact, python, targets):
+    """(findings, comparisons performed) for fig_cox's advisory block."""
+    findings = []
+    compared = 0
+    py = python.get("diagnostics")
+    if not isinstance(py, dict):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "diagnostics", None, py,
+            "Path B produced no `diagnostics` block; none of the advisory "
+            "diagnostics could be compared", source=SRC_PATH_B))
+        return findings, compared
+
+    mark = len(findings)
+    # -- the proportional-hazards sentence: state, then the p-phrase. Mirrors
+    # addendum 6 — a differing p-part is never a display artifact — so the
+    # rendered phrase is compared as a STRING with no rounding leniency.
+    m = ZPH_RE.search(text)
+    py_global = py.get("zph_global_p")
+    state = _note(findings, targets, "-", "proportional-hazards note",
+                  "proportional-hazards note", m is not None,
+                  py_global is not None, m.group(0) if m else None,
+                  "proportional-hazards sentence")
+    compared += state is not None
+    if state:
+        compared += 1
+        rendered = format_p(float(py_global))
+        if rendered != m.group(1):
+            findings.append(finding(
+                "DEFECT", "-", "proportional-hazards note", m.group(1),
+                rendered,
+                "the global p-value part differs; a p disagreement is never a "
+                "display artifact"))
+
+    # -- the violation CAUTION rides inside the same sentence and is its own
+    # claim: "the assumption may not hold" is what a reader acts on.
+    compared += _note(
+        findings, targets, "-", "PH violation caution",
+        "proportional-hazards note", ZPH_VIOLATION_TEXT in text,
+        py.get("ph_violation"),
+        ZPH_VIOLATION_TEXT if ZPH_VIOLATION_TEXT in text else None,
+        "proportional-hazards violation caution") is not None
+
+    # -- EPV. cox's sentence carries no number, so state is the whole claim.
+    compared += _note(
+        findings, targets, "-", "EPV note", "EPV note",
+        EPV_COX_TEXT in text, py.get("epv_triggered"),
+        EPV_COX_TEXT if EPV_COX_TEXT in text else None,
+        "EPV caution") is not None
+
+    # -- separation.
+    compared += _note(
+        findings, targets, "-", "separation note", "separation note",
+        SEPARATION_TEXT in text, py.get("separation_caution"),
+        SEPARATION_TEXT if SEPARATION_TEXT in text else None,
+        "separation/collinearity caution") is not None
+    _source(findings[mark:], SRC_DISPLAY)
+
+    # -- exact tier: cox.zph, global and per covariate. The per-covariate
+    # p-values never reach the screen, so this is the ONLY tier that judges
+    # them, and it is a real one: the exported script prints cox.zph(fit).
+    mark = len(findings)
+    a_diag = exact.get("diagnostics") or {}
+    a_global = a_diag.get("zph_global_p")
+    if a_global is None or py_global is None:
+        missing = "Path A" if a_global is None else "Path B"
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "zph_global_p", a_global, py_global,
+            f"{missing} did not report a global proportional-hazards p-value"))
+    else:
+        compared += 1
+        targets.credit("zph_global_p")
+        if not close_enough(float(a_global), float(py_global)):
+            findings.append(finding(
+                "DEFECT", "-", "zph_global_p", a_global, py_global,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+
+    a_terms = {_strip_backticks(k): v
+               for k, v in (a_diag.get("zph_terms") or {}).items()}
+    b_terms = py.get("zph_terms") or {}
+    if not a_terms:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "zph_terms", None, None,
+            "Path A's harvest carried no per-covariate proportional-hazards "
+            "p-values"))
+    if not b_terms:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "zph_terms", None, None,
+            "Path B produced no per-covariate proportional-hazards p-values"))
+    for key in sorted(set(a_terms) | set(b_terms)):
+        a, b = a_terms.get(key), b_terms.get(key)
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", key, "zph term p", a, b,
+                f"{missing} has no proportional-hazards p-value for this "
+                "covariate"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        if not close_enough(float(a), float(b)):
+            findings.append(finding(
+                "DEFECT", key, "zph term p", a, b,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+    _source(findings[mark:], SRC_EXACT)
+
+    # -- script tier: does the exported .R's global p re-render the sentence the
+    # screen showed?
+    mark = len(findings)
+    if a_global is not None and m is not None:
+        compared += 1
+        rendered = format_p(float(a_global))
+        if rendered != m.group(1):
+            findings.append(finding(
+                "SCRIPT_DIVERGENCE", "-", "exported script zph p", m.group(1),
+                rendered,
+                "the exported .R's proportional-hazards p does not reproduce "
+                "the value the screen showed"))
+    _source(findings[mark:], SRC_SCRIPT)
+    return findings, compared
+
+
+DIAGNOSTIC_HANDLERS = {"logistic": _compare_logistic_diagnostics,
+                       "cox": _compare_cox_diagnostics}
+
+
+def compare_diagnostics(case, figura, exact, python, targets):
+    """Dispatch the advisory-diagnostics block on the case's FIGURE.
+
+    ratio_table serves two figures whose advisory sentences are different
+    sentences about different quantities, so the dispatch is on `figure`, not on
+    `display.kind`. A ratio_table figure with no registered handler is a hole,
+    reported as one — never waved through as "this figure has no diagnostics",
+    which is a claim only its own handler can make.
+    """
+    figure = case.get("figure")
+    handler = DIAGNOSTIC_HANDLERS.get(figure)
+    if handler is None:
+        return [finding(
+            "MISSING_QUANTITY", "-", "diagnostics", None, None,
+            f"no diagnostics contract is registered for figure {figure!r}, so "
+            "its advisory sentences were not compared",
+            source=SRC_COVERAGE)], 0
+    return handler(methods_text(figura.get("text")), exact, python, targets)
+
+
 def compare_ratio_table(case, figura, exact, python):
     """The full ratio_table branch: display, exact, and script tiers."""
     findings = []
     compared = 0
+    # The advisory-diagnostics block is deferred while Path B has not published
+    # its `diagnostics` contract (see PENDING_PATH_B_DIAGNOSTICS). Deciding that
+    # HERE, before _Targets is built, is what lets the case's diagnostics
+    # exact_targets read as deferred rather than as unmet coverage.
+    figure = case.get("figure")
+    diagnostics_deferred = (
+        figure in PENDING_PATH_B_DIAGNOSTICS
+        and not isinstance(python.get("diagnostics"), dict))
     # `or []` so an explicit null reads as "no contract" and hits the vacuity
     # guard, rather than raising inside _Targets.
-    targets = _Targets(case.get("exact_targets") or [])
+    targets = _Targets(
+        case.get("exact_targets") or [],
+        DIAGNOSTIC_TARGETS.get(figure, ()) if diagnostics_deferred else ())
     covariates = list(case["roles"]["covariates"])
 
     # -- counts. The highest-severity class: if the two paths disagree about
@@ -699,6 +1276,15 @@ def compare_ratio_table(case, figura, exact, python):
                 "the exported .R does not reproduce the adjusted cell the "
                 "screen showed"))
     _source(findings[mark:], SRC_SCRIPT)
+
+    # -- the advisory diagnostics. Runs LAST so its findings sort below the
+    # estimate tiers within a case even before SEVERITY reorders them, and so a
+    # reader scanning the console output meets the published numbers first.
+    if not diagnostics_deferred:
+        diag_findings, diag_compared = compare_diagnostics(
+            case, figura, exact, python, targets)
+        findings.extend(diag_findings)
+        compared += diag_compared
 
     findings.extend(_source(targets.findings(), SRC_COVERAGE))
     return findings, compared, targets
@@ -2324,6 +2910,11 @@ def compare_case(case_id: str, results: Path = RESULTS,
         "passed": len(findings) == 0,
         "targets_met": targets.met,
         "targets": dict(targets.counts),
+        # Declared coverage this run did not enforce because the comparison
+        # block has not landed yet. Empty for every case whose blocks are all
+        # live. Published rather than folded into `targets`, so "targets met"
+        # can never be read as "everything the case declares was checked".
+        "deferred_targets": list(targets.deferred),
         "findings": findings,
     }
 
@@ -2360,6 +2951,12 @@ def main(case_ids, results: Path = RESULTS, cases: Path = CASES) -> int:
     for c in reports:
         status = "PASS" if c["passed"] else f"{len(c['findings'])} finding(s)"
         met = "targets met" if c["targets_met"] else "TARGETS UNMET"
+        # A deferred target is neither met nor failed — it was not checked. Say
+        # so on the same line as the coverage verdict, so a green case never
+        # reads as fully covered while a block is still pending.
+        deferred = c.get("deferred_targets") or []
+        if deferred:
+            met += f" ({len(deferred)} DEFERRED: {', '.join(deferred)})"
         print(f"{c['id']}: {c['compared']} compared, {status}, {met}")
         for f in c["findings"]:
             # The source is printed here too, not only on the scorecard: this

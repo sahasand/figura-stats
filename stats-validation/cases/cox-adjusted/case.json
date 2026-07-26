@@ -4,5 +4,8 @@
   "roles": { "time": "followup_months", "status": "status", "covariates": ["arm", "age"] },
   "options": { "event_value": "Death", "ref_levels": { "arm": "Standard care" } },
   "display": { "kind": "ratio_table" },
-  "exact_targets": ["adjusted_hr", "adjusted_ci", "adjusted_p", "n", "n_event", "n_dropped"]
+  "exact_targets": [
+    "adjusted_hr", "adjusted_ci", "adjusted_p", "n", "n_event", "n_dropped",
+    "zph", "ph_note", "epv_note", "separation_note"
+  ]
 }

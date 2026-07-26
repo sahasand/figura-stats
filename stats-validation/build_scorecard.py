@@ -31,7 +31,12 @@ has an empty `findings` list) and the taxonomy has no `EXACT_PASS` — that
 code was considered and never wired to any emission (see compare.py's
 DISPOSITIONS comment), so it is not styled here. The REAL emitted codes are:
 PASS (synthesised here for a no-findings case row), DISPLAY_ARTIFACT, DEFECT,
-COUNT_MISMATCH, DECISION_MISMATCH, SCRIPT_DIVERGENCE, MISSING_QUANTITY.
+COUNT_MISMATCH, DECISION_MISMATCH, DIAGNOSTIC_MISMATCH, SCRIPT_DIVERGENCE,
+MISSING_QUANTITY.
+
+Each case may also carry `deferred_targets` — declared coverage whose
+comparison block has not landed yet. It is rendered inside the Coverage cell,
+never silently dropped into "targets met".
 """
 from __future__ import annotations
 
@@ -90,11 +95,12 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 .PASS { color:var(--pass); }
 .DISPLAY_ARTIFACT { color:var(--warn); }
 .DEFECT,.COUNT_MISMATCH,.SCRIPT_DIVERGENCE,.MISSING_QUANTITY,
-.DECISION_MISMATCH { color:var(--fail); font-weight:600; }
+.DECISION_MISMATCH,.DIAGNOSTIC_MISMATCH { color:var(--fail); font-weight:600; }
 .NOT_COMPARED { color:var(--warn); font-weight:600; }
 .targets-met { color:var(--pass); font-size:.78rem; white-space:nowrap; }
 .targets-unmet { color:var(--fail); font-weight:600; font-size:.78rem; white-space:nowrap; }
 .targets-none { color:var(--warn); font-weight:600; font-size:.78rem; white-space:nowrap; }
+.targets-deferred { color:var(--warn); font-weight:600; font-size:.78rem; }
 .source { color:var(--muted); font-size:.78rem; white-space:nowrap; }
 .webr-empty { border:1px dashed var(--rule); border-radius:8px; padding:1rem 1.1rem;
               color:var(--muted); }
@@ -187,12 +193,32 @@ def _pending_rows(pending: list[str], results_dir: Path) -> str:
     return "".join(rows)
 
 
+def _coverage_cell(case: dict) -> str:
+    """The Coverage cell, including any DEFERRED targets.
+
+    A deferred target is one the case declares and this run did not enforce
+    because its comparison block has not landed yet (compare.py's
+    PENDING_PATH_B_DIAGNOSTICS). It is neither met nor failed — it was not
+    checked — so it is named in the cell rather than folded into either verdict.
+    Without this a case reads "targets met" in green while part of its published
+    contract went unexamined, which is the one thing this scorecard exists not
+    to do. `.get` keeps an older findings.json, written before the field
+    existed, rendering exactly as it used to.
+    """
+    targets_class = "targets-met" if case["targets_met"] else "targets-unmet"
+    targets_label = "targets met" if case["targets_met"] else "TARGETS UNMET"
+    deferred = case.get("deferred_targets") or []
+    extra = ""
+    if deferred:
+        extra = (f"<br><span class='targets-deferred'>{len(deferred)} DEFERRED:"
+                 f" {esc(', '.join(deferred))}</span>")
+    return f"<td class='{targets_class}'>{esc(targets_label)}{extra}</td>"
+
+
 def _rows(data: dict) -> str:
     rows = []
     for c in data["cases"]:
-        targets_class = "targets-met" if c["targets_met"] else "targets-unmet"
-        targets_label = "targets met" if c["targets_met"] else "TARGETS UNMET"
-        coverage_cell = f"<td class='{targets_class}'>{esc(targets_label)}</td>"
+        coverage_cell = _coverage_cell(c)
         if not c["findings"]:
             rows.append(
                 f"<tr><td>{esc(c['id'])}</td><td class='PASS'>PASS</td>"
@@ -280,7 +306,9 @@ comparison — a coverage failure marks a case TARGETS UNMET even if every
 comparison that did run passed. <b>NOT COMPARED</b> marks a case that is
 registered and ran, but whose two paths were never set against each other; it
 carries no guarantee at all, and it is counted in the cases tile's denominator
-so the tile can never read complete while such a case exists.
+so the tile can never read complete while such a case exists. <b>DEFERRED</b>
+names declared coverage this run did not enforce because its comparison block
+has not landed yet &mdash; not checked, so neither met nor failed.
 <b>Display artifact</b> means both paths
 computed the same number and only the rendered string differs, within half a
 display step. <b>Defect</b> means the values themselves disagree beyond a
@@ -291,7 +319,12 @@ reproduce what the screen showed. <b>Count mismatch</b> means the two paths
 analysed different rows. <b>Decision mismatch</b> means the two paths chose
 different summary statistics for a Table 1 variable &mdash; mean &plusmn; SD
 where the other chose median (IQR), say &mdash; which is a defect even when
-every number in the row is individually correct.</p>
+every number in the row is individually correct. <b>Diagnostic mismatch</b>
+means the two paths disagree about whether one of the app's ADVISORY sentences
+&mdash; the C-statistic, VIF, EPV, Cook's-distance, separation or
+proportional-hazards note &mdash; fires at all. Those sentences never change a
+reported estimate, but they are printed for the user and pasted into a
+manuscript, so a disagreement about one is published like any other.</p>
 <h2>WebR tier</h2>
 {_webr_section(results_dir)}
 </main></body></html>"""

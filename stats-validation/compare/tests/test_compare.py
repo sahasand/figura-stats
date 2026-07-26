@@ -26,6 +26,7 @@ from compare import (
     KIND_HANDLERS,
     PASS_CODES,
     PENDING_KINDS,
+    PENDING_PATH_B_DIAGNOSTICS,
     SEVERITY,
     SOURCES,
     SRC_DISPLAY,
@@ -50,9 +51,11 @@ from compare import (
     format_p_gc,
     format_p_km,
     format_ratio_cell,
+    format_vif_largest,
     gc_direction_suffix,
     gc_display_half_ulp,
     main,
+    methods_text,
     parse_gc_posthoc,
     parse_gc_test_clause,
     parse_km_group_median,
@@ -2225,3 +2228,405 @@ def test_t1_tier_sources(tmp_path):
     assert by_quantity["n"] == SRC_EXACT
     assert by_quantity["displayed cell [Control]"] == SRC_DISPLAY
     assert by_quantity["exported script cell [Control]"] == SRC_SCRIPT
+
+
+# ==========================================================================
+# the advisory diagnostics (task A14)
+#
+# The base fixture below AGREES everywhere, like every other base fixture in
+# this file, and it is the one that ACTIVATES the diagnostics block: the block
+# is deferred while Path B publishes no `diagnostics` key at all
+# (PENDING_PATH_B_DIAGNOSTICS), which is why the `_base()` fixture at the top of
+# this file — and every test built on it — is untouched by any of this.
+#
+# The displayed sentences are R/logistic.R's and R/cox.R's real sprintf output,
+# reproduced character for character (the C-statistic and Cook's clauses below
+# are copied from a live run of the shipped logistic-confounding case, the
+# proportional-hazards clause from cox-adjusted).
+# ==========================================================================
+
+_L_METHODS = (
+    "Multivariable logistic regression (n = 320, 91 events) adjusted for arm, "
+    "age. Unadjusted odds ratios are from single-covariate models; adjusted "
+    "odds ratios are from the joint model. Overall model discrimination: "
+    "apparent (in-sample) C-statistic = 0.68. 13 observation(s) were flagged "
+    "as influential (Cook's distance > 4/n); inspect them for data-entry "
+    "errors."
+)
+
+_L_C_STAT = 0.683502087432218
+
+
+def _base_diag():
+    case, figura, exact, python = _base()
+    figura["text"] = TSV.split("\n\n")[0] + "\n\n" + _L_METHODS
+    case["exact_targets"] = case["exact_targets"] + [
+        "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"]
+    exact["diagnostics"] = {"c_statistic": _L_C_STAT}
+    python["diagnostics"] = {
+        "c_statistic": _L_C_STAT,
+        "vif": None,               # one continuous covariate: never computed
+        "vif_triggered": False,
+        "epv": 22.75,
+        "epv_triggered": False,
+        "cooks_influential": 13,
+        "cooks_triggered": True,
+        "separation_caution": False,
+    }
+    return case, figura, exact, python
+
+
+def _run_diag(tmp_path, mutate=None):
+    case, figura, exact, python = _base_diag()
+    if mutate is not None:
+        mutate(case, figura, exact, python)
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    return _report(case["id"], results, cases)
+
+
+def test_methods_text_returns_the_sentence_not_the_table():
+    """A TSV cell could contain a substring one of the note patterns matches, so
+    the diagnostics are read from the methods paragraph alone."""
+    assert methods_text("a\tb\n\nthe methods sentence") == "the methods sentence"
+    # no blank-line separator at all: the whole thing is the sentence
+    assert methods_text("just a sentence") == "just a sentence"
+    assert methods_text(None) == ""
+
+
+def test_format_vif_largest_restates_the_r_rule():
+    assert format_vif_largest({"age": 7.0086753423474493, "bmi": 7.0}) == "7.0"
+    # keyed off the PRESENCE of a non-finite VIF, not the absence of finite ones
+    assert format_vif_largest(
+        {"a": float("inf"), "b": 1.02}) == "effectively infinite"
+
+
+def test_the_agreeing_diagnostics_fixture_passes_everything(tmp_path):
+    report = _run_diag(tmp_path)
+    assert report["findings"] == []
+    assert report["targets_met"] is True
+    # ...and nothing is deferred once Path B publishes the block.
+    assert report["deferred_targets"] == []
+    # every diagnostics target was credited by a real comparison
+    for target in ("c_statistic", "vif_note", "epv_note", "cooks_note",
+                   "separation_note"):
+        assert report["targets"][target] > 0, target
+
+
+def test_diagnostics_are_deferred_while_path_b_has_no_block(tmp_path):
+    """The clean-room gate. No `diagnostics` key on Path B -> the block does not
+    run, its targets are published as DEFERRED rather than failed, and nothing
+    else about the case changes."""
+    report = _run_diag(tmp_path, lambda c, f, e, p: p.pop("diagnostics"))
+    assert report["findings"] == []
+    assert report["deferred_targets"] == [
+        "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"]
+    # the deferred targets are not silently credited either
+    assert "c_statistic" not in report["targets"]
+    assert "logistic" in PENDING_PATH_B_DIAGNOSTICS
+
+
+def test_a_present_but_empty_diagnostics_block_is_not_deferred(tmp_path):
+    """The gate is narrow on purpose: it fires only when the key is ABSENT. A
+    block that is present but hollow goes through the normal MISSING_QUANTITY
+    path, so a half-implemented Path B can never hide behind the deferral."""
+    report = _run_diag(tmp_path, lambda c, f, e, p: p.__setitem__(
+        "diagnostics", {}))
+    assert report["deferred_targets"] == []
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["targets_met"] is False
+
+
+def test_c_statistic_beyond_tolerance_is_a_defect(tmp_path):
+    report = _run_diag(tmp_path, lambda c, f, e, p: p["diagnostics"].__setitem__(
+        "c_statistic", 0.6845))
+    hit = [f for f in report["findings"] if f["quantity"] == "c_statistic"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+    assert hit[0]["source"] == SRC_EXACT
+
+
+def test_c_statistic_exported_script_divergence_is_a_script_finding(tmp_path):
+    """logistic-dirty's real shape: the screen and Path B agree, the exported
+    script's own C-statistic renders a different sentence."""
+    report = _run_diag(tmp_path, lambda c, f, e, p: e["diagnostics"].__setitem__(
+        "c_statistic", 0.6866452324967609))
+    codes = {f["quantity"]: f["code"] for f in report["findings"]}
+    assert codes["exported script C-statistic"] == "SCRIPT_DIVERGENCE"
+    assert codes["c_statistic"] == "DEFECT"
+    script = _by_code(report, "SCRIPT_DIVERGENCE")
+    assert all(f["source"] == SRC_SCRIPT for f in script)
+
+
+def test_c_statistic_rounding_only_is_an_artifact_not_a_defect(tmp_path):
+    """Both paths hold 0.6850001 and the screen printed 0.68: the value sits a
+    whisker past the 2-dp boundary, so the rendered strings differ while the
+    numbers agree. The DISPLAY tier must call that an artifact, not arithmetic.
+
+    The SCRIPT tier legitimately speaks up in the same run — Path A's harvest
+    renders 0.69 where the screen said 0.68, which really is a screen-vs-script
+    divergence — and it is asserted here rather than filtered away, so this test
+    pins the whole shape of the run and not just the line it is named for.
+    """
+    def mutate(case, figura, exact, python):
+        python["diagnostics"]["c_statistic"] = 0.6850001
+        exact["diagnostics"]["c_statistic"] = 0.6850001
+    report = _run_diag(tmp_path, mutate)
+    codes = {f["quantity"]: f["code"] for f in report["findings"]}
+    assert codes["C-statistic note"] == "DISPLAY_ARTIFACT"
+    assert codes["exported script C-statistic"] == "SCRIPT_DIVERGENCE"
+    # the exact tier stays silent: the two full-precision values are identical
+    assert "c_statistic" not in codes
+    assert len(report["findings"]) == 2
+
+
+def test_a_note_firing_on_only_one_path_is_a_diagnostic_mismatch(tmp_path):
+    """The code's whole reason to exist: Path B says the EPV advisory applies,
+    the screen printed no such sentence."""
+    report = _run_diag(tmp_path, lambda c, f, e, p: p["diagnostics"].update(
+        {"epv": 4.0, "epv_triggered": True}))
+    hit = [f for f in report["findings"] if f["quantity"] == "EPV note"]
+    assert [f["code"] for f in hit] == ["DIAGNOSTIC_MISMATCH"]
+    assert hit[0]["disposition"] == "defect"
+    assert hit[0]["source"] == SRC_DISPLAY
+
+
+def test_a_note_the_screen_raises_and_path_b_does_not_is_a_mismatch(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] += (" CAUTION: separation or severe collinearity was "
+                           "detected — one or more covariates ...")
+    report = _run_diag(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "separation note"]
+    assert [f["code"] for f in hit] == ["DIAGNOSTIC_MISMATCH"]
+
+
+def test_a_value_inside_an_agreed_note_is_a_defect_not_a_mismatch(tmp_path):
+    """Both paths agree the Cook's advisory fires; they disagree on the count.
+    That is a number disagreeing, which is what DEFECT already means —
+    DIAGNOSTIC_MISMATCH is reserved for the note's STATE."""
+    report = _run_diag(tmp_path, lambda c, f, e, p: p["diagnostics"].__setitem__(
+        "cooks_influential", 15))
+    hit = [f for f in report["findings"]
+           if f["quantity"] == "Cook's distance note"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+    assert hit[0]["figura"] == 13 and hit[0]["python"] == 15
+
+
+def test_a_triggered_vif_note_compares_the_largest_vif(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] += (" CAUTION: multicollinearity among continuous "
+                           "covariates (largest VIF = 7.0, above the usual "
+                           "threshold of 5); consider dropping a redundant "
+                           "variable.")
+        python["diagnostics"]["vif"] = {"age": 7.0086753423474493, "bmi": 6.4}
+        python["diagnostics"]["vif_triggered"] = True
+    report = _run_diag(tmp_path, mutate)
+    assert report["findings"] == []
+    assert report["targets"]["vif_note"] > 0
+
+
+def test_an_infinite_vif_against_a_finite_one_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] += (" CAUTION: multicollinearity among continuous "
+                           "covariates (largest VIF = effectively infinite, "
+                           "above the usual threshold of 5); consider dropping "
+                           "a redundant variable.")
+        python["diagnostics"]["vif"] = {"a": 12.0, "b": 12.0}
+        python["diagnostics"]["vif_triggered"] = True
+    report = _run_diag(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "VIF note"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+    assert "effectively infinite" in hit[0]["figura"]
+
+
+def test_a_triggered_vif_note_with_no_vif_map_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] += (" CAUTION: multicollinearity among continuous "
+                           "covariates (largest VIF = 7.0, above the usual "
+                           "threshold of 5); consider dropping a redundant "
+                           "variable.")
+        python["diagnostics"]["vif_triggered"] = True   # but `vif` stays None
+    report = _run_diag(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "VIF note"]
+    assert [f["code"] for f in hit] == ["MISSING_QUANTITY"]
+
+
+def test_a_non_boolean_trigger_is_missing_quantity_not_a_crash(tmp_path):
+    report = _run_diag(tmp_path, lambda c, f, e, p: p["diagnostics"].__setitem__(
+        "separation_caution", None))
+    hit = [f for f in report["findings"] if f["quantity"] == "separation note"]
+    assert [f["code"] for f in hit] == ["MISSING_QUANTITY"]
+
+
+def test_the_numerical_warning_fallback_is_reported_not_ignored(tmp_path):
+    """R's own verbatim warning text is outside fit_logistic's contract, so its
+    appearance demands the contract be extended — mirroring the 2x2 odds-ratio
+    clause in the group-comparison branch."""
+    def mutate(case, figura, exact, python):
+        figura["text"] += (' CAUTION: fitting reported a numerical warning '
+                           '("glm.fit: algorithm did not converge"); ...')
+    report = _run_diag(tmp_path, mutate)
+    hit = [f for f in report["findings"]
+           if f["quantity"] == "numerical-warning note"]
+    assert [f["code"] for f in hit] == ["MISSING_QUANTITY"]
+
+
+def test_a_ratio_table_figure_with_no_diagnostics_contract_is_a_hole(tmp_path):
+    """A future ratio_table figure must not be waved through as "no diagnostics
+    to compare" — only its own handler can make that claim."""
+    def mutate(case, figura, exact, python):
+        case["figure"] = "poisson"
+        python["diagnostics"] = {}
+    report = _run_diag(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "diagnostics"]
+    assert [f["code"] for f in hit] == ["MISSING_QUANTITY"]
+    assert "poisson" in hit[0]["note"]
+
+
+# --------------------------------------------------------------------------
+# cox's own advisory block
+# --------------------------------------------------------------------------
+
+_COX_METHODS = (
+    "Multivariable Cox proportional-hazards regression (n = 220, 157 events) "
+    "adjusted for arm, age. Unadjusted hazard ratios are from single-covariate "
+    "models; adjusted hazard ratios are from the joint model. The "
+    "proportional-hazards assumption was assessed with scaled Schoenfeld "
+    "residuals (global p=0.373)."
+)
+
+_ZPH_GLOBAL = 0.373158581101024
+_ZPH_TERMS = {"arm": 0.596851840197187, "age": 0.283461184238505}
+
+
+def _base_cox_diag():
+    case, figura, exact, python = _base()
+    case["figure"] = "cox"
+    case["exact_targets"] = [
+        "adjusted_hr", "adjusted_ci", "adjusted_p", "n", "n_event",
+        "n_dropped", "zph", "ph_note", "epv_note", "separation_note"]
+    figura["text"] = TSV.split("\n\n")[0] + "\n\n" + _COX_METHODS
+    exact["figure"] = python["figure"] = "cox"
+    exact["diagnostics"] = {"zph_global_p": _ZPH_GLOBAL,
+                            "zph_terms": dict(_ZPH_TERMS)}
+    python["diagnostics"] = {
+        "zph_global_p": _ZPH_GLOBAL,
+        "zph_terms": dict(_ZPH_TERMS),
+        "ph_violation": False,
+        "epv": 78.5,
+        "epv_triggered": False,
+        "separation_caution": False,
+    }
+    return case, figura, exact, python
+
+
+def _run_cox_diag(tmp_path, mutate=None):
+    case, figura, exact, python = _base_cox_diag()
+    if mutate is not None:
+        mutate(case, figura, exact, python)
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    return _report(case["id"], results, cases)
+
+
+def test_the_agreeing_cox_diagnostics_fixture_passes_everything(tmp_path):
+    report = _run_cox_diag(tmp_path)
+    assert report["findings"] == []
+    assert report["targets_met"] is True
+    for target in ("zph", "ph_note", "epv_note", "separation_note"):
+        assert report["targets"][target] > 0, target
+
+
+def test_zph_global_beyond_tolerance_is_a_defect(tmp_path):
+    report = _run_cox_diag(
+        tmp_path,
+        lambda c, f, e, p: p["diagnostics"].__setitem__("zph_global_p", 0.3732))
+    hit = [f for f in report["findings"] if f["quantity"] == "zph_global_p"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+    assert hit[0]["source"] == SRC_EXACT
+
+
+def test_a_per_covariate_zph_p_is_compared_even_though_it_is_never_displayed(
+        tmp_path):
+    """The per-covariate p-values reach no sentence at all, so the exact tier is
+    the ONLY thing judging them — and it is a real tier, because the exported
+    .R prints cox.zph(fit)."""
+    report = _run_cox_diag(
+        tmp_path,
+        lambda c, f, e, p: p["diagnostics"]["zph_terms"].__setitem__("age", 0.9))
+    hit = [f for f in report["findings"] if f["quantity"] == "zph term p"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+    assert hit[0]["term"] == "age"
+
+
+def test_a_zph_term_on_only_one_side_is_missing_quantity(tmp_path):
+    report = _run_cox_diag(
+        tmp_path,
+        lambda c, f, e, p: p["diagnostics"]["zph_terms"].pop("arm"))
+    hit = [f for f in report["findings"] if f["quantity"] == "zph term p"]
+    assert [f["code"] for f in hit] == ["MISSING_QUANTITY"]
+
+
+def test_a_ph_violation_on_only_one_path_is_a_diagnostic_mismatch(tmp_path):
+    report = _run_cox_diag(
+        tmp_path,
+        lambda c, f, e, p: p["diagnostics"].__setitem__("ph_violation", True))
+    hit = [f for f in report["findings"]
+           if f["quantity"] == "PH violation caution"]
+    assert [f["code"] for f in hit] == ["DIAGNOSTIC_MISMATCH"]
+
+
+def test_a_displayed_zph_p_difference_is_never_a_display_artifact(tmp_path):
+    """Mirrors addendum 6: the p-value carries the inferential claim, so there
+    is no rounding leniency for it anywhere in this file."""
+    def mutate(case, figura, exact, python):
+        python["diagnostics"]["zph_global_p"] = 0.3736
+        exact["diagnostics"]["zph_global_p"] = 0.3736
+    report = _run_cox_diag(tmp_path, mutate)
+    codes = {f["quantity"]: f["code"] for f in report["findings"]}
+    assert codes["proportional-hazards note"] == "DEFECT"
+    assert codes["exported script zph p"] == "SCRIPT_DIVERGENCE"
+
+
+def test_cox_epv_note_carries_no_number_only_a_state(tmp_path):
+    """R/cox.R's EPV sentence embeds no value at all, unlike R/logistic.R's, so
+    the two are separate rules here and this one is state-only."""
+    def mutate(case, figura, exact, python):
+        figura["text"] += (" CAUTION: fewer than 10 events per model term "
+                           "(EPV < 10); the adjusted estimates may be "
+                           "unstable.")
+        python["diagnostics"]["epv"] = 5.0
+        python["diagnostics"]["epv_triggered"] = True
+    report = _run_cox_diag(tmp_path, mutate)
+    assert report["findings"] == []
+
+
+def test_cox_diagnostics_are_deferred_while_path_b_has_no_block(tmp_path):
+    report = _run_cox_diag(tmp_path, lambda c, f, e, p: p.pop("diagnostics"))
+    assert report["findings"] == []
+    assert report["deferred_targets"] == ["zph", "ph_note", "epv_note",
+                                          "separation_note"]
+    assert "cox" in PENDING_PATH_B_DIAGNOSTICS
+
+
+def test_an_unusable_note_state_is_not_credited_as_a_comparison(tmp_path):
+    """`compared` is the EVIDENCE count. A note whose state could not be read
+    off Path B was not compared, so it must not inflate it — the same rule the
+    display-cell and post-hoc branches follow."""
+    clean = _run_diag(tmp_path / "clean")
+    broken = _run_diag(tmp_path / "broken",
+                       lambda c, f, e, p: p["diagnostics"].__setitem__(
+                           "separation_caution", "no"))
+    assert broken["compared"] == clean["compared"] - 1
+    assert _by_code(broken, "MISSING_QUANTITY")
+
+
+def test_the_c_statistic_target_is_credited_by_the_exact_tier_only(tmp_path):
+    """`c_statistic` follows `adjusted_or`'s convention: it names a
+    full-precision quantity, so only the exact tier discharges it. The display
+    tier's C-statistic sentence still runs and still reports — it just does not
+    credit the coverage contract on the exact tier's behalf."""
+    def mutate(case, figura, exact, python):
+        exact.pop("diagnostics")          # no Path A value -> no exact tier
+    report = _run_diag(tmp_path, mutate)
+    assert report["targets"]["c_statistic"] == 0
+    assert report["targets_met"] is False
+    quantities = {f["quantity"] for f in report["findings"]}
+    assert "c_statistic" in quantities

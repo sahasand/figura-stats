@@ -88,3 +88,38 @@ still written, because the failing evidence IS the deliverable.
 **Do not suppress, special-case, or "fix" these findings.** They are the
 mechanical catch of issue 02 divergence 1, which until now existed only as a
 hand-built repro in a Markdown file.
+
+## Diagnostics
+
+**The diagnostics contract is identical to
+`stats-validation/spec/logistic-confounding.md`'s Diagnostics section.** Read
+that file for the C-statistic construction, the VIF rule, EPV, Cook's distance,
+the separation caution, and which tier judges which. `fit_logistic` needs no new
+diagnostics behaviour for this case either.
+
+What the dirt does to the diagnostics, measured on both readers:
+
+| quantity | live app / Path B (320 rows, 4 stage levels) | exported script (312 rows, 3 stage levels) |
+| --- | --- | --- |
+| `c_statistic` | 0.6866452324967609, displayed `0.69` | 0.68265644955300131, renders `0.68` |
+| `cooks_influential` | 15 | 13 (never computed by the script; measured here only to show the dirt moves it) |
+| `epv` | 91 / 5 = 18.2, not triggered | 87 / 4 = 21.75, not triggered |
+| `vif` | `None` — only one continuous covariate (`age`) | same |
+| `separation_caution` | false | false |
+
+So the dirt reaches the diagnostics too, and it reaches them in the same
+direction as the estimates: the app and Path B agree, and the exported script
+disagrees with both. Once Path B's diagnostics land, this case is expected to
+publish **two further findings**, both on the C-statistic and both attributed to
+the export path:
+
+- **`DEFECT` x1** — exact tier, `c_statistic` 0.68265644955300131 (exported
+  script) vs 0.6866452324967609 (Path B), beyond rel 1e-6.
+- **`SCRIPT_DIVERGENCE` x1** — script tier, the exported `.R`'s C-statistic
+  renders ` ... C-statistic = 0.68.` where the screen showed `0.69`.
+
+Every display-tier diagnostic still PASSES: the C-statistic sentence, the
+absent VIF and EPV sentences, the 15-observation Cook's sentence and the absent
+separation sentence are all reproduced exactly by Path B. As with the estimates,
+the screen was right and the export path was wrong — do not "fix" the two new
+findings either.
