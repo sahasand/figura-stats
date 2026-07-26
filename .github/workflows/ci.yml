@@ -119,7 +119,7 @@ jobs:
       # structure exactly, numbers at compare.py's own REL_TOL/ABS_TOL.
       #
       # scorecard.html: a plain BYTE diff, deliberately. It renders only what
-      # findings.json publishes, and compare.py rounds published values to 12
+      # findings.json publishes, and compare.py rounds published values to 9
       # significant digits on the way out, so the noise a byte diff used to trip
       # over is gone. build_scorecard.py reads no live state
       # (test_scorecard_is_a_pure_function_of_its_inputs pins that), so this is a
