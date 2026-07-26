@@ -50,11 +50,60 @@ def _covariate_groups(df, covariates, ref_levels):
     return groups
 
 
+def _estimated_columns(design):
+    """Split a design matrix's columns into ESTIMATED and ALIASED, left to right.
+
+    The spec's Cook's-distance clause defines `p` as "the number of ESTIMATED
+    coefficients **including the intercept**" — wording that only differs from
+    the column count when the design is rank-deficient, so the spec itself
+    contemplates a design column for which no coefficient is estimated at all.
+    That is the rank of the design: `rank` independent directions, `rank`
+    coefficients, and `ncol - rank` columns carrying no information of their
+    own.
+
+    WHICH columns are the unestimated ones is fixed here by scanning left to
+    right — the intercept first, then the covariate blocks in the order
+    `_covariate_matrix` lays them out — and dropping a column that adds no rank
+    to the columns already accepted. Deterministic, and it leaves the first
+    occurrence of a duplicated covariate estimated rather than picking
+    arbitrarily between two identical columns.
+
+    Returns `(estimated_names, aliased_names)`.
+    """
+    X = np.asarray(design, dtype=float)
+    names = list(design.columns)
+    accepted, aliased = [], []
+    for j in range(X.shape[1]):
+        if np.linalg.matrix_rank(X[:, accepted + [j]]) > len(accepted):
+            accepted.append(j)
+        else:
+            aliased.append(j)
+    return [names[j] for j in accepted], [names[j] for j in aliased]
+
+
+# A coefficient that was not estimated at all. Not zero, not infinite: absent.
+# `reportable` reads est/lo/hi, so a cell in this shape fails the spec's
+# Reportability rule through the module's one definition of it, which is what
+# makes separation clause 1 fire on a rank-deficient design.
+_NOT_ESTIMATED = {"est": float("nan"), "se": float("nan"),
+                  "lo": float("nan"), "hi": float("nan"), "p": float("nan")}
+
+
 def _fit_one(y, X):
     design = add_constant(X, has_constant="add")
     result = GLM(y, design, family=Binomial()).fit()
+    _estimated, aliased = _estimated_columns(design)
     terms = {}
     for term in X.columns:
+        if term in aliased:
+            # Rank-deficient design: this column duplicates information the
+            # accepted columns already carry, so no coefficient is estimated
+            # for it. statsmodels' pinv solve would hand back the minimum-norm
+            # split instead — two identical finite odds ratios for a duplicated
+            # covariate, each of them reportable — which reads as a fitted
+            # result where the spec has none.
+            terms[term] = dict(_NOT_ESTIMATED)
+            continue
         coef = result.params[term]
         se = result.bse[term]
         terms[term] = {
@@ -126,7 +175,13 @@ def _vif(kept, covariates, ref_levels):
 
 
 def _cooks_influential(y, mu, design, n_coef):
-    """Rows whose Cook's distance exceeds 4/n, non-finite distances excluded."""
+    """Rows whose Cook's distance exceeds 4/n, non-finite distances excluded.
+
+    `n_coef` is the spec's `p`: "the number of ESTIMATED coefficients including
+    the intercept" — the design's RANK, not its column count. The two agree on
+    every full-rank design and diverge only when a column is aliased, where the
+    column count would inflate the divisor and undercount influential rows.
+    """
     y = np.asarray(y, dtype=float)
     mu = np.asarray(mu, dtype=float)
     X = np.asarray(design, dtype=float)
@@ -198,7 +253,16 @@ def fit_logistic(df, outcome, event_value, covariates, ref_levels, increments):
     # events is judged on its rarer class. (Cox's EPV uses the event count;
     # the two are different quantities under one name.)
     epv = min(n_event, n - n_event) / n_terms
-    cooks = _cooks_influential(y, pred, design, design.shape[1])
+    # Cook's `p` is a DIFFERENT count from EPV's `terms`, and deliberately so.
+    # EPV's denominator is spelled out by the spec as a counting recipe over the
+    # covariates ("one per continuous, levels - 1 per categorical"), so it is the
+    # design's column count. Cook's `p` is "the number of ESTIMATED coefficients
+    # including the intercept" — the design's RANK, which is smaller when a
+    # column is aliased. `n_estimated` is len(estimated) from the same left-to-
+    # right scan that decided which cells got a coefficient at all, so the
+    # divisor and the unreportable cells can never disagree about the rank.
+    n_estimated = len(_estimated_columns(design)[0])
+    cooks = _cooks_influential(y, pred, design, n_estimated)
 
     diagnostics = {
         "c_statistic": c_stat,

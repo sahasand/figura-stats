@@ -2,7 +2,10 @@ import math
 
 import numpy as np
 import pandas as pd
-from validate.cox import fit_cox
+import pytest
+from validate.cox import _fit_one, _population, _zph, fit_cox
+from validate.io import code_event
+from validate.logistic import _covariate_matrix
 
 
 def _frame(seed=11, n=400, log_hr=0.7):
@@ -243,3 +246,50 @@ def test_cox_epv_counts_events_not_the_smaller_outcome_group():
 
 def test_separation_caution_is_false_on_a_clean_fit():
     assert _zph_fit()["diagnostics"]["separation_caution"] is False
+
+
+def test_zph_resolves_a_covariates_columns_by_name_not_by_position():
+    """`zph_terms` is keyed by covariate while `U`/`S` are indexed by
+    coefficient, so `_zph` has to map one to the other. It must do that by
+    COLUMN NAME: walking `groups` and accumulating widths is correct only while
+    `_covariate_matrix` and `_covariate_groups` happen to emit blocks in the
+    same order, which is an invariant no code enforces.
+
+    Handing `_zph` a `groups` dict whose insertion order is the REVERSE of the
+    design's column order is exactly that mismatch. Position-based offsets would
+    give `age` the `armTreated` column and vice versa — and because the two
+    per-term p-values here differ by 15x, the swap shows up as a wrong number
+    rather than as a wash."""
+    df = _zph_frame()
+    kept, time_numeric, _dropped = _population(df, "time", ["arm", "age"])
+    event = code_event(kept["status"], "1")
+    X = _covariate_matrix(kept, ["arm", "age"], {"arm": "Control"}, {})
+    assert list(X.columns) == ["armTreated", "age"]
+    terms, cph = _fit_one(time_numeric, event, X)
+    beta = cph.params_[list(X.columns)].to_numpy(dtype=float)
+
+    reversed_groups = {"age": ["age"], "arm": ["armTreated"]}
+    global_p, per_term = _zph(
+        X, time_numeric.to_numpy(dtype=float),
+        event.to_numpy(dtype=float), beta, reversed_groups)
+    assert math.isclose(global_p, _R_ZPH_GLOBAL, rel_tol=1e-6)
+    assert math.isclose(per_term["arm"], _R_ZPH_ARM, rel_tol=1e-6)
+    assert math.isclose(per_term["age"], _R_ZPH_AGE, rel_tol=1e-6)
+
+
+def test_zph_raises_rather_than_testing_a_wrong_submatrix():
+    """A covariate naming a column the design does not have is a wiring error,
+    not a statistical result. `_zph` raises; `fit_cox`'s own except clause turns
+    that into `zph_global_p = None`, the honest "could not be computed", instead
+    of silently testing whatever columns happened to line up."""
+    df = _zph_frame()
+    kept, time_numeric, _dropped = _population(df, "time", ["arm", "age"])
+    event = code_event(kept["status"], "1")
+    X = _covariate_matrix(kept, ["arm", "age"], {"arm": "Control"}, {})
+    terms, cph = _fit_one(time_numeric, event, X)
+    beta = cph.params_[list(X.columns)].to_numpy(dtype=float)
+    with pytest.raises(ValueError) as excinfo:
+        _zph(X, time_numeric.to_numpy(dtype=float),
+             event.to_numpy(dtype=float), beta,
+             {"arm": ["armTreated"], "bmi": ["bmi"]})
+    assert "bmi" in str(excinfo.value)

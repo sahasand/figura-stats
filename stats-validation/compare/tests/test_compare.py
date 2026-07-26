@@ -33,6 +33,7 @@ from compare import (
     SRC_EXACT,
     SRC_SCRIPT,
     SRC_UNCLASSIFIED,
+    _Targets,
     _table1_harvest_cells,
     _table1_script_tier,
     classify_cell,
@@ -159,7 +160,14 @@ def _base():
             "arm:New treatment": copy.deepcopy(unadjusted["armNew treatment"]),
             "age": copy.deepcopy(unadjusted["age"]),
         },
-        "n": 320, "n_event": 91, "n_dropped": 0, "c_statistic": 0.6812,
+        "n": 320, "n_event": 91, "n_dropped": 0,
+        # The SAME object as diagnostics["c_statistic"] below, because that is
+        # what real Path B returns: fit_logistic assigns `c_stat` once and puts
+        # it in both places (INTERFACES.md marks the top-level key superseded
+        # but kept for an older caller, so the two can never drift). A fixture
+        # carrying two different numbers under one name would let a comparator
+        # that read the wrong one still look green.
+        "c_statistic": _BASE_L_C_STAT,
         # Matches the text above: C-statistic fires and agrees, VIF/EPV/
         # separation are silent (one continuous covariate, ample events, no
         # unreportable cell), and Cook's fires with the count the sentence
@@ -168,7 +176,14 @@ def _base():
             "c_statistic": _BASE_L_C_STAT,
             "vif": None,               # one continuous covariate: never computed
             "vif_triggered": False,
-            "epv": 22.75,
+            # THIS case's own EPV, not the shipped 4-term case's. Two covariates
+            # here — `arm` (2 levels -> 1 term) and `age` (continuous -> 1) — so
+            # terms = 2, and min(n_event, n - n_event) = min(91, 229) = 91, so
+            # epv = 91/2 = 45.5. (91/4 = 22.75 is the shipped logistic-
+            # confounding case, which also carries `stage` on 2 more terms.)
+            # Either number leaves epv_triggered False, which is why the
+            # inconsistency was invisible — the fixture still has to be right.
+            "epv": 45.5,
             "epv_triggered": False,
             "cooks_influential": 13,
             "cooks_triggered": True,
@@ -538,8 +553,15 @@ def test_unwired_exact_target_is_missing_quantity(tmp_path):
 
 
 def test_an_empty_table_never_passes_vacuously(tmp_path):
+    # The header row survives and the methods paragraph is left ALONE: this test
+    # is about an empty TABLE, and replacing the real methods sentence with
+    # "methods." also silenced Figura's advisory diagnostics while Path B's
+    # block kept firing, which published two DIAGNOSTIC_MISMATCH findings that
+    # no assertion here ever looked at. Keeping _BASE_L_METHODS leaves the
+    # diagnostics story agreeing, so the only findings in this run are the two
+    # the test is named for.
     def mutate(case, figura, exact, python):
-        figura["text"] = figura["text"].split("\n")[0] + "\n\nmethods."
+        figura["text"] = figura["text"].split("\n")[0] + "\n\n" + _BASE_L_METHODS
         exact["terms"] = {}
         python["terms"] = {}
         python["display_terms"] = {}
@@ -549,6 +571,8 @@ def test_an_empty_table_never_passes_vacuously(tmp_path):
     notes = [f["note"] for f in _by_code(report, "MISSING_QUANTITY")]
     assert any("no estimate rows" in n for n in notes)
     assert any("no terms to compare" in n for n in notes)
+    # and the advisory diagnostics stay out of it entirely
+    assert _by_code(report, "DIAGNOSTIC_MISMATCH") == []
 
 
 def test_unknown_display_kind_exits_loudly(tmp_path):
@@ -2334,6 +2358,51 @@ def test_the_agreeing_diagnostics_fixture_passes_everything(tmp_path):
     for target in ("c_statistic", "vif_note", "epv_note", "cooks_note",
                    "separation_note"):
         assert report["targets"][target] > 0, target
+
+
+def test_targets_deferral_machinery_survives_an_empty_pending_gate():
+    """`_Targets(declared, deferred=...)` is the mechanism a future pending
+    contract would ride on, and PENDING_PATH_B_DIAGNOSTICS is now empty — so no
+    whole-case test reaches the `deferred` argument any more. Exercised directly
+    here, or it rots silently until the next task needs it and finds it broken.
+
+    Four properties, each one a way the mechanism could go wrong:
+      * a deferred target LEAVES `declared` and `counts` — it is removed from
+        the contract this run enforces, not merely annotated;
+      * `met` is False when everything is deferred: nothing was checked, and
+        calling that a pass is the exact failure the vacuity guard exists for;
+      * `findings()` stays SILENT in that state — the case did declare a
+        contract, so the "declares no exact_targets" finding would be a false
+        accusation; `deferred_targets` is what reports it;
+      * partial deferral leaves the undeferred half fully enforced.
+    """
+    everything = _Targets(["a"], deferred=["a"])
+    assert everything.declared == []
+    assert everything.deferred == ["a"]
+    assert everything.counts == {}
+    assert everything.met is False
+    assert everything.findings() == []
+    # crediting a quantity cannot resurrect a deferred target into the contract
+    everything.credit("est")
+    assert everything.counts == {}
+    assert everything.met is False
+
+    # an empty contract with nothing deferred is the OTHER case, and it does
+    # publish the vacuity finding — the two must not be conflated.
+    nothing = _Targets([], deferred=[])
+    assert [f["code"] for f in nothing.findings()] == ["MISSING_QUANTITY"]
+    assert "no coverage contract" in nothing.findings()[0]["note"]
+
+    # partial deferral: the undeferred half is still enforced for real.
+    partial = _Targets(["c_statistic", "n"], deferred=["c_statistic"])
+    assert partial.declared == ["n"]
+    assert partial.deferred == ["c_statistic"]
+    assert partial.met is False               # nothing credited yet
+    assert [f["quantity"] for f in partial.findings()] == ["n"]
+    partial.credit("n")
+    assert partial.counts == {"n": 1}
+    assert partial.met is True
+    assert partial.findings() == []
 
 
 def test_diagnostics_are_no_longer_pending_for_logistic_or_cox():

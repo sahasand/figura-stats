@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 import pandas as pd
-from validate.logistic import fit_logistic, reportable
+from validate.logistic import _c_statistic, fit_logistic, reportable
 
 
 def _frame(seed=7, n=400):
@@ -221,6 +221,73 @@ def test_a_duplicated_covariate_gives_an_infinite_vif():
     assert out["diagnostics"]["vif_triggered"] is True
 
 
+def _l1_rank_deficient():
+    """L1 plus an exact copy of `age`: 3 design columns, only 2 of them
+    estimable. assign() rather than in-place, same reason as above."""
+    df = _l1_frame().assign(age_copy=lambda d: d["age"])
+    return fit_logistic(df, "resp", "Yes", ["age", "age_copy"], {}, {})
+
+
+# Derived from spec/logistic-confounding.md's Cook's clause alone, not measured
+# off the implementation. The spec's `p` is "the number of ESTIMATED
+# coefficients including the intercept", which on this design is 2 (intercept +
+# age), not the 3 columns present — `age_copy` adds no rank, so no coefficient
+# is estimated for it.
+#
+# Re-derived independently by dropping the duplicated column: on the REDUCED
+# design [const, age] the fit, the fitted probabilities and the hat matrix are
+# identical, the design is unambiguously full rank, and `p` is plainly 2. Then,
+# with D_i = (r_i/(1-h_i))^2 * h_i / p, the literal inverse the spec writes, and
+# the 4/n = 0.0666... cut-off:
+#
+#   trace(H) = 2.000000000000004  (= p, the internal check that the divisor and
+#                                  the leverage agree about the rank)
+#   no D_i is non-finite, so nothing is excluded
+#   7 rows exceed the cut: 0-based 13, 16, 25, 32, 34, 36, 53, with
+#     D_i = 0.128393, 0.069767, 0.121188, 0.192649, 0.233441, 0.075046, 0.119796
+#   the largest D_i BELOW the cut is 0.056705, so the boundary is not tight
+#
+# Dividing by the column count 3 instead scales every D_i by 2/3 and drops rows
+# 16 (0.0698 -> 0.0465) and 36 (0.0750 -> 0.0500) below the cut, giving 5 — the
+# undercount the column-count reading produces.
+_L1_DUP_COOKS = 7
+
+
+def test_cooks_p_is_the_estimated_coefficient_count_not_the_column_count():
+    d = _l1_rank_deficient()["diagnostics"]
+    assert d["cooks_influential"] == _L1_DUP_COOKS
+    assert d["cooks_triggered"] is True
+
+
+def test_a_full_rank_design_is_untouched_by_the_rank_reading():
+    """rank == column count on every design that is not deficient, so the L1
+    count pinned against R above cannot move."""
+    assert _l1_fit()["diagnostics"]["cooks_influential"] == _L1_COOKS
+
+
+def test_an_aliased_covariate_has_no_estimate_and_fires_the_caution():
+    """A rank-deficient design estimates FEWER coefficients than it has columns
+    (the spec's own Cook's wording), so the aliased column has no estimate at
+    all — it cannot satisfy Reportability's "the estimate and both CI bounds are
+    finite", so separation clause 1 fires. The displayed sentence names this
+    case in as many words: covariates that "duplicate information already
+    carried by another covariate, so those odds ratios are not reliably
+    estimated by standard logistic regression".
+
+    Without this, statsmodels' pinv solve hands back the minimum-norm split —
+    two identical, finite, reportable odds ratios — and the caution stays
+    silent on the one fixture in the suite that is built to provoke it."""
+    out = _l1_rank_deficient()
+    # left-to-right: the FIRST occurrence keeps its coefficient
+    assert reportable(out["terms"]["age"])
+    assert not reportable(out["terms"]["age_copy"])
+    assert math.isnan(out["terms"]["age_copy"]["est"])
+    assert out["diagnostics"]["separation_caution"] is True
+    # the univariable fits are each full rank, so both still have estimates
+    assert reportable(out["unadjusted"]["age"])
+    assert reportable(out["unadjusted"]["age_copy"])
+
+
 def test_vif_is_unchanged_by_the_increment_rescaling():
     """Dividing a column by a positive constant leaves R^2 alone, so the app's
     per-10-years rescaling must not move a VIF."""
@@ -263,6 +330,22 @@ def test_c_statistic_averages_ranks_at_ties():
     out = fit_logistic(df, "resp", "Yes", ["grp"], {"grp": "A"}, {})
     assert math.isclose(out["diagnostics"]["c_statistic"], _L2_C_STATISTIC,
                         rel_tol=1e-9)
+
+
+def test_c_statistic_is_none_when_a_class_is_empty():
+    """`None` when either class is empty, per the spec — not 0, not nan, and not
+    a ZeroDivisionError on n1*n0. `None` is the contracted "the diagnostic could
+    not be computed" value and the comparator reads it as the sentence being
+    silent; a 0.0 would render " C-statistic = 0.00." and claim a measurement.
+
+    Called directly: no fixture with a single-class outcome can reach it through
+    fit_logistic, because a constant outcome gives glm nothing to fit."""
+    assert _c_statistic([1, 1, 1], [0.2, 0.5, 0.9]) is None      # no y = 0
+    assert _c_statistic([0, 0, 0], [0.2, 0.5, 0.9]) is None      # no y = 1
+    assert _c_statistic([], []) is None                          # no rows at all
+    # and the finite case still returns a number, so the guard is not swallowing
+    # a legitimate computation
+    assert _c_statistic([1, 0], [0.9, 0.1]) == 1.0
 
 
 def test_separation_caution_fires_on_an_unreportable_cell():

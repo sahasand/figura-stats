@@ -9,8 +9,13 @@ from .logistic import _covariate_groups, _covariate_matrix, reportable
 
 # Converge well past lifelines' defaults (precision=1e-7, r_precision=1e-9,
 # max_steps=500) so the Newton-Raphson stopping tolerance doesn't leak into
-# the reported estimates. See INTERFACES.md's Numerical precision note.
-_FIT_OPTIONS = {"precision": 1e-11, "r_precision": 1e-13, "max_steps": 1000}
+# the reported estimates. See INTERFACES.md's Numerical precision note, and
+# DECISIONS-diagnostics.md for what each digit here is measured to buy:
+# briefly, the previous 1e-11/1e-13/1000 already bought the tied-times fixture
+# ~3 orders of magnitude on beta-hat, and these three extra digits buy the PH
+# score test a further 5 (global-p residual 4.0e-8 -> 2.9e-13 relative to R) at
+# no measurable runtime cost (~7 ms per joint fit either way, 20-fit mean).
+_FIT_OPTIONS = {"precision": 1e-15, "r_precision": 1e-17, "max_steps": 5000}
 
 _DURATION_COL = "__time__"
 _EVENT_COL = "__event__"
@@ -69,8 +74,18 @@ def _zph(X, time, event, beta, groups):
     same name. Risk sets use the same Efron construction the model was fitted
     with.
 
+    `X` must be the design-matrix DATAFRAME, not a bare array: the per-covariate
+    statistic needs to know which of its columns belong to which covariate, and
+    that is resolved by NAME below rather than by assuming a layout.
+
     Returns `(global_p, {covariate: p})`.
     """
+    # Column positions come from the frame's own index, so the per-term block
+    # below can never be silently off by one. The alternative — walking `groups`
+    # and accumulating widths — is correct only while `_covariate_matrix` and
+    # `_covariate_groups` emit blocks in the same order, an invariant no code
+    # enforces and a comment cannot.
+    positions = {name: X.columns.get_loc(name) for name in X.columns}
     X = np.asarray(X, dtype=float)
     p = X.shape[1]
     risk = np.exp(X @ beta)
@@ -118,13 +133,19 @@ def _zph(X, time, event, beta, groups):
     global_chisq = float(U @ np.linalg.solve(S, U))
     global_p = float(chi2.sf(global_chisq, p))
 
-    columns = list(groups)
     offsets = {}
-    start = 0
-    for cov in columns:
-        width = len(groups[cov])
-        offsets[cov] = list(range(start, start + width))
-        start += width
+    for cov, names in groups.items():
+        missing = [name for name in names if name not in positions]
+        if missing:
+            # A covariate whose columns are not in the design at all is a
+            # wiring error between _covariate_matrix and _covariate_groups, not
+            # a statistical result. Raise rather than test a wrong submatrix:
+            # fit_cox's own except clause turns a ValueError into
+            # `zph_global_p = None`, the honest "could not be computed".
+            raise ValueError(
+                f"covariate {cov!r} names design columns absent from the "
+                f"design matrix: {missing}")
+        offsets[cov] = [positions[name] for name in names]
 
     per_term = {}
     for cov, index in offsets.items():
