@@ -386,8 +386,21 @@
           "source": "exported script vs Python"
         }
       ]
+    },
+    {
+      "id": "summary-table1",
+      "kind": "table1",
+      "compared": 61,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "n": 1,
+        "n_dropped": 1,
+        "decisions": 5
+      },
+      "findings": []
     }
   ],
-  "total_compared": 237,
+  "total_compared": 298,
   "total_findings": 28
 }

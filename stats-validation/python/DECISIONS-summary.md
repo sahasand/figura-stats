@@ -1,0 +1,70 @@
+# Decisions — validate/summary.py
+
+Silent-spec choices and one environment limitation, recorded per the task's
+strict rules.
+
+## Reused helpers
+
+- `_text` and `_r_numeric` are imported from `validate/groupcompare.py` rather
+  than re-implemented. Both mirror the same browser CSV parser
+  (`web/lib/csv.js`) that `spec/summary-table1.md`'s Cell reading section
+  describes, so the same trimming/blank/numeric-parsing rules apply verbatim
+  (accept `"01"`, `"1e3"`, `"0x1A"`, `"Inf"`, `"-Inf"`; reject `"NA"`,
+  `"NaN"`, `"1,000"`, `"TRUE"`).
+- **Checked and NOT reused**: `prompt.md` claims groupcompare.py has "a
+  spec-matching R-style signif formatter." No such formatter exists there
+  (grepped for `signif`/`fmt_num`) — `fmt_num` in `summary.py` was written
+  directly from `summary-table1.md`'s `.fmt_num` algorithm (scale by `10**e`,
+  round the scaled value half-to-even via Python's argument-less `round()`,
+  scale back), and verified against every worked example in the spec
+  (`12.3456→"12.3"`, `1234.5→"1230"`, `2.225→"2.22"`, `1.315→"1.32"`, etc.).
+  `groupcompare.py`'s `_route` skewness/Shapiro pattern *was* a useful
+  reference for `decide()`'s population-skewness and n>300/n<=300 routing
+  shape, even though its return value (a parametric/non-parametric bool for a
+  different analysis) isn't reusable directly.
+
+## Silent choices
+
+- **Categorical level sort order.** The spec calls for R's `sort(unique(...))`
+  (locale-aware), noting it coincides with plain lexicographic order for this
+  case's ASCII levels. `summary.py` uses Python's built-in `sorted()`
+  (Unicode code-point order) rather than implementing R's locale collation —
+  correct for ASCII levels, not guaranteed to match for non-ASCII ones.
+- **`decide(x)` return shape.** The interface only requires `{"kind": ...}`.
+  The implementation additionally returns `skewness` (always) and `p_value`
+  (only when the Shapiro path ran, i.e. `3 <= n <= 300`) for diagnostic
+  transparency. Neither is exercised by the acceptance tests; per
+  `INTERFACES.md`'s "at least" wording this is additive, not a deviation.
+- **No-group centering.** The spec's "values fed to the decision" are
+  group-mean-centred when a group role exists; it says nothing explicit about
+  the ungrouped case. Population skewness and Shapiro-Wilk are both
+  shift-invariant, so treating the single "Overall" pseudo-group the same way
+  (subtract its own mean before pooling) is a no-op relative to using the raw
+  values directly — `decide()` re-centres internally regardless, so this
+  choice has no observable effect either way.
+- **Blank group cells → `(missing)`.** Implemented per the spec's Cell
+  reading section even though the shipped case has no blank `arm` cells and
+  no test exercises it.
+
+## Environment limitation (not a spec choice)
+
+`tests/test_summary.py::test_the_shipped_case_reproduces_the_displayed_table`
+reads `cases/summary-table1/data.csv` (computed as
+`Path(__file__).resolve().parents[2] / "cases" / "summary-table1" / "data.csv"`).
+That file does not exist anywhere under this task's directory — only
+`spec/summary-table1.md` and `INTERFACES.md` were provided, and the strict
+rules forbid reaching outside this directory or the internet. The spec
+publishes only aggregate statistics for that case (means, SDs, quartiles,
+counts), not the 120 underlying rows, so the fixture cannot be reconstructed
+from what's available here either.
+
+This is the one failing test in the suite
+(`cd python && ../.venv/bin/python -m pytest tests/test_summary.py -q` →
+14 passed, 1 failed). Every other acceptance test exercises the same code
+paths the shipped case would exercise — the decision rule (all three rules,
+including the grouped group-mean-centred pooling), type-7 quartile
+interpolation, sample (n-1) SD, three-significant-figure formatting
+(including the half-to-even scaled-tie cases), and whole-number percent
+rounding — so the missing fixture blocks re-deriving the shipped case's exact
+published numbers end-to-end, not the correctness of the logic that would
+produce them.
