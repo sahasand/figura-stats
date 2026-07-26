@@ -57,10 +57,11 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 .webr-aborted { color:var(--fail); font-weight:600; font-style:italic; }
 .webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
 .webr-totals { margin:0 0 1rem; }
-/* The staleness note: turns "commit clobbered/stale" from a silent wrong
-   claim into visible information (see _current_head's docstring). Same warn
-   colour as .DISPLAY_ARTIFACT/.NOT_COMPARED above, not fail — an out-of-date
-   gate is a thing to notice, not a defect the gate itself found. */
+/* The staleness note: turns "the native numbers moved under this evidence"
+   from a silent wrong claim into visible information (see
+   _stale_native_digest's docstring). Same warn colour as
+   .DISPLAY_ARTIFACT/.NOT_COMPARED above, not fail — an out-of-date gate is a
+   thing to notice, not a defect the gate itself found. */
 .webr-stale { color:var(--warn); font-size:.85rem; margin:0 0 1rem; }
 </style></head>
 <body><main>
@@ -119,5 +120,5 @@ no 80-bit extended precision and webR ships reference BLAS/LAPACK, so an
 iterative fit is where a difference would appear. Cells are the strings the
 user is shown, so a difference here is a difference a reader of the manuscript
 would see.</p>
-<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26 &middot; commit <code>815fa79d40d5</code><br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><p class="webr-stale">Gate last run at <code>815fa79d40d5</code>; HEAD is now <code>2997e1b1f9b0</code> &mdash; this evidence predates the current commit.</p><p class="webr-totals">Compared every one of the <b>36</b> strings the app displays across these cases &mdash; <b>17</b> of them carrying a number that could actually drift between native R and webR.<br>36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate&#x27;s own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
+<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26 &middot; commit <code>815fa79d40d5</code><br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><p class="webr-totals">Compared every one of the <b>36</b> strings the app displays across these cases &mdash; <b>17</b> of them carrying a number that could actually drift between native R and webR.<br>36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate&#x27;s own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
 </main></body></html>

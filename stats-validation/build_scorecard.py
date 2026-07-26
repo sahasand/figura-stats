@@ -40,18 +40,26 @@ never silently dropped into "targets met".
 """
 from __future__ import annotations
 
+import hashlib
 import html
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 RESULTS = Path(__file__).resolve().parent / "results"
-# The actual repo checkout this file lives in — one level above
-# stats-validation/ — used ONLY to read current HEAD for the webR staleness
-# note below. Never used to WRITE `commit`; only a real browser run
-# (e2e/webr-parity.spec.js's repoCommit()) may do that.
-REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# THIS MODULE READS NO LIVE STATE. Every byte it writes is a function of the
+# files in results/ and of the code here — no clock, no environment, no `git
+# rev-parse`. That is not tidiness, it is the precondition for the freshness
+# gate to exist at all: CI rebuilds scorecard.html and runs
+# `git diff --exit-code` over it, so any live input would make the tracked
+# artifact differ from its own regeneration and the gate would flap forever.
+#
+# It used to read live HEAD, for the webR staleness note, and that was exactly
+# the bug: committing the scorecard advances HEAD, so the note in the committed
+# file named the PREVIOUS commit and could never again match a rebuild. (Real
+# instance: the file tracked at 93aa973 said "HEAD is now 2997e1b1f9b0".) The
+# note now derives from `native_digest` instead — see _stale_native_digest.
 
 # DISPOSITIONS comes from compare.py itself, not a restated copy, so the
 # "defects" tile and compare.py's own finding taxonomy can never drift apart
@@ -124,10 +132,11 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 .webr-aborted { color:var(--fail); font-weight:600; font-style:italic; }
 .webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
 .webr-totals { margin:0 0 1rem; }
-/* The staleness note: turns "commit clobbered/stale" from a silent wrong
-   claim into visible information (see _current_head's docstring). Same warn
-   colour as .DISPLAY_ARTIFACT/.NOT_COMPARED above, not fail — an out-of-date
-   gate is a thing to notice, not a defect the gate itself found. */
+/* The staleness note: turns "the native numbers moved under this evidence"
+   from a silent wrong claim into visible information (see
+   _stale_native_digest's docstring). Same warn colour as
+   .DISPLAY_ARTIFACT/.NOT_COMPARED above, not fail — an out-of-date gate is a
+   thing to notice, not a defect the gate itself found. */
 .webr-stale { color:var(--warn); font-size:.85rem; margin:0 0 1rem; }
 """
 
@@ -282,30 +291,75 @@ def _rows(data: dict) -> str:
     return "".join(rows)
 
 
-def _current_head(repo_root: Path = REPO_ROOT) -> str | None:
-    """Best-effort current repo HEAD, for the webR staleness note only.
+def _native_digest(results_dir: Path, case_ids: list[str]) -> str | None:
+    """Recompute webr-tier.json's `native_digest` from the artifacts on disk.
 
-    THE GUARD, not the write path. webr-tier.json's `commit` field must only
-    ever be written by a real run of e2e/webr-parity.spec.js's repoCommit() —
-    see that function's docstring for the regression this is defending
-    against (an offline patch script once re-derived `commit` this same way
-    and clobbered the true value). This function never touches the artifact;
-    it only reads HEAD, once, to let _webr_section say when the two disagree.
-    Returns None (never a fabricated hash) if git is unavailable, this isn't a
-    checkout, or anything else goes wrong — the staleness note is then simply
-    omitted rather than guessed at.
+    A byte-for-byte mirror of `nativeDigest` in e2e/compare-text.mjs: sha256
+    over `id + " " + text + " "` for each case, ids sorted, `text` being the
+    native-R display string in results/<id>.figura.json — the exact strings the
+    webR run compared against.
+
+    Returns None (never a fabricated digest) when any input is missing, so a
+    scorecard built without the pipeline's intermediates says nothing rather
+    than claiming staleness it cannot demonstrate.
     """
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=repo_root,
-            capture_output=True, text=True, timeout=5,
-        )
-    except (OSError, subprocess.SubprocessError):
+    if not all(isinstance(case_id, str) for case_id in case_ids):
         return None
-    if out.returncode != 0:
+    digest = hashlib.sha256()
+    for case_id in sorted(case_ids):
+        path = results_dir / f"{case_id}.figura.json"
+        if not path.exists():
+            return None
+        try:
+            text = json.loads(path.read_text()).get("text")
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(text, str):
+            return None
+        digest.update(case_id.encode("utf-8"))
+        digest.update(b" ")
+        digest.update(text.encode("utf-8"))
+        digest.update(b" ")
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _stale_native_digest(raw: dict, results_dir: Path,
+                         case_ids: list[str]) -> str | None:
+    """The recomputed digest when it DISAGREES with the recorded one, else None.
+
+    THE GUARD, deterministically. The thing that actually makes published webR
+    evidence stale is the native output moving underneath it — a later
+    `make all` changing results/<id>.figura.json's `text` — and webr-tier.json
+    already records a digest of exactly those strings for exactly this purpose
+    (see the comment above `digestInput` in e2e/webr-parity.spec.js). So the
+    staleness question is answerable from the artifacts alone.
+
+    This replaces a live `git rev-parse HEAD` comparison, and is strictly
+    better on both counts that matter:
+
+      * DETERMINISM. Same inputs, same HTML, on any machine at any commit. The
+        HEAD version could not survive its own commit (see the module header),
+        which made the tracked scorecard permanently un-regenerable.
+      * WHAT IT CATCHES. The regression this guard was written for was a patch
+        script re-deriving `commit` from HEAD and clobbering the true value.
+        A HEAD comparison is DEFEATED by that clobber — the two now agree, so
+        no note renders. The digest is not: clobbering `commit` does not touch
+        `native_digest`, so moved native output still says so on the page.
+
+    What it gives up: "HEAD has moved at all" — which fired on every commit
+    including the one publishing the scorecard, so it was noise, not signal.
+    A change to web/ that moves webR behaviour without moving native R output
+    is therefore no longer flagged here; the commit line still names the tree
+    the gate ran against, and the tier is a hand-run release gate whose whole
+    protocol is "run it before a release".
+    """
+    recorded = raw.get("native_digest")
+    if not recorded:
         return None
-    head = out.stdout.strip()
-    return head or None
+    recomputed = _native_digest(results_dir, case_ids)
+    if recomputed is None or recomputed == recorded:
+        return None
+    return recomputed
 
 
 def _webr_section(results_dir: Path) -> str:
@@ -407,20 +461,24 @@ def _webr_section(results_dir: Path) -> str:
     # e2e/webr-parity.spec.js): a later `make all` that changes native output,
     # OR an offline edit to webr-tier.json that clobbers `commit` outright,
     # must never be able to leave this evidence silently claiming parity with
-    # a commit the browser was not actually run against. Rather than relying
-    # on a reader to manually `git diff` the shown commit against HEAD, say it
-    # on the page: when the gate's `commit` differs from the repo's current
-    # HEAD, render a plain staleness note. Equal (including the common case of
-    # `_current_head` failing to resolve, e.g. no git available) renders
-    # nothing extra — this is additive information, never a fabricated claim.
+    # numbers the browser was not actually run against. Rather than relying on
+    # a reader to check by hand, say it on the page — from the artifacts, not
+    # from live git, so the rendered file stays a pure function of its inputs
+    # (see _stale_native_digest for the full argument). Digests equal, or not
+    # computable, renders nothing extra: additive information, never a
+    # fabricated claim.
     staleness_html = ""
-    current_head = _current_head()
-    if commit and current_head and str(commit) != current_head:
+    stale_digest = _stale_native_digest(
+        raw, results_dir, [c.get("id") for c in cases if not c.get("aborted")])
+    if stale_digest:
         staleness_html = (
-            f"<p class=\"webr-stale\">Gate last run at "
-            f"<code>{esc(str(commit)[:12])}</code>; HEAD is now "
-            f"<code>{esc(current_head[:12])}</code> &mdash; this evidence "
-            f"predates the current commit.</p>"
+            f"<p class=\"webr-stale\">Gate last run against native output "
+            f"digesting to <code>{esc(str(raw.get('native_digest'))[:19])}"
+            f"&hellip;</code>; the native display artifacts in "
+            f"<code>results/</code> now digest to "
+            f"<code>{esc(stale_digest[:19])}&hellip;</code> &mdash; the native "
+            f"numbers this evidence was compared against have changed since it "
+            f"ran. Re-run <code>make -C stats-validation webr</code>.</p>"
         )
 
     # The honest "36 cells" fix: not every compared cell is a number that

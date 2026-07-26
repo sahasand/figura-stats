@@ -22,7 +22,7 @@ CASES := logistic-confounding cox-adjusted km-twoarm \
 # the full case list.
 COMPARE_CASES := $(CASES)
 
-.PHONY: all test webr clean
+.PHONY: all test webr clean gate gate-update
 
 # COMPARE MAY LEGITIMATELY EXIT 1. `logistic-dirty` is designed to publish real
 # findings (the app-vs-exported-script divergence of issues/02), so a non-zero
@@ -76,7 +76,12 @@ results/%.done: cases/%/data.csv cases/%/case.json
 # run it outside the gate is retired. It is now just another suite under
 # python/tests, discovered and run like every other test_*.py there.
 #
-# Every suite, chained. CI runs `make -C stats-validation test all`.
+# Every suite, chained. CI (.github/workflows/ci.yml, job `validation`) runs
+# this as its own step, then `clean all` as a separate step whose exit code is
+# recorded rather than obeyed, then `gate` — see the `gate` target below for
+# why the exit code cannot be the CI verdict. gate.py's own suite rides along
+# under `cd compare && pytest tests -q` (compare/tests/test_gate.py), so the
+# thing adjudicating CI is itself tested by the step that runs first.
 #
 # harness/build-spec.test.mjs hardcodes the fixture path
 # "stats-validation/cases/logistic-confounding" (relative to the repo root,
@@ -101,16 +106,40 @@ results/%.done: cases/%/data.csv cases/%/case.json
 #
 # `all` remains free to exit non-zero: logistic-dirty publishes real findings by
 # design (see the `all` recipe). So `make test all` runs BOTH targets, publishes
-# the scorecard, and then reports the findings as a failure — which is the
-# intended CI shape. A CI job that must not go red on published findings should
-# run `make test` and `make all` as separate steps and treat `all`'s status as
-# "findings exist", never as "do not publish".
+# the scorecard, and then reports the findings as a failure. A CI job that must
+# not go red on published findings runs `test`, `all`, and `gate` as SEPARATE
+# steps, treats `all`'s status as "findings exist" (never as "do not publish"),
+# and lets `gate` decide pass/fail. Do not chain `test all` in CI: it collapses
+# two distinguishable outcomes into one exit code.
 test:
 	cd .. && node stats-validation/harness/build-spec.test.mjs
 	node harness/parse-cells.test.mjs
 	node e2e/compare-text.test.mjs
 	cd compare && $(PY) -m pytest tests -q
 	cd python && $(PY) -m pytest tests -q
+
+# THE GATE THAT MAKES A NON-ZERO `all` USABLE IN CI.
+#
+# `all` exits 2 by design (see its recipe), so CI can neither obey that exit
+# code (permanently red, therefore ignored) nor discard it (never catches a
+# regression). `gate` is the third option: it compares the findings SET against
+# the dispositioned baseline in expected-findings.json and fails only on a
+# finding added, removed, or changed in kind — or on a change in coverage.
+# Measured values are deliberately not compared, so a last-digit float move
+# cannot turn the build red. gate.py's module docstring has the full argument.
+#
+# RUN IT AFTER `all`, never instead of it: it reads results/findings.json, which
+# `all` writes. A missing findings.json is exit 2, not a pass — if `all` died
+# before the comparator returned, this is the only step left that can notice.
+#
+# `gate-update` rewrites the baseline from the current run. Its output belongs
+# in the SAME COMMIT as the change that moved the evidence, never as a
+# drive-by; see the README and the `_note` inside the file itself.
+gate:
+	$(PY) gate.py
+
+gate-update:
+	$(PY) gate.py --update
 
 # THE ONE TIER THAT IS NOT IN `all` AND NOT IN `test`, AND MUST NOT BE ADDED TO
 # EITHER. Everything else here runs native R offline; this drives the shipped

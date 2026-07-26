@@ -363,45 +363,104 @@ def test_webr_missing_commit_renders_without_crashing_or_a_stray_dot(tmp_path):
 # 2997e1b's offline patch to webr-tier.json re-ran `git rev-parse HEAD` and
 # clobbered `commit` from 815fa79d40d5bcb1a9cd5e3115694e51d58bd7b2 (the tree
 # the browser actually ran against) to 6c7744dfd642af01d525d4788e4b644b35938314
-# (a later, metadata-only commit the browser never saw) — a silent wrong
-# claim. Rather than relying on a reader to manually `git diff` the shown
-# commit against HEAD, the scorecard now says so on the page. Both directions
-# are pinned against `build_scorecard._current_head()` itself (not a
-# hardcoded hash), so the tests stay correct as this checkout's HEAD moves.
-def test_webr_commit_matching_head_shows_no_staleness_note(tmp_path):
-    """The gate's `commit` IS the repo's current HEAD: the evidence is
-    current, so no staleness note — just the plain commit line."""
-    import pytest
-    real_head = build_scorecard._current_head()
-    if real_head is None:
-        pytest.skip("git unavailable in this environment")
+# (a later, metadata-only commit the browser never saw) — a silent wrong claim.
+#
+# The guard used to answer that by comparing `commit` against live
+# `git rev-parse HEAD`. It no longer does, for two reasons argued in full in
+# build_scorecard._stale_native_digest: a HEAD comparison is DEFEATED by the
+# very clobber it was written for (the two hashes now agree, so no note), and
+# it made scorecard.html un-regenerable — committing the file advances HEAD, so
+# the tracked copy permanently disagreed with its own rebuild and the CI
+# freshness gate could never be green. The guard now compares `native_digest`
+# against the same digest recomputed from results/<id>.figura.json, which is
+# both deterministic and a direct statement about the numbers themselves.
+def _write_native(tmp_path, texts: dict[str, str]) -> None:
+    """The native-R display artifacts the webR tier compared against."""
+    for case_id, text in texts.items():
+        (tmp_path / f"{case_id}.figura.json").write_text(
+            json.dumps({"text": text}))
+
+
+NATIVE_TEXTS = {"cox-adjusted": "native cox table\n",
+                "logistic-confounding": "native logistic table\n"}
+
+
+def test_webr_matching_native_digest_shows_no_staleness_note(tmp_path):
+    """The native artifacts on disk are the ones the gate was measured against:
+    the evidence is current, so no staleness note — just the plain commit line."""
+    _write_native(tmp_path, NATIVE_TEXTS)
     payload = dict(WEBR_TIER_ABORTED)
-    payload["commit"] = real_head
+    payload["cases"] = [{"id": cid, "identical": True, "cells_compared": 1,
+                         "differing_cells": []} for cid in NATIVE_TEXTS]
+    payload["native_digest"] = build_scorecard._native_digest(
+        tmp_path, list(NATIVE_TEXTS))
     html = _build_with_webr(tmp_path, payload)
-    assert "Gate last run at" not in html
     # The CSS rule (".webr-stale { ... }") is always present in the stylesheet
     # — only the RENDERED marker (the class attribute on a <p>) must be absent.
     assert 'class="webr-stale"' not in html
 
 
-def test_webr_commit_differing_from_head_shows_staleness_note(tmp_path):
-    """The gate's `commit` differs from current HEAD (the exact shape of the
-    2997e1b regression, and also the ordinary case of a later commit landing
-    after the gate ran): the page must say so plainly, naming both hashes,
-    instead of silently rendering a commit that no longer describes what is
-    on disk."""
-    import pytest
-    real_head = build_scorecard._current_head()
-    if real_head is None:
-        pytest.skip("git unavailable in this environment")
-    stale_commit = "0" * 40 if real_head != "0" * 40 else "1" * 40
+def test_webr_moved_native_output_shows_staleness_note(tmp_path):
+    """A later `make all` changed the native numbers the webR run was compared
+    against. The page must say so plainly instead of continuing to claim parity
+    with values that no longer exist."""
+    _write_native(tmp_path, NATIVE_TEXTS)
     payload = dict(WEBR_TIER_ABORTED)
-    payload["commit"] = stale_commit
+    payload["cases"] = [{"id": cid, "identical": True, "cells_compared": 1,
+                         "differing_cells": []} for cid in NATIVE_TEXTS]
+    payload["native_digest"] = build_scorecard._native_digest(
+        tmp_path, list(NATIVE_TEXTS))
+    _write_native(tmp_path, {**NATIVE_TEXTS,
+                             "cox-adjusted": "native cox table CHANGED\n"})
     html = _build_with_webr(tmp_path, payload)
-    assert "class=\"webr-stale\"" in html
-    assert "Gate last run at" in html
-    assert stale_commit[:12] in html
-    assert real_head[:12] in html
+    assert 'class="webr-stale"' in html
+    assert "have changed since it ran" in html
+    assert payload["native_digest"][:19] in html
+
+
+def test_webr_clobbered_commit_does_not_defeat_the_staleness_note(tmp_path):
+    """The exact 2997e1b regression: `commit` is overwritten with a value the
+    browser never ran against. That edit cannot touch `native_digest`, so moved
+    native output is still reported — which a HEAD comparison could not do."""
+    _write_native(tmp_path, NATIVE_TEXTS)
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["cases"] = [{"id": cid, "identical": True, "cells_compared": 1,
+                         "differing_cells": []} for cid in NATIVE_TEXTS]
+    payload["native_digest"] = build_scorecard._native_digest(
+        tmp_path, list(NATIVE_TEXTS))
+    payload["commit"] = "f" * 40          # clobbered
+    _write_native(tmp_path, {**NATIVE_TEXTS,
+                             "cox-adjusted": "native cox table CHANGED\n"})
+    html = _build_with_webr(tmp_path, payload)
+    assert 'class="webr-stale"' in html
+
+
+def test_webr_absent_native_artifacts_fabricate_no_staleness_claim(tmp_path):
+    """No results/<id>.figura.json on disk (a scorecard built without the
+    pipeline's intermediates): the digest is not computable, so the page says
+    nothing rather than declaring staleness it cannot demonstrate."""
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["native_digest"] = "sha256:" + "0" * 64
+    html = _build_with_webr(tmp_path, payload)
+    assert 'class="webr-stale"' not in html
+
+
+def test_scorecard_is_a_pure_function_of_its_inputs(tmp_path):
+    """THE PRECONDITION FOR THE FRESHNESS GATE. CI rebuilds scorecard.html and
+    runs `git diff --exit-code` over it, so a single live input — a clock, an
+    environment variable, `git rev-parse HEAD` — would make the tracked file
+    differ from its own regeneration and the gate would flap forever. Two
+    builds from identical inputs must be byte-identical, and the output must
+    not contain the repo's current HEAD (the input that used to be there)."""
+    import subprocess
+    _write_native(tmp_path, NATIVE_TEXTS)
+    first = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
+    second = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
+    assert first == second
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=STATS_VALIDATION,
+                          capture_output=True, text=True)
+    if head.returncode == 0 and head.stdout.strip():
+        assert head.stdout.strip()[:12] not in first
 
 
 def test_webr_honest_cells_with_numbers_phrasing_is_rendered(tmp_path):

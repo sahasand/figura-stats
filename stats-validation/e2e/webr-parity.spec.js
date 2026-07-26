@@ -254,10 +254,11 @@ async function detectRuntime(page, cdnUrls) {
 // driven against) with 6c7744dfd642af01d525d4788e4b644b35938314 (the very
 // metadata-only commit that made the patch necessary, where the browser never
 // ran) — a silent regression of the exact staleness-honesty guarantee this
-// field exists to provide. See build_scorecard.py's `_current_head`/staleness
-// note for the safety net that now makes a mismatch like that visible instead
-// of silent, and prefer restoring a clobbered value (as that regression's fix
-// did) over ever recomputing it offline.
+// field exists to provide. See build_scorecard.py's `_stale_native_digest` for
+// the safety net that now makes a staleness like that visible instead of
+// silent — it watches `native_digest` rather than this field precisely BECAUSE
+// a clobber of `commit` cannot defeat it — and prefer restoring a clobbered
+// value (as that regression's fix did) over ever recomputing it offline.
 function repoCommit() {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT })

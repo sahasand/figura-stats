@@ -21,6 +21,55 @@ app-vs-exported-script divergence of `issues/02`, so it fails on purpose. The
 scorecard is written BEFORE the failure is reported — a non-zero `all` means
 "findings exist, go read them", never "nothing was published".
 
+## The findings baseline, and how CI uses it
+
+`make all` exiting non-zero is the designed outcome, which leaves CI with a
+problem: it can neither obey that exit code (permanently red, so everyone learns
+to ignore the job, and the day a real regression lands nobody looks) nor discard
+it (a job that ignores the exit code cannot catch a regression, which is the
+only thing a gate is for). The answer is a tracked baseline of the findings we
+have already read and accepted:
+
+    make -C stats-validation gate           # check
+    make -C stats-validation gate-update    # rewrite the baseline
+
+`expected-findings.json` records every accepted finding by its **identity**
+(case + code + term + quantity) and its **kind** (disposition, source, note),
+plus each case's coverage counts and the run totals. `gate` passes when the
+findings set matches exactly and fails when anything is **added, removed, or
+changed in kind**, printing a readable baseline-vs-actual diff. Full argument in
+`gate.py`'s module docstring.
+
+Three properties are deliberate:
+
+- **Measured values are not in the baseline.** `figura` and `python` are floats
+  and float-derived display strings; a last-digit move in an odds ratio is not a
+  regression and must never turn the build red. A finding *appearing* or
+  *disappearing* is.
+- **Order is not in the baseline.** Cases sort by id, findings by identity, so
+  reshuffling `findings.json` is not a difference.
+- **Coverage is in the baseline.** A case that silently stopped comparing
+  anything would add no finding and remove none, so a findings-only gate would
+  wave it through. `compared`, `passed`, `targets_met`, `targets` and
+  `deferred_targets` are checked too — including coverage going *up*.
+
+**A removed finding is a failure, not a celebration.** It means the evidence
+moved and the baseline is now a stale description of the repo. That is exactly
+what will happen when the Phase-2 export-path fix lands, and that fix's own PR
+is where the baseline gets updated — **in the same commit as the change that
+moved the evidence, reviewed alongside it, never as a drive-by.** The remedy is
+printed by the failure itself, and repeated in a `_note` inside the file.
+
+CI (`.github/workflows/ci.yml`, job `validation`) runs, in order: `make test`;
+`make clean all` with its status recorded but not obeyed; `make gate` (the
+actual verdict); a **freshness gate** — `git diff --exit-code` over
+`results/findings.json` and `results/scorecard.html`, so a stale committed
+artifact fails the build; and an upload of the scorecard. `webr-tier.json` is
+excluded from the freshness diff — nothing in CI regenerates it, because the
+webR tier is hand-run — but it is still uploaded. A missing `findings.json` is
+a hard gate failure (exit 2), which is what catches a pipeline that died before
+the comparator wrote anything: the one real risk of not obeying `all`'s status.
+
 **`test` is green.** It was red by design for a while: Task A14's in-repo half
 published the advisory-diagnostics contract — the specs, `INTERFACES.md`, the
 harvester, the comparator and the case files — ahead of the clean-room
@@ -120,10 +169,23 @@ compared against). A later `make all` that changes native output changes the
 digest, so previously-published webR evidence becomes visibly stale instead of
 silently continuing to claim parity with numbers that no longer exist. The
 scorecard shows the commit (short form) next to the runtime line, and — since
-`commit` binding is only useful if staleness is actually visible, not just
-theoretically detectable — when that commit differs from the repo's current
-`HEAD` the scorecard says so on the page ("gate last run at `<hash>`; HEAD is
-now `<hash>`"), rather than requiring a reader to `git diff` it by hand.
+binding is only useful if staleness is actually visible, not just theoretically
+detectable — it recomputes the digest from the artifacts on disk and says so on
+the page when the two disagree, rather than requiring a reader to check by hand.
+
+**That note is derived from the artifacts, never from live `git`, and the
+distinction is load-bearing.** It used to compare `commit` against
+`git rev-parse HEAD`, which broke in two ways. It could not survive its own
+commit — publishing the scorecard advances `HEAD`, so the tracked file
+permanently named the *previous* commit and could never again match a rebuild,
+which makes the CI freshness gate below impossible. And it was *defeated* by the
+one regression it was written for: a patch script that clobbers `commit` with
+the current `HEAD` makes the two agree, so no note renders. `native_digest`
+has neither problem — clobbering `commit` does not touch it, and the same
+inputs always render the same HTML. What was given up is "`HEAD` has moved at
+all", which fired on literally every commit and was noise. `build_scorecard.py`
+now reads no live state whatsoever; `test_scorecard_is_a_pure_function_of_its_inputs`
+pins that.
 
 Coverage is the two ratio-table cases with a full native-R display artifact,
 `logistic-confounding` and `cox-adjusted`. The rest of the roster is Phase 2 —
