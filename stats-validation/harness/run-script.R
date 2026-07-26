@@ -272,8 +272,122 @@ harvest_groupcompare <- function(env, id) {
        n_dropped = n_dropped_vs_csv(dat))
 }
 
+# Summary (Table 1). Verified against R/summarize.R's `.summary_script` by
+# generating and sourcing the real exported script for the summary-table1 case
+# before writing this. The script leaves SIX objects in the environment:
+#
+#   df            the read.csv frame (all columns, all 120 rows — Summary has no
+#                 complete-case filter at all, so this is the whole file).
+#   .grp          the group vector, "Overall" when there is no group role.
+#   s1..sN        one per CONTINUOUS variable, in selection order:
+#                 `tapply(df[[col]], .grp, ...)` — a list keyed by group level.
+#                 Its element NAMES say which statistic the app chose:
+#                 c("mean","sd") for a mean variable, c("25%","50%","75%") for a
+#                 median one. That makes the harvest self-describing about the
+#                 DECISION, which is the whole point of Table 1: the script
+#                 re-expresses the app's mean-vs-median choice, so the comparator
+#                 can check the choice as well as the numbers.
+#   t1..tM        one per CATEGORICAL variable, in selection order:
+#                 `table(df[[col]], .grp)` — levels x groups, NA excluded, so
+#                 colSums() is the app's own per-group percentage denominator.
+#
+# The exact tier for table1 is therefore NOT count-level only: the script leaves
+# per-variable, per-group statistics at FULL PRECISION (unrounded mean/sd and
+# unrounded type-7 quartiles), which is strictly more than the 3-significant-
+# figure screen shows. That harvest powers the script tier — Path A against
+# itself, the check that the .R the user downloaded reproduces the table they
+# saw, including which statistic it chose.
+#
+# WHY case.json IS READ HERE. `s1`/`t1` carry the group levels in their own
+# dimnames but NOT the variable they summarise (`table(df[["sex"]], .grp)`'s
+# dimnames names are "" and ".grp", verified — not the column name). The only
+# way to name them is the selection order, so this harvester reads the case's
+# declared roles (cwd is the case dir while it runs, so "case.json" resolves)
+# and re-derives the order the way buildSummarySpec does: CSV COLUMN ORDER
+# filtered to the selected variables, taken from the script's own `df`. A
+# mismatch between the case's declared split and what the app actually
+# classified would silently mis-key every s/t object, so the arity is checked
+# and a disagreement stops loudly rather than harvesting the wrong variable's
+# numbers under the right variable's name.
+harvest_summary <- function(env, id) {
+  df <- need(env, "df", id)
+  grp <- need(env, ".grp", id)
+
+  case <- jsonlite::fromJSON("case.json", simplifyVector = TRUE)
+  # NOT `%||%`: this file never load_all()s the package, so R/dispatch.R's
+  # infix is not in scope here (base R has had one since 4.4, but this harness
+  # must not silently depend on the interpreter's minor version).
+  declared <- function(x) if (is.null(x)) character(0) else as.character(x)
+  cols <- names(df)
+  continuous <- cols[cols %in% declared(case$roles$continuous)]
+  categorical <- cols[cols %in% declared(case$roles$categorical)]
+
+  s_names <- sprintf("s%d", seq_along(continuous))
+  t_names <- sprintf("t%d", seq_along(categorical))
+  present <- ls(env)
+  extra_s <- setdiff(grep("^s[0-9]+$", present, value = TRUE), s_names)
+  extra_t <- setdiff(grep("^t[0-9]+$", present, value = TRUE), t_names)
+  if (length(extra_s) > 0 || length(extra_t) > 0)
+    stop(sprintf(paste0("exported script for %s defines %s, which the case's ",
+                        "declared continuous/categorical roles do not account ",
+                        "for — the s/t objects cannot be keyed to variables"),
+                 id, paste(c(extra_s, extra_t), collapse = ", ")))
+
+  levels_g <- unique(as.character(grp))
+
+  # Per-variable, per-group statistics at full precision. `kind` is read off the
+  # element names, never assumed, so a script that computed the OTHER statistic
+  # is detected instead of silently relabelled.
+  cont <- lapply(seq_along(continuous), function(i) {
+    col <- continuous[[i]]
+    s <- need(env, s_names[[i]], id)
+    kinds <- unique(vapply(levels_g, function(g) {
+      nm <- names(s[[g]])
+      if (identical(nm, c("mean", "sd"))) "mean"
+      else if (identical(nm, c("25%", "50%", "75%"))) "median"
+      else "unknown"
+    }, character(1)))
+    if (length(kinds) != 1L || identical(kinds, "unknown"))
+      stop(sprintf("exported script for %s: `%s` (%s) carries statistics this harvester cannot name",
+                   id, s_names[[i]], col))
+    stats <- lapply(levels_g, function(g) as.list(s[[g]]))
+    names(stats) <- levels_g
+    # A group whose values are all NA yields NaN/NA here; na = "null" in main()
+    # turns that into JSON null, which the comparator reads as "no statistic",
+    # never as a number.
+    list(kind = kinds, stats = stats,
+         n_missing = sum(is.na(df[[col]])))
+  })
+  names(cont) <- continuous
+
+  cat_out <- lapply(seq_along(categorical), function(j) {
+    col <- categorical[[j]]
+    tt <- need(env, t_names[[j]], id)
+    lev <- rownames(tt)
+    counts <- lapply(levels_g, function(g) as.list(setNames(as.integer(tt[, g]), lev)))
+    names(counts) <- levels_g
+    denom <- as.list(setNames(as.integer(colSums(tt))[match(levels_g, colnames(tt))],
+                              levels_g))
+    list(levels = lev, counts = counts, denom = denom,
+         n_missing = sum(is.na(df[[col]])))
+  })
+  names(cat_out) <- categorical
+
+  n_per_group <- as.list(setNames(
+    vapply(levels_g, function(g) sum(as.character(grp) == g), integer(1)), levels_g))
+
+  list(levels = levels_g, n_per_group = n_per_group,
+       continuous = cont, categorical = cat_out,
+       n = nrow(df),
+       # Summary has no complete-case filter, so this is structurally 0. It is
+       # still measured against the raw CSV rather than hard-coded: a future
+       # change that starts dropping rows must show up here.
+       n_dropped = n_dropped_vs_csv(df))
+}
+
 HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox,
-                   km = harvest_km, groupcompare = harvest_groupcompare)
+                   km = harvest_km, groupcompare = harvest_groupcompare,
+                   summary = harvest_summary)
 
 # ---- harvest orchestration -------------------------------------------------
 

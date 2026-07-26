@@ -66,9 +66,32 @@ FIXTURE = {
                 }
             ],
         },
+        {
+            # Task 11's table1 kind, whose DECISION (mean vs median) is itself
+            # a validated output. DECISION_MISMATCH is disposition "defect" per
+            # compare.py's DISPOSITIONS, so DEFECT_CODES must pick it up
+            # automatically — it is derived from that mapping, never hand-listed.
+            "id": "case-decision",
+            "kind": "table1",
+            "compared": 5,
+            "passed": False,
+            "targets_met": True,
+            "targets": {"decisions": 5},
+            "findings": [
+                {
+                    "code": "DECISION_MISMATCH",
+                    "disposition": "defect",
+                    "term": "age",
+                    "quantity": "decisions",
+                    "figura": "mean",
+                    "python": "median",
+                    "note": "the two paths chose different summary statistics",
+                }
+            ],
+        },
     ],
-    "total_compared": 15,
-    "total_findings": 2,
+    "total_compared": 20,
+    "total_findings": 3,
 }
 
 
@@ -83,9 +106,10 @@ def _build(tmp_path: Path) -> str:
 def test_tile_counts_correct(tmp_path):
     html = _build(tmp_path)
     # values compared, differences, defects, cases-meet-targets tiles.
-    assert "<b>15</b>" in html  # total_compared
-    assert "<b>2</b>" in html  # total_findings == defects here (DEFECT + MISSING_QUANTITY)
-    assert "<b>1/3</b>" in html  # 1 of 3 cases meets targets
+    assert "<b>20</b>" in html  # total_compared
+    # total_findings == defects here: DEFECT + MISSING_QUANTITY + DECISION_MISMATCH
+    assert "<b>3</b>" in html
+    assert "<b>2/4</b>" in html  # 2 of 4 cases meet targets
 
 
 def test_missing_quantity_counts_as_defect(tmp_path):
@@ -97,9 +121,9 @@ def test_missing_quantity_counts_as_defect(tmp_path):
     render a red row while the defects tile claimed zero — this test fails
     if that regresses."""
     html = _build(tmp_path)
-    # Both the DEFECT and the MISSING_QUANTITY finding must be counted: with
-    # one of each, the defects tile reads 2, not 1.
-    assert "<b>2</b>" in html
+    # Every "defect"-disposition code must be counted: with one DEFECT, one
+    # MISSING_QUANTITY and one DECISION_MISMATCH, the defects tile reads 3.
+    assert "<b>3</b>" in html
     assert "class='MISSING_QUANTITY'" in html
 
 
@@ -134,3 +158,17 @@ def test_no_dead_exact_pass_code_styled(tmp_path):
 def test_webr_section_renders_honest_empty_state(tmp_path):
     html = _build(tmp_path)
     assert "Not yet run for this release" in html
+
+
+def test_decision_mismatch_is_styled_and_counted_as_a_defect(tmp_path):
+    """Task 11's new code. It must reach the CSS (a row with no styling rule
+    renders as ordinary body text, which would make a wrong summary statistic
+    look like a passing row) and it must be inside the defects tile, which
+    build_scorecard derives from compare.py's DISPOSITIONS rather than from a
+    hand-written list."""
+    html = _build(tmp_path)
+    assert "class='DECISION_MISMATCH'" in html
+    assert ".DECISION_MISMATCH" in html
+    assert "DECISION_MISMATCH" in build_scorecard.DEFECT_CODES
+    # ...and it is explained in the legend, not left as a bare code.
+    assert "Decision mismatch" in html

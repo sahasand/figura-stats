@@ -144,3 +144,60 @@ calls on the identical 3x3 input, scipy 1.16.1) and cannot meet the 1e-6 exact
 tier. Enumerate the fixed-margin tables instead — an exhaustive enumeration was
 verified against R to within 1e-14 relative. The 2x2 path is genuinely exact
 and reproduces R.
+
+## validate/summary.py
+
+- `summarize(df, variables, group=None) -> dict`. `variables` is the flat list
+  of columns to summarize, in display order; `group` is the group column name or
+  `None`. **`summarize` classifies continuous vs categorical itself, from the
+  data** — the same rule the app's `classifyColumns` applies (a numeric column
+  with MORE THAN FIVE distinct non-missing values is continuous; anything else
+  is categorical). The case's declared `roles.continuous`/`roles.categorical`
+  split is the COMPARATOR's expectation, never an input to Path B.
+
+  Returned keys:
+  - `rows`: `[{variable, level, kind, cells, missing}, ...]` — one entry per
+    displayed table row, in display order (all continuous variables first, in
+    `variables` order, then all categorical variables, each as a header row
+    followed by its level rows).
+    - `variable`: `str` — the bare column name. Never the displayed
+      `"<variable>, mean ± SD"` label.
+    - `level`: `str | None` — the level string on a categorical LEVEL row;
+      `None` on a continuous row and on a categorical header row.
+    - `kind`: `"mean" | "median" | "count"`. **The kind is a property of the
+      VARIABLE, not of the row**: a categorical variable's header row and all
+      of its level rows carry `"count"`, so one decision per variable can be
+      read off either side. This is the `decisions` quantity the comparator
+      compares under its own code, `DECISION_MISMATCH` — for Table 1 the
+      CHOICE of summary statistic is itself a validated output.
+    - `cells`: `{group level: str}` — the **rendered cell strings**, not
+      numbers. At three significant figures the string IS the published claim,
+      so the comparator compares them exactly and Table 1 has no
+      display-artifact tier. Render per `spec/summary-table1.md`: `"M ± SD"`
+      (U+00B1), `"Q2 (Q1–Q3)"` (EN DASH U+2013, type-7 quartiles),
+      `"k (p%)"` (whole-number percent, `%.0f`, half-to-even), `"—"` (U+2014)
+      for an empty group, and the bare formatted value for a group with exactly
+      one non-missing value.
+    - `missing`: `str` — the rendered Missing cell; `""` on a level row.
+  - `levels`: `[str]` — the group levels in DISPLAY order (first appearance in
+    the file, not sorted). `["Overall"]` when `group` is `None`.
+  - `n_per_group`: `{group level: int}` — every row in the group, including rows
+    missing the variable under summary.
+  - `n`: `int` — total rows. `n_dropped`: `int` — **always 0**; Summary has no
+    complete-case filter and never drops a row. It is reported so the count tier
+    has the same shape as every other analysis's, and so that an implementation
+    that silently starts dropping rows is caught.
+
+  Two module-level helpers are additionally part of the contract, because the
+  acceptance tests in `tests/test_summary.py` exercise them directly:
+  - `decide(x) -> dict` with at least `{"kind": "mean" | "median"}` — the
+    mean-vs-median rule of `spec/summary-table1.md`, on an array of values.
+  - `fmt_num(v) -> str` — R's `.fmt_num`, three significant figures, plain
+    notation, trailing zeros dropped, **round-half-to-even at the tie**
+    (`1.125` renders `"1.12"`). Note that R's `signif` rounds the SCALED value
+    `x * 10^e`, not the exact decimal expansion of the double: `2.225` renders
+    `"2.22"` (because `2.225 * 100` is `222.49999999999997`) while `2.475`
+    renders `"2.48"`. `compare.py`'s `_signif` restates that algorithm and
+    documents the measurement.
+
+Cells are rendered strings by design; every other quantity is at full precision.

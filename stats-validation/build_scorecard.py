@@ -15,7 +15,7 @@ has an empty `findings` list) and the taxonomy has no `EXACT_PASS` — that
 code was considered and never wired to any emission (see compare.py's
 DISPOSITIONS comment), so it is not styled here. The REAL emitted codes are:
 PASS (synthesised here for a no-findings case row), DISPLAY_ARTIFACT, DEFECT,
-COUNT_MISMATCH, SCRIPT_DIVERGENCE, MISSING_QUANTITY.
+COUNT_MISMATCH, DECISION_MISMATCH, SCRIPT_DIVERGENCE, MISSING_QUANTITY.
 """
 from __future__ import annotations
 
@@ -70,7 +70,8 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
    did not. */
 .PASS { color:var(--pass); }
 .DISPLAY_ARTIFACT { color:var(--warn); }
-.DEFECT,.COUNT_MISMATCH,.SCRIPT_DIVERGENCE,.MISSING_QUANTITY { color:var(--fail); font-weight:600; }
+.DEFECT,.COUNT_MISMATCH,.SCRIPT_DIVERGENCE,.MISSING_QUANTITY,
+.DECISION_MISMATCH { color:var(--fail); font-weight:600; }
 .targets-met { color:var(--pass); font-size:.78rem; white-space:nowrap; }
 .targets-unmet { color:var(--fail); font-weight:600; font-size:.78rem; white-space:nowrap; }
 .webr-empty { border:1px dashed var(--rule); border-radius:8px; padding:1rem 1.1rem;
@@ -183,7 +184,10 @@ relative tolerance of 1e-6. <b>Missing quantity</b> means something expected
 was never compared at all &mdash; a coverage failure, not a value
 disagreement. <b>Script divergence</b> means the exported .R does not
 reproduce what the screen showed. <b>Count mismatch</b> means the two paths
-analysed different rows.</p>
+analysed different rows. <b>Decision mismatch</b> means the two paths chose
+different summary statistics for a Table 1 variable &mdash; mean &plusmn; SD
+where the other chose median (IQR), say &mdash; which is a defect even when
+every number in the row is individually correct.</p>
 <h2>WebR tier</h2>
 {_webr_section(results_dir)}
 </main></body></html>"""

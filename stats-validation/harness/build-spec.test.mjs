@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { buildSpecForCase } from "./build-spec.mjs";
 import { parseCsv } from "../../web/lib/csv.js";
 import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
+import { buildSummarySpec } from "../../web/guided/summary/analyze-form.js";
 
 const spec = await buildSpecForCase("stats-validation/cases/logistic-confounding");
 
@@ -144,5 +145,71 @@ assert.equal(codes.filter((v) => v === "").length, 4,
 // at all, let alone affect anything.
 assert.ok(!("los_skewed" in dirty.data[0]),
   "unmapped column los_skewed must not cross into the spec");
+
+// --- logistic-dirty: the SAME builder as logistic-confounding, on a file with
+// literal "NA" text in a categorical covariate and trailing spaces on a
+// numeric one. The claims here are about the shipped PARSER, because they are
+// what makes the case's whole point reproducible:
+//   * `NA` is ORDINARY TEXT to parseCsv — it must survive into the spec as the
+//     two-character string, becoming a real `stage` level the app models and
+//     displays. (R's read.csv, which the exported script uses, turns it into a
+//     real NA and drops the row; that divergence is the case.)
+//   * a padded numeric cell arrives TRIMMED, so the padding is inert and the
+//     only variable under test is the "NA" handling.
+const dirtyLogistic = await buildSpecForCase("stats-validation/cases/logistic-dirty");
+assert.equal(dirtyLogistic.figure, "logistic");
+assert.deepEqual(dirtyLogistic.roles.covariates, ["arm", "age", "stage"]);
+assert.equal(dirtyLogistic.data.length, 320, "logistic-dirty: 320 rows");
+const dirtyStages = dirtyLogistic.data.map((r) => r.stage);
+assert.deepEqual([...new Set(dirtyStages)].sort(), ["I", "II", "III", "NA"],
+  'literal "NA" must survive the parser as an ordinary stage level');
+assert.equal(dirtyStages.filter((v) => v === "NA").length, 8,
+  "logistic-dirty must carry exactly eight literal-NA stage cells");
+assert.ok(dirtyLogistic.data.every((r) => r.age === r.age.trim()),
+  "every padded age cell must arrive trimmed");
+assert.ok(dirtyLogistic.data.every((r) => r.complication === "Yes" || r.complication === "No"),
+  "the outcome column must be untouched by the injected dirt");
+
+// --- summary: the ONE analysis whose spec builder does not live in a spec.js.
+// `buildSummarySpec` is exported from web/guided/summary/analyze-form.js, and
+// its real signature is (table, { groupBy, showPlots, showQq, selected,
+// sourceFilename }) — one options object, verified against that file.
+const summarySpec = await buildSpecForCase("stats-validation/cases/summary-table1");
+
+assert.equal(summarySpec.figure, "summary");
+assert.equal(summarySpec.roles.group, "arm");
+assert.equal(summarySpec.options.source_filename, "data.csv");
+assert.equal(summarySpec.options.show_plots, false);
+assert.equal(summarySpec.options.show_qq, false);
+assert.ok(Array.isArray(summarySpec.data) && summarySpec.data.length === 120,
+  "summary spec must carry all 120 rows");
+// THE registration claim: the case DECLARES a continuous/categorical split,
+// and the shipped builder re-derives its own via classifyColumns. The two must
+// agree, or the comparator's expectations are keyed to rows the app will never
+// print — and the harvester's s1..sN / t1..tM would be mis-keyed too.
+assert.deepEqual(summarySpec.options.continuous,
+  ["age", "length_of_stay", "crp"],
+  "the app's own classification must match the case's declared continuous set");
+assert.deepEqual(summarySpec.options.categorical, ["sex", "diabetes"],
+  "the app's own classification must match the case's declared categorical set");
+// Blank cells travel as empty strings, not as dropped keys: fig_summary counts
+// them per variable and never drops the row.
+assert.equal(summarySpec.data.filter((r) => r.length_of_stay === "").length, 8,
+  "the eight blank length_of_stay cells must reach the spec as blanks");
+
+// No-egress narrowing for summary, proven with a deliberately UNSELECTED
+// column (the real case selects every column, so it cannot show this).
+const summaryNarrowingCsv =
+  "age,crp,arm,notes\n" +
+  "72,2.5,Control,private\n" +
+  "58,3.1,Treatment,private\n";
+const summaryNarrowing = buildSummarySpec(parseCsv(summaryNarrowingCsv), {
+  groupBy: "arm", showPlots: false, showQq: false,
+  selected: ["age", "crp"], sourceFilename: "narrowing-fixture.csv",
+});
+assert.deepEqual(Object.keys(summaryNarrowing.data[0]).sort(),
+  ["age", "arm", "crp"].sort());
+assert.ok(!("notes" in summaryNarrowing.data[0]),
+  "an unticked column must not cross into the spec");
 
 console.log("build-spec.test.mjs ok");

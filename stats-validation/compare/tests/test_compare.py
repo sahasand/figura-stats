@@ -23,6 +23,8 @@ import pytest
 
 from compare import (
     DISPOSITIONS,
+    KIND_HANDLERS,
+    PENDING_KINDS,
     classify_cell,
     classify_gc_effect_display,
     classify_km_logrank_display,
@@ -30,7 +32,10 @@ from compare import (
     close_enough,
     compare_case,
     display_key,
+    format_count_cell_t1,
     format_effect_gc,
+    format_mean_cell_t1,
+    format_median_cell_t1,
     format_median_km,
     format_num_gc,
     format_p_gc,
@@ -44,6 +49,7 @@ from compare import (
     parse_km_group_median,
     parse_km_logrank,
     parse_ratio_tsv,
+    parse_table1_tsv,
     reportable,
 )
 
@@ -470,14 +476,18 @@ def test_an_empty_table_never_passes_vacuously(tmp_path):
 
 
 def test_unknown_display_kind_exits_loudly(tmp_path):
-    # table1 (Task 11) is still pending as of this test; km_summary (Task 9)
-    # and gc_summary (Task 10) are both implemented now, so neither can stand
-    # in here any longer.
+    # Every kind any shipped case declares is now implemented — km_summary
+    # (Task 9), gc_summary (Task 10), table1 (Task 11) — and PENDING_KINDS is
+    # empty, so this test uses a kind that exists nowhere at all rather than
+    # borrowing the next task's placeholder. Registering a kind is the ONLY way
+    # to compare it: an unregistered one must stop, never be waved through as
+    # "nothing to compare".
     def mutate(case, figura, exact, python):
-        case["display"]["kind"] = "table1"
+        case["display"]["kind"] = "no_such_kind"
     with pytest.raises(SystemExit) as excinfo:
         _run(tmp_path, mutate)
-    assert "table1" in str(excinfo.value)
+    assert "no_such_kind" in str(excinfo.value)
+    assert "unknown display.kind" in str(excinfo.value)
 
 
 def test_a_figura_artifact_with_no_text_field_is_missing_quantity(tmp_path):
@@ -1559,3 +1569,456 @@ def test_gc_no_silent_skips_every_continue_follows_a_recorded_finding():
         assert "findings.append(" in window, (
             f"a `continue` at gc-branch line {i} has no recorded finding "
             f"before it:\n{window}")
+
+
+# ==========================================================================
+# table1 (Task 11) — Summary / Table 1, where the DECISION is an output
+# ==========================================================================
+
+# The real displayed text of the shipped summary-table1 case, captured from an
+# actual render_figure() run (not hand-written): see
+# stats-validation/spec/summary-table1.md. EM is U+2014, EN is U+2013,
+# PM is U+00B1 — all three characters R really writes.
+EM = "—"
+PM = "±"
+
+T1_TSV = "\n".join([
+    "Characteristic\tControl (N=60)\tTreatment (N=60)\tMissing",
+    f"age, mean {PM} SD\t59.6 {PM} 11.1\t60.2 {PM} 11.4\t0",
+    f"length_of_stay, median (IQR)\t3.7 (2.25{EN}6)\t4.1 (2{EN}7.3)\t8",
+    f"crp, median (IQR)\t4.5 (2.48{EN}7.15)\t4.85 (2.22{EN}8.45)\t0",
+    "sex\t\t\t0",
+    "Female\t32 (53%)\t28 (47%)\t",
+    "Male\t28 (47%)\t32 (53%)\t",
+    "diabetes\t\t\t0",
+    "No\t32 (53%)\t44 (73%)\t",
+    "Yes\t28 (47%)\t16 (27%)\t",
+])
+
+T1_METHODS = ("Continuous variables are summarized as mean ± SD when "
+              "approximately normal and as median (IQR) otherwise.")
+
+
+def _t1_row(variable, kind, control, treatment, missing, level=None):
+    return {"variable": variable, "level": level, "kind": kind,
+            "cells": {"Control": control, "Treatment": treatment},
+            "missing": missing}
+
+
+def _base_t1():
+    """A deliberately PASSING table1 case, built from the shipped case's real
+    Path A artifacts (displayed text, and the harvest run-script.R really
+    wrote for it), so every mutation below breaks exactly one thing."""
+    case = {
+        "id": "t1",
+        "figure": "summary",
+        "roles": {"group": "arm",
+                  "continuous": ["age", "length_of_stay", "crp"],
+                  "categorical": ["sex", "diabetes"]},
+        "options": {"show_plots": False, "show_qq": False},
+        "display": {"kind": "table1"},
+        "exact_targets": ["n", "n_dropped", "decisions"],
+    }
+    figura = {"id": "t1", "text": T1_TSV + "\n\n" + T1_METHODS, "code": "..."}
+    exact = {
+        "id": "t1", "figure": "summary",
+        "levels": ["Control", "Treatment"],
+        "n_per_group": {"Control": 60, "Treatment": 60},
+        "continuous": {
+            "age": {"kind": "mean",
+                    "stats": {"Control": {"mean": 59.6166666666667,
+                                          "sd": 11.1204372348296},
+                              "Treatment": {"mean": 60.2333333333333,
+                                            "sd": 11.3591099356892}},
+                    "n_missing": 0},
+            "length_of_stay": {"kind": "median",
+                               "stats": {"Control": {"25%": 2.25, "50%": 3.7,
+                                                     "75%": 6},
+                                         "Treatment": {"25%": 2, "50%": 4.1,
+                                                       "75%": 7.3}},
+                               "n_missing": 8},
+            "crp": {"kind": "median",
+                    "stats": {"Control": {"25%": 2.475, "50%": 4.5,
+                                          "75%": 7.15},
+                              "Treatment": {"25%": 2.225, "50%": 4.85,
+                                            "75%": 8.45}},
+                    "n_missing": 0},
+        },
+        "categorical": {
+            "sex": {"levels": ["Female", "Male"],
+                    "counts": {"Control": {"Female": 32, "Male": 28},
+                               "Treatment": {"Female": 28, "Male": 32}},
+                    "denom": {"Control": 60, "Treatment": 60},
+                    "n_missing": 0},
+            "diabetes": {"levels": ["No", "Yes"],
+                         "counts": {"Control": {"No": 32, "Yes": 28},
+                                    "Treatment": {"No": 44, "Yes": 16}},
+                         "denom": {"Control": 60, "Treatment": 60},
+                         "n_missing": 0},
+        },
+        "n": 120, "n_dropped": 0,
+    }
+    python = {
+        "id": "t1", "figure": "summary",
+        "rows": [
+            _t1_row("age", "mean", f"59.6 {PM} 11.1", f"60.2 {PM} 11.4", "0"),
+            _t1_row("length_of_stay", "median", f"3.7 (2.25{EN}6)",
+                    f"4.1 (2{EN}7.3)", "8"),
+            _t1_row("crp", "median", f"4.5 (2.48{EN}7.15)",
+                    f"4.85 (2.22{EN}8.45)", "0"),
+            _t1_row("sex", "count", "", "", "0"),
+            _t1_row("sex", "count", "32 (53%)", "28 (47%)", "", level="Female"),
+            _t1_row("sex", "count", "28 (47%)", "32 (53%)", "", level="Male"),
+            _t1_row("diabetes", "count", "", "", "0"),
+            _t1_row("diabetes", "count", "32 (53%)", "44 (73%)", "", level="No"),
+            _t1_row("diabetes", "count", "28 (47%)", "16 (27%)", "", level="Yes"),
+        ],
+        "levels": ["Control", "Treatment"],
+        "n_per_group": {"Control": 60, "Treatment": 60},
+        "n": 120, "n_dropped": 0,
+    }
+    return case, figura, exact, python
+
+
+def _run_t1(tmp_path, mutate=None):
+    case, figura, exact, python = _base_t1()
+    if mutate is not None:
+        mutate(case, figura, exact, python)
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    return compare_case(case["id"], results=results, cases=cases)
+
+
+def _codes(report):
+    return [f["code"] for f in report["findings"]]
+
+
+# -- pure-function vectors ---------------------------------------------------
+
+def test_signif_restates_rs_scaled_rounding_not_a_decimal_exact_round():
+    """R's `signif` is `nearbyint(x * 10^e) / 10^e`, so it can disagree with a
+    decimal-exact round on the double either side of a tie. Both probes are
+    real cells: crp's Control and Treatment first quartiles in the shipped
+    summary-table1 case, displayed as "2.48" and "2.22".
+
+    R: f <- function(v) format(signif(v, 3), trim = TRUE, scientific = FALSE,
+                               drop0trailing = TRUE)
+       f(2.225)  # "2.22"   -- 2.225 * 100 is 222.49999999999997
+       f(2.475)  # "2.48"   -- 2.475 * 100 is 247.50000000000003
+    A `round(v, 2)` restatement answers 2.23 for the first, and reported a
+    SCRIPT_DIVERGENCE against a correct cell before this was fixed.
+    """
+    assert format_num_gc(2.225) == "2.22"
+    assert format_num_gc(2.475) == "2.48"
+
+
+def test_table1_cell_renderers_match_r():
+    assert format_mean_cell_t1(59.6166666666667, 11.1204372348296) == \
+        f"59.6 {PM} 11.1"
+    assert format_median_cell_t1(2.25, 3.7, 6) == f"3.7 (2.25{EN}6)"
+    # A one-value group: R's sd() is NA, and fig_summary shows the bare value.
+    assert format_mean_cell_t1(4.2, None) == "4.2"
+    assert format_mean_cell_t1(None, None) == EM
+    # R: sprintf("%d (%.0f%%)", 32, 100 * 32/60) -> "32 (53%)"
+    assert format_count_cell_t1(32, 60) == "32 (53%)"
+    # Half-to-even, verified in R: sprintf("%.0f", 12.5) is "12", 37.5 is "38".
+    assert format_count_cell_t1(1, 8) == "1 (12%)"
+    assert format_count_cell_t1(3, 8) == "3 (38%)"
+    # R: `if (denom == 0) "—"`.
+    assert format_count_cell_t1(0, 0) == EM
+
+
+def test_parse_table1_tsv_reads_the_real_shipped_table():
+    case, _figura, _exact, _python = _base_t1()
+    headers, group_n, rows, findings = parse_table1_tsv(T1_TSV, case)
+    assert findings == []
+    assert headers == ["Control", "Treatment"]
+    assert group_n == {"Control": 60, "Treatment": 60}
+    by_key = {r["key"]: r for r in rows}
+    assert by_key["age"]["kind"] == "mean"
+    assert by_key["crp"]["kind"] == "median"
+    # A level row is keyed by its BLOCK, never by its bare label — two
+    # variables could otherwise both claim a level called "No".
+    assert by_key["sex: Female"]["cells"]["Control"] == "32 (53%)"
+    assert by_key["diabetes: No"]["cells"]["Treatment"] == "44 (73%)"
+    assert by_key["sex"]["cells"] == {"Control": "", "Treatment": ""}
+
+
+def test_parse_table1_tsv_ignores_the_trailing_methods_paragraph():
+    case, _f, _e, _p = _base_t1()
+    _h, _g, rows, findings = parse_table1_tsv(
+        T1_TSV + "\n\n" + T1_METHODS, case)
+    assert findings == []
+    assert len(rows) == 9
+
+
+def test_parse_table1_tsv_flags_a_continuous_row_with_no_kind_suffix():
+    case, _f, _e, _p = _base_t1()
+    broken = T1_TSV.replace(f"age, mean {PM} SD", "age")
+    _h, _g, _rows, findings = parse_table1_tsv(broken, case)
+    # Two findings, both correct: the row itself is malformed, AND `age` then
+    # has no usable row at all.
+    assert [f["code"] for f in findings] == ["DEFECT", "MISSING_QUANTITY"]
+    assert "declares no summary kind" in findings[0]["note"]
+    assert findings[1]["term"] == "age"
+
+
+def test_parse_table1_tsv_flags_a_level_row_with_no_block():
+    case, _f, _e, _p = _base_t1()
+    broken = T1_TSV.replace("sex\t\t\t0\n", "")
+    _h, _g, _rows, findings = parse_table1_tsv(broken, case)
+    assert "MISSING_QUANTITY" in [f["code"] for f in findings]
+
+
+# -- whole-case vectors ------------------------------------------------------
+
+def test_t1_agreeing_fixture_passes_everything(tmp_path):
+    report = _run_t1(tmp_path)
+    assert report["findings"] == []
+    assert report["passed"] is True
+    assert report["targets_met"] is True
+    # decisions is credited once per variable: 3 continuous + 2 categorical.
+    assert report["targets"]["decisions"] == 5
+    assert report["compared"] > 0
+
+
+def test_t1_a_different_summary_statistic_is_a_decision_mismatch(tmp_path):
+    """The headline case: Python computes a MEDIAN where the screen declared a
+    mean. Every cell string then differs too, but the DECISION is reported on
+    its own, with its own code, because the choice is the defect."""
+    def mutate(case, figura, exact, python):
+        row = next(r for r in python["rows"] if r["variable"] == "age")
+        row["kind"] = "median"
+        row["cells"] = {"Control": f"59.5 (52{EN}68)",
+                        "Treatment": f"59 (54{EN}68)"}
+    report = _run_t1(tmp_path, mutate)
+    decision = [f for f in report["findings"]
+                if f["code"] == "DECISION_MISMATCH"]
+    assert len(decision) == 1
+    assert decision[0]["term"] == "age"
+    assert decision[0]["quantity"] == "decisions"
+    assert decision[0]["figura"] == "mean"
+    assert decision[0]["python"] == "median"
+    assert decision[0]["disposition"] == "defect"
+
+
+def test_decision_mismatch_outranks_defect_in_the_reported_order(tmp_path):
+    """SEVERITY puts the decision above the cell disagreements it causes: a
+    reader must see WHY the row is wrong before the symptoms."""
+    def mutate(case, figura, exact, python):
+        row = next(r for r in python["rows"] if r["variable"] == "age")
+        row["kind"] = "median"
+        row["cells"] = {"Control": "x", "Treatment": "y"}
+    codes = _codes(_run_t1(tmp_path, mutate))
+    assert codes.index("DECISION_MISMATCH") < codes.index("DEFECT")
+
+
+def test_t1_a_categorical_variable_summarised_as_a_number_is_a_decision_mismatch(tmp_path):
+    def mutate(case, figura, exact, python):
+        for r in python["rows"]:
+            if r["variable"] == "sex":
+                r["kind"] = "mean"
+    report = _run_t1(tmp_path, mutate)
+    decision = [f for f in report["findings"]
+                if f["code"] == "DECISION_MISMATCH"]
+    assert [f["term"] for f in decision] == ["sex"]
+
+
+def test_t1_path_b_disagreeing_with_itself_about_a_variables_kind(tmp_path):
+    """The kind is a property of the VARIABLE: a Path B that labels a
+    categorical header row and its level rows differently is incoherent."""
+    def mutate(case, figura, exact, python):
+        next(r for r in python["rows"]
+             if r["variable"] == "sex" and r.get("level") == "Male")["kind"] = "mean"
+    assert "DECISION_MISMATCH" in _codes(_run_t1(tmp_path, mutate))
+
+
+def test_t1_a_differing_cell_string_is_a_defect_with_no_artifact_tier(tmp_path):
+    """At three significant figures the rendered string IS the claim, so a
+    one-digit difference is a DEFECT, never a DISPLAY_ARTIFACT."""
+    def mutate(case, figura, exact, python):
+        next(r for r in python["rows"]
+             if r["variable"] == "age")["cells"]["Control"] = f"59.7 {PM} 11.1"
+    report = _run_t1(tmp_path, mutate)
+    codes = _codes(report)
+    assert "DEFECT" in codes
+    assert "DISPLAY_ARTIFACT" not in codes
+
+
+def test_t1_a_differing_missing_count_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        next(r for r in python["rows"]
+             if r["variable"] == "length_of_stay")["missing"] = "0"
+    report = _run_t1(tmp_path, mutate)
+    hit = [f for f in report["findings"]
+           if f["quantity"] == "displayed missing cell"]
+    assert len(hit) == 1
+    assert hit[0]["code"] == "DEFECT"
+    assert hit[0]["figura"] == "8"
+
+
+def test_t1_count_mismatch(tmp_path):
+    report = _run_t1(tmp_path, lambda c, f, e, p: p.__setitem__("n", 119))
+    assert "COUNT_MISMATCH" in _codes(report)
+
+
+def test_t1_a_dropped_row_is_a_count_mismatch(tmp_path):
+    """Summary never drops a row, so a non-zero n_dropped on either side is a
+    real disagreement about the population."""
+    report = _run_t1(tmp_path, lambda c, f, e, p: e.__setitem__("n_dropped", 8))
+    hit = [f for f in report["findings"] if f["quantity"] == "n_dropped"]
+    assert [f["code"] for f in hit] == ["COUNT_MISMATCH"]
+
+
+def test_t1_per_group_count_mismatch(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["n_per_group"]["Control"] = 59
+    report = _run_t1(tmp_path, mutate)
+    quantities = {f["quantity"] for f in report["findings"]}
+    # Both the harvest's count AND the displayed "(N=60)" header disagree.
+    assert quantities == {"n_per_group", "displayed group header"}
+    assert set(_codes(report)) == {"COUNT_MISMATCH"}
+
+
+def test_t1_a_group_present_on_only_one_side_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["n_per_group"]["Placebo"] = 20
+    assert "MISSING_QUANTITY" in _codes(_run_t1(tmp_path, mutate))
+
+
+def test_t1_script_cell_disagreeing_with_the_screen_is_script_divergence(tmp_path):
+    """Path A against itself: the exported .R's own unrounded statistic,
+    rendered through fig_summary's display rule, must reproduce the screen."""
+    def mutate(case, figura, exact, python):
+        exact["continuous"]["age"]["stats"]["Control"]["mean"] = 61.4
+    report = _run_t1(tmp_path, mutate)
+    hit = [f for f in report["findings"]
+           if f["code"] == "SCRIPT_DIVERGENCE"]
+    assert len(hit) == 1
+    assert hit[0]["quantity"] == "exported script cell [Control]"
+    assert hit[0]["figura"] == f"59.6 {PM} 11.1"
+    assert hit[0]["python"] == f"61.4 {PM} 11.1"
+
+
+def test_t1_script_computing_the_other_statistic_is_script_divergence(tmp_path):
+    """The exported script re-expresses the DECISION by computing one statistic
+    or the other. A script that computed a mean where the screen said median
+    means the user cannot reproduce the row they saw."""
+    def mutate(case, figura, exact, python):
+        exact["continuous"]["crp"] = {
+            "kind": "mean",
+            "stats": {"Control": {"mean": 7.0, "sd": 8.08},
+                      "Treatment": {"mean": 7.1, "sd": 8.11}},
+            "n_missing": 0}
+    report = _run_t1(tmp_path, mutate)
+    hit = [f for f in report["findings"]
+           if f["quantity"] == "exported script decision"]
+    assert len(hit) == 1
+    assert hit[0]["code"] == "SCRIPT_DIVERGENCE"
+    assert hit[0]["figura"] == "median"
+    assert hit[0]["python"] == "mean"
+
+
+def test_t1_a_harvested_variable_the_screen_never_showed(tmp_path):
+    def mutate(case, figura, exact, python):
+        exact["continuous"]["ghost"] = {
+            "kind": "mean", "stats": {"Control": {"mean": 1.0, "sd": 1.0},
+                                      "Treatment": {"mean": 1.0, "sd": 1.0}},
+            "n_missing": 0}
+    hit = [f for f in _run_t1(tmp_path, mutate)["findings"]
+           if f["term"] == "ghost"]
+    assert hit and all(f["code"] == "MISSING_QUANTITY" for f in hit)
+
+
+def test_t1_a_declared_variable_with_no_displayed_row_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        case["roles"]["continuous"].append("bmi")
+    hit = [f for f in _run_t1(tmp_path, mutate)["findings"]
+           if f["term"] == "bmi"]
+    assert hit and hit[0]["code"] == "MISSING_QUANTITY"
+
+
+def test_t1_a_path_b_row_the_screen_never_showed_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["rows"].append(
+            _t1_row("bmi", "mean", f"27 {PM} 4", f"28 {PM} 4", "0"))
+    hit = [f for f in _run_t1(tmp_path, mutate)["findings"]
+           if f["term"] == "bmi"]
+    assert hit and all(f["code"] == "MISSING_QUANTITY" for f in hit)
+
+
+def test_t1_absent_text_field_is_missing_quantity_not_a_crash(tmp_path):
+    report = _run_t1(tmp_path, lambda c, f, e, p: f.__setitem__("text", None))
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["passed"] is False
+
+
+def test_t1_empty_harvest_is_missing_quantity_not_a_pass(tmp_path):
+    def mutate(case, figura, exact, python):
+        exact["continuous"] = {}
+        exact["categorical"] = {}
+    report = _run_t1(tmp_path, mutate)
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["passed"] is False
+
+
+def test_t1_a_case_declaring_an_unwired_exact_target_fails_coverage(tmp_path):
+    def mutate(case, figura, exact, python):
+        case["exact_targets"] = ["n", "n_dropped", "decisions", "median_iqr"]
+    report = _run_t1(tmp_path, mutate)
+    assert report["targets_met"] is False
+    assert "MISSING_QUANTITY" in _codes(report)
+
+
+def test_t1_no_silent_skips_every_continue_follows_a_recorded_finding():
+    """The file's own DESIGN RULE, enforced mechanically for the table1 branch
+    and its two parse helpers."""
+    src = (Path(__file__).resolve().parents[1] / "compare.py").read_text()
+    for fn in ("compare_table1(", "parse_table1_tsv(", "python_table1_rows(",
+               "_table1_script_tier("):
+        body = src.split("def " + fn)[1].split("\ndef ")[0]
+        lines = body.split("\n")
+        continues = [i for i, ln in enumerate(lines)
+                     if ln.strip().startswith("continue")]
+        assert continues, f"{fn} is expected to contain `continue`s"
+        for i in continues:
+            window = "\n".join(lines[max(0, i - 8):i])
+            assert "findings.append(" in window, (
+                f"a `continue` at {fn} line {i} has no recorded finding "
+                f"before it:\n{window}")
+
+
+def test_table1_is_no_longer_a_pending_kind():
+    """`table1` used to be announced as "arrives with Task 11". It arrived."""
+    assert "table1" in KIND_HANDLERS
+    assert "table1" not in PENDING_KINDS
+
+
+def test_t1_sorted_group_levels_are_a_defect_not_a_pass(tmp_path):
+    """The app orders columns by FIRST APPEARANCE in the file, never sorted.
+    Every other loop in the branch runs over sorted key unions, so without an
+    explicit order check a correctly-valued table with swapped columns would
+    pass."""
+    def mutate(case, figura, exact, python):
+        python["levels"] = ["Treatment", "Control"]
+    report = _run_t1(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "level order"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+
+
+def test_t1_rows_in_the_wrong_order_are_a_defect(tmp_path):
+    """Continuous variables first, then categorical, in selection order."""
+    def mutate(case, figura, exact, python):
+        python["rows"] = list(reversed(python["rows"]))
+    report = _run_t1(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "row order"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+
+
+def test_t1_a_missing_row_is_not_also_reported_as_an_ordering_difference(tmp_path):
+    """The order checks are gated on matching key sets, so a genuinely absent
+    row reports once (MISSING_QUANTITY) instead of twice."""
+    def mutate(case, figura, exact, python):
+        python["rows"] = [r for r in python["rows"] if r["variable"] != "crp"]
+    report = _run_t1(tmp_path, mutate)
+    assert not any(f["quantity"] == "row order" for f in report["findings"])
+    assert "MISSING_QUANTITY" in _codes(report)

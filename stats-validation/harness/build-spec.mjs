@@ -7,6 +7,7 @@ import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
 import { buildCoxSpec } from "../../web/guided/cox/spec.js";
 import { buildKmSpec } from "../../web/guided/km/spec.js";
 import { buildGroupCompareSpec } from "../../web/guided/groupcompare/spec.js";
+import { buildSummarySpec } from "../../web/guided/summary/analyze-form.js";
 
 const BUILDERS = {
   logistic: (table, c) =>
@@ -56,6 +57,32 @@ const BUILDERS = {
       { plot: c.options.plot, test: c.options.test,
         source_filename: "data.csv" }
     ),
+  // Summary is the one analysis whose spec builder does NOT live in a
+  // `spec.js` beside the guided config: `buildSummarySpec` is exported from
+  // web/guided/summary/analyze-form.js (verified — there is no
+  // web/guided/summary/spec.js at all; summary's demo path uses a separate
+  // `buildSummaryDemoSpec` in demo.js, which embeds the frozen demo rows and
+  // is NOT what an upload goes through). Its real signature is
+  // `buildSummarySpec(table, { groupBy, showPlots, showQq, selected,
+  // sourceFilename })` — ONE options object, no positional event value or
+  // reference levels, and it returns the FLAT spec like logistic/cox/gc.
+  //
+  // `selected` is the user's variable checklist, so the case declares it as
+  // roles.continuous + roles.categorical. The builder does NOT trust those
+  // labels: it re-derives continuous-vs-categorical itself via
+  // `classifyColumns` (numeric with > 5 distinct values -> continuous), which
+  // is exactly the shipped behaviour under test. The case's own split is the
+  // comparator's EXPECTATION, checked against the displayed rows — so a
+  // reclassification in the app surfaces as a finding instead of being
+  // absorbed here.
+  summary: (table, c) =>
+    buildSummarySpec(table, {
+      groupBy: c.roles.group,
+      showPlots: !!c.options.show_plots,
+      showQq: !!c.options.show_qq,
+      selected: [...(c.roles.continuous || []), ...(c.roles.categorical || [])],
+      sourceFilename: "data.csv",
+    }),
 };
 
 export async function buildSpecForCase(caseDir) {

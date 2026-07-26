@@ -241,6 +241,43 @@ existing `df[df == ""] <- NA`, applied before it so a whitespace-only cell also 
 blank. One shared preamble change would close all three at once; that is a maintainer
 decision, not a harness one.
 
+## Disposition — divergence 1 is now mechanically caught (2026-07-26)
+
+Added during Task 11. Divergence 1 (a literal `"NA"` text cell dropped by the exported
+script's `read.csv` and kept by the live app) is no longer only a hand-built repro in this
+file: it is now a **shipped, permanently-running validation case**,
+`stats-validation/cases/logistic-dirty/` (spec: `stats-validation/spec/logistic-dirty.md`),
+which is in the Makefile's `CASES` and runs on every `make -C stats-validation all`.
+
+The case is `logistic-confounding`'s data with eight `stage` cells changed to the literal
+text `NA` (plus two trailing-space `age` cells, on a NUMERIC column only — padding a factor
+level is divergence 3, already verified above, and would only produce a permanently-broken
+export rather than new information). Running the full pipeline publishes 28 findings:
+
+- **3 x `COUNT_MISMATCH`** — `n` 312 vs 320, `n_event` 87 vs 91, `n_dropped` 8 vs 0. The
+  exported script analysed 8 fewer patients than the app displayed.
+- **1 x `MISSING_QUANTITY`** — `stage:NA`: the app fitted and displayed a `stageNA`
+  coefficient (OR 4.02, 95% CI 0.90-17.91, p = 0.068); the exported script has no such term
+  at all, because it never saw the level.
+- **4 x `SCRIPT_DIVERGENCE`** — one per displayed adjusted cell; the downloaded `.R` does not
+  reproduce a single one of them.
+- **20 x `DEFECT`** — est/se/lo/hi/p for all four shared terms, all beyond rel 1e-6.
+- **display tier: PASS.** The app and the independent Python re-implementation agree
+  completely about what the screen showed. The disagreement is entirely between the app and
+  its own exported script — which is precisely this issue.
+
+**This does not close the issue.** The underlying behaviour is unchanged, and the fix is
+still the maintainer decision described in the Scope note above (`na.strings = character(0)`
+plus a `trimws` pass in `R/script.R`'s `.script_data`, which would close all three
+divergences at once). What has changed is that the divergence is now *measured on every
+run and published on the scorecard* instead of living only in this file, and that a future
+fix to `.script_data` will show up immediately as `logistic-dirty` going green.
+
+**Do not "fix" the case to make the scorecard green.** `stats-validation/cases/logistic-dirty`
+is expected to fail; its findings ARE the deliverable. The comparator exits 1 for it, and the
+Makefile is structured so the scorecard is still built from the written `findings.json`
+before that status is propagated.
+
 ## Comments
 
 None yet.

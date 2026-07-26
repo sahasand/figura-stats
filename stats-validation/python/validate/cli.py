@@ -100,6 +100,44 @@ def run(case_dir: str) -> dict:
         out["figure"] = figure
         return out
 
+    # summary (Table 1) returns EARLY for the same structural reason km and
+    # groupcompare do: a summary case.json carries no `roles["covariates"]` key
+    # at all, so the `covariates = ...` line below would KeyError before any
+    # clean message could be printed, and `summarize`'s return shape has no
+    # `terms` / `unadjusted` dicts for the display_terms/display_unadjusted
+    # block to key off.
+    #
+    # TODO(validate/summary.py): Path B for Table 1 is not written yet — it is
+    # the clean-room half of Task 11, written from stats-validation/spec/
+    # summary-table1.md alone. The recipe, once that module exists, is four
+    # lines and nothing more:
+    #
+    #     from .summary import summarize      # beside the other fitter imports
+    #     ...
+    #     if figure == "summary":
+    #         out = summarize(df,
+    #                         list(case["roles"]["continuous"])
+    #                         + list(case["roles"]["categorical"]),
+    #                         case["roles"].get("group"))
+    #         out["id"] = case["id"]; out["figure"] = figure
+    #         return out
+    #
+    # `summarize` must classify continuous-vs-categorical ITSELF, from the data,
+    # exactly as the app's `classifyColumns` does (numeric with more than five
+    # distinct non-missing values is continuous) — the case's declared split is
+    # the comparator's expectation, not an input to Path B. The return shape the
+    # comparator's `table1` branch reads is pinned in INTERFACES.md.
+    #
+    # Until then this raises rather than half-running: the Makefile keeps
+    # summary cases out of the Path B step and out of compare.py's argument
+    # list, so reaching this line means someone wired one in by hand.
+    if figure == "summary":
+        raise SystemExit(
+            "no Path B implementation for figure 'summary' yet — "
+            "validate/summary.py is the clean-room half of Task 11 "
+            "(see the TODO in this file and stats-validation/spec/"
+            "summary-table1.md)")
+
     covariates = list(case["roles"]["covariates"])
 
     if figure == "cox":

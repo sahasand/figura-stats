@@ -1,0 +1,13 @@
+{
+  "id": "logistic-dirty",
+  "figure": "logistic",
+  "spec": "logistic-dirty",
+  "roles": { "outcome": "complication", "covariates": ["arm", "age", "stage"] },
+  "options": {
+    "event_value": "Yes",
+    "ref_levels": { "arm": "Standard care", "stage": "I" },
+    "increments": { "age": 10 }
+  },
+  "display": { "kind": "ratio_table" },
+  "exact_targets": ["adjusted_or", "adjusted_ci", "adjusted_p", "n", "n_event", "n_dropped"]
+}

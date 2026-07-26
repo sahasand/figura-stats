@@ -84,6 +84,7 @@ DISPOSITIONS = {
     "DISPLAY_ARTIFACT": "review",
     "SCRIPT_DIVERGENCE": "defect",
     "COUNT_MISMATCH": "defect",
+    "DECISION_MISMATCH": "defect",
     "DEFECT": "defect",
     "MISSING_QUANTITY": "defect",
 }
@@ -93,8 +94,13 @@ PASS_CODES = {c for c, d in DISPOSITIONS.items() if d == "pass"}
 # disagreement about which rows were analysed means the two paths did not
 # analyse the same study, and every downstream number is uninterpretable.
 # MISSING_QUANTITY is next because an absent comparison is an absent guarantee.
-SEVERITY = ["COUNT_MISMATCH", "MISSING_QUANTITY", "SCRIPT_DIVERGENCE",
-            "DEFECT", "DISPLAY_ARTIFACT"]
+#
+# DECISION_MISMATCH sits above SCRIPT_DIVERGENCE and DEFECT: Table 1's choice of
+# mean +/- SD vs median (IQR) is itself a published output, and a wrong CHOICE
+# invalidates the whole row even when every number in it is individually
+# correct. It is a claim about the variable, not about one cell.
+SEVERITY = ["COUNT_MISMATCH", "MISSING_QUANTITY", "DECISION_MISMATCH",
+            "SCRIPT_DIVERGENCE", "DEFECT", "DISPLAY_ARTIFACT"]
 
 # case.json `exact_targets` -> the exact-tier quantities that discharge them.
 # This is the wired contract: a declared target that no performed comparison
@@ -120,6 +126,11 @@ TARGET_QUANTITIES = {
     # python.json), never by the display-tier text parse.
     "test_p": ("test_p",),
     "test_statistic": ("test_statistic",),
+    # table1's own target, and the one target in this map that is NOT credited
+    # by a numeric comparison: `decisions` is discharged by the per-variable
+    # mean-vs-median-vs-count comparison (see compare_table1), because for
+    # Table 1 the CHOICE of summary statistic is itself a validated output.
+    "decisions": ("decisions",),
 }
 
 
@@ -974,12 +985,50 @@ def format_p_gc(p: float) -> str:
     return "p < 0.001" if p < 0.001 else f"p = {p:.3f}"
 
 
+def _r_nearbyint(value: float) -> float:
+    """C's `nearbyint` under the default rounding mode: round half to EVEN.
+    Python's ONE-argument `round` on a float is exactly that."""
+    return float(round(value))
+
+
 def _signif(value: float, digits: int = GC_SIGNIF_DIGITS) -> float:
-    """R's `signif(v, 3)`."""
-    value = float(value)
-    if value == 0.0 or not math.isfinite(value):
-        return value
-    return round(value, -int(math.floor(math.log10(abs(value)))) + (digits - 1))
+    """R's `signif(v, 3)` — restated as R actually COMPUTES it.
+
+    R's `signif` is not "round the exact decimal value of the double". It is
+    src/nmath/fprec.c: `nearbyint(x * 10^e) / 10^e` with
+    `e = digits - 1 - floor(log10(|x|))` — and that scaling multiply carries its
+    own floating-point error. The two rules disagree whenever `x * 10^e` lands
+    on the far side of a .5 boundary from x's exact decimal expansion.
+
+    MEASURED, and the reason this function has this shape: the double nearest
+    2.225 is 2.22500000000000008882..., so a decimal-exact rounding (Python's
+    TWO-argument `round(2.225, 2)`) gives 2.23 — but `2.225 * 100` is
+    222.49999999999997, so R's `signif(2.225, 3)` gives **2.22**. And 2.22 is
+    what `fig_summary` printed for crp's Treatment Q1 in the shipped
+    summary-table1 case. The previous two-argument-`round` restatement reported
+    a SCRIPT_DIVERGENCE against a perfectly correct cell; this one does not.
+    (`2.475 * 100` is 247.50000000000003, so 2.475 rounds UP to 2.48 in both —
+    the error is not a consistent direction, which is exactly why the rule has
+    to be restated rather than approximated.)
+
+    R's fprec additionally splits the scaling into two powers near the
+    representable extremes; that guard is replaced here by returning `x`
+    unrounded when the scaling would overflow, which no quantity this
+    comparator formats can reach.
+    """
+    x = float(value)
+    if x == 0.0 or not math.isfinite(x):
+        return x
+    sign = -1.0 if x < 0 else 1.0
+    x = abs(x)
+    e10 = (digits - 1) - int(math.floor(math.log10(x)))
+    if e10 > 0:
+        p10 = 10.0 ** e10
+        if not math.isfinite(p10) or not math.isfinite(x * p10):
+            return sign * x
+        return sign * (_r_nearbyint(x * p10) / p10)
+    p10 = 10.0 ** (-e10)
+    return sign * (_r_nearbyint(x / p10) * p10)
 
 
 def format_num_gc(value: float) -> str:
@@ -1493,16 +1542,574 @@ def compare_gc_summary(case, figura, exact, python):
     return findings, compared, targets
 
 
+# ---------------------------------------------------------------------------
+# table1: Summary (Table 1), checked against R/summarize.R reality.
+#
+# Table 1 is the one analysis whose DECISION is itself a published output: for
+# every continuous variable the app chooses mean +/- SD or median (IQR) and
+# prints that choice in the row's own label. A table whose numbers are each
+# individually right but whose choice is wrong is still wrong, so the choice is
+# compared as its own quantity, with its own code (DECISION_MISMATCH).
+#
+# The real displayed `text` (verified by running the shipped summary-table1 case
+# end to end, not reasoned about):
+#
+#   Characteristic\tControl (N=60)\tTreatment (N=60)\tMissing
+#   age, mean ± SD\t59.6 ± 11.1\t60.2 ± 11.4\t0
+#   length_of_stay, median (IQR)\t3.7 (2.25–6)\t4.1 (2–7.3)\t8
+#   crp, median (IQR)\t4.5 (2.48–7.15)\t4.85 (2.22–8.45)\t0
+#   sex\t\t\t0
+#   Female\t32 (53%)\t28 (47%)\t
+#   Male\t28 (47%)\t32 (53%)\t
+#   diabetes\t\t\t0
+#   No\t32 (53%)\t44 (73%)\t
+#   Yes\t28 (47%)\t16 (27%)\t
+#
+# A categorical variable emits a bare-name header row with EMPTY group cells,
+# then bare level rows — the same positional model ratio_table's reference
+# header / level rows use, and for the same reason: a level row's label is the
+# level alone, so it can only be keyed by the block it sits in.
+#
+# TIER SHAPE, and how it differs from every other kind here. `summarize`'s
+# contract (INTERFACES.md) returns RENDERED CELL STRINGS, not raw numbers,
+# because at three significant figures the string IS the published claim. So:
+#
+#   display tier  every per-variable-per-group cell string, plus the Missing
+#                 cell, compared EXACTLY against Path B. There is deliberately
+#                 no DISPLAY_ARTIFACT tier for table1 — with no numbers behind
+#                 the strings there is no "half a display step" to be within,
+#                 and inventing one would weaken the only tier that judges the
+#                 published artifact.
+#   decision tier the per-variable kind (mean/median/count), Path A vs Path B.
+#   exact tier    n, n_dropped, and the per-group Ns. Count-level against Path
+#                 B by construction (see above) — which is why summary-table1
+#                 declares exact_targets ["n", "n_dropped", "decisions"] and
+#                 not a list of estimates it cannot credit.
+#   script tier   Path A against itself, and the STRONGEST tier here: the
+#                 exported .R leaves unrounded per-variable, per-group
+#                 mean/sd or type-7 quartiles (harvest_summary in
+#                 harness/run-script.R), so the harvest is pushed through the
+#                 app's own display rule and string-compared to the screen —
+#                 including the statistic it CHOSE, which the script re-expresses
+#                 by computing one or the other.
+# ---------------------------------------------------------------------------
+
+TABLE1_HEADER_FIRST_CELL = "Characteristic"
+TABLE1_HEADER_LAST_CELL = "Missing"
+EM_DASH = "—"
+
+# R: `sprintf("%s, %s", disp(col), if (kind == "mean") "mean ± SD" else
+# "median (IQR)")` — R/summarize.R, the continuous row label. U+00B1.
+TABLE1_KIND_SUFFIX = {", mean ± SD": "mean", ", median (IQR)": "median"}
+
+# R: `sprintf("%s (N=%d)", levels_g, group_n)`.
+TABLE1_GROUP_HEADER_RE = re.compile(r"^(?P<level>.+) \(N=(?P<n>\d+)\)$")
+
+# R/summarize.R's `.fmt_num` is shared BY SOURCE between fig_groupcompare and
+# fig_summary: literally the same function, in the same file — not two rules
+# that happen to coincide. (Contrast format_p_km / format_p_gc above, restated
+# separately precisely because they are two different R functions whose output
+# currently agrees.) So table1 aliases the existing restatement instead of
+# making a second copy that could drift; a change to `.fmt_num` must move
+# exactly one thing in this file.
+format_num_t1 = format_num_gc
+
+
+def format_mean_cell_t1(mean, sd) -> str:
+    """R `.fmt_continuous(x, "mean")`: `sprintf("%s ± %s", ...)`, U+00B1.
+
+    `sd is None` is the harvest's signal for a one-value group (R's `sd()` of
+    length 1 is NA), which `fig_summary` displays as the bare value.
+    """
+    if mean is None:
+        return EM_DASH
+    if sd is None:
+        return format_num_t1(mean)
+    return f"{format_num_t1(mean)} ± {format_num_t1(sd)}"
+
+
+def format_median_cell_t1(q1, q2, q3) -> str:
+    """R `.fmt_continuous(x, "median")`: `sprintf("%s (%s–%s)", q2, q1, q3)`,
+    EN DASH U+2013, quartiles from `quantile(..., type = 7)`.
+
+    KNOWN LIMIT: a group with exactly ONE non-missing value is displayed by the
+    app as the bare value, but the exported script's `quantile()` returns three
+    equal numbers, which render here as `v (v–v)`. No shipped case has such a
+    group; if one appears the resulting SCRIPT_DIVERGENCE is a true statement
+    (this harvest cannot reproduce that cell), not a silenced difference.
+    """
+    if q2 is None:
+        return EM_DASH
+    return (f"{format_num_t1(q2)} ({format_num_t1(q1)}{EN_DASH}"
+            f"{format_num_t1(q3)})")
+
+
+def format_count_cell_t1(k, denom) -> str:
+    """R: `if (denom == 0) "—" else sprintf("%d (%.0f%%)", k, 100 * k / denom)`.
+
+    NOT `.fmt_num`: the percent is whole-number `%.0f`, and it rounds half to
+    EVEN (C's printf, and Python's own format spec — verified identical:
+    `sprintf("%.0f", 12.5)` is "12" in both, `37.5` is "38" in both).
+    """
+    if denom in (None, 0):
+        return EM_DASH
+    return f"{int(k)} ({100 * float(k) / float(denom):.0f}%)"
+
+
+def parse_table1_tsv(text: str, case: dict):
+    """The displayed Table 1 -> (group headers, rows, findings).
+
+    Each row is {key, label, variable, level, kind, cells: {level: str},
+    missing: str}. `key` is the variable name for a continuous row or a
+    categorical HEADER row, and `"<variable>: <level>"` for a level row — never
+    a bare level, which would collide across variables.
+
+    Anchored on the case's DECLARED continuous/categorical roles, the same
+    "search for something already known" approach parse_ratio_cell and
+    parse_km_group_median use. That also makes a reclassification by the app
+    (a variable the case calls continuous displayed as a categorical block, or
+    the reverse) visible as a finding instead of being absorbed by a generic
+    grammar.
+    """
+    roles = case.get("roles") or {}
+    continuous = list(roles.get("continuous") or [])
+    categorical = list(roles.get("categorical") or [])
+
+    findings = []
+    rows = []
+    headers = []
+    group_n = {}
+
+    tsv = text.split("\n\n")[0]
+    lines = [ln for ln in tsv.split("\n") if ln.strip() != ""]
+    if not lines:
+        findings.append(finding("DEFECT", "-", "displayed table", "", None,
+                                "the displayed output carries no table"))
+        return headers, group_n, rows, findings
+
+    head = [c.strip() for c in lines[0].split("\t")]
+    if len(head) < 3 or head[0] != TABLE1_HEADER_FIRST_CELL \
+            or head[-1] != TABLE1_HEADER_LAST_CELL:
+        findings.append(finding(
+            "DEFECT", "-", "table header", lines[0], None,
+            f"expected a header starting {TABLE1_HEADER_FIRST_CELL!r} and "
+            f"ending {TABLE1_HEADER_LAST_CELL!r}"))
+    for cell in head[1:-1]:
+        m = TABLE1_GROUP_HEADER_RE.match(cell)
+        if m is None:
+            findings.append(finding(
+                "DEFECT", cell, "group header", cell, None,
+                "the column header does not match the app's '<level> (N=<n>)' "
+                "rule, so its group level and N cannot be read"))
+            continue  # NOT a silent skip: the unreadable header was recorded
+        headers.append(m["level"])
+        group_n[m["level"]] = int(m["n"])
+
+    n_cols = len(head) - 2  # everything between Characteristic and Missing
+    current_var = None
+    seen_keys = set()
+    for line in lines[1:]:
+        parts = line.split("\t")
+        if len(parts) != n_cols + 2:
+            findings.append(finding(
+                "DEFECT", parts[0].strip(), "displayed row", line, None,
+                f"row does not carry {n_cols + 2} tab-separated cells"))
+            continue  # NOT a silent skip: the malformed row was just recorded
+        label = parts[0].strip()
+        cells = {headers[i]: parts[i + 1].strip()
+                 for i in range(min(n_cols, len(headers)))}
+        missing = parts[-1].strip()
+
+        variable = level = None
+        kind = None
+        for suffix, k in TABLE1_KIND_SUFFIX.items():
+            if label.endswith(suffix) and label[: -len(suffix)] in continuous:
+                variable, kind = label[: -len(suffix)], k
+                break
+        if variable is not None:
+            current_var = None  # a continuous row closes any categorical block
+        elif label in categorical:
+            variable, kind, current_var = label, "count", label
+            if any(c != "" for c in cells.values()):
+                findings.append(finding(
+                    "DEFECT", label, "displayed row", line, None,
+                    "a categorical header row carries value cells; it must be "
+                    "empty in every group column"))
+        elif label in continuous:
+            findings.append(finding(
+                "DEFECT", label, "displayed row", line, None,
+                "a continuous row's label carries no ', mean ± SD' or "
+                "', median (IQR)' suffix, so it declares no summary kind"))
+            continue  # NOT a silent skip: the kind-less row was just recorded
+        else:
+            if current_var is None:
+                findings.append(finding(
+                    "MISSING_QUANTITY", label, "displayed row", line, None,
+                    "level row with no preceding categorical header row; it "
+                    "cannot be keyed to a variable"))
+                continue  # NOT a silent skip: the unkeyable row was recorded
+            variable, level, kind = current_var, label, "count"
+
+        key = variable if level is None else f"{variable}: {level}"
+        if key in seen_keys:
+            findings.append(finding(
+                "DEFECT", key, "displayed row", line, None,
+                "two displayed rows resolve to the same key"))
+        seen_keys.add(key)
+        rows.append({"key": key, "label": label, "variable": variable,
+                     "level": level, "kind": kind, "cells": cells,
+                     "missing": missing})
+
+    for var in continuous + categorical:
+        if not any(r["variable"] == var for r in rows):
+            findings.append(finding(
+                "MISSING_QUANTITY", var, "displayed row", None, None,
+                "the case declares this variable but the displayed table has "
+                "no row for it"))
+    return headers, group_n, rows, findings
+
+
+def python_table1_rows(python: dict):
+    """Path B's rows -> ({key: row}, {variable: kind}, findings).
+
+    The key derivation is a SECOND, independent implementation of the same rule
+    parse_table1_tsv applies to the screen — deliberately, exactly as
+    display_key / validate.cli.display_label are kept separate. A divergence
+    surfaces as MISSING_QUANTITY rather than a quietly-matched wrong row.
+    """
+    findings = []
+    by_key = {}
+    kinds = {}
+    for row in python.get("rows") or []:
+        if not isinstance(row, dict) or "variable" not in row:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "Path B row", None, row,
+                "Path B produced a row with no `variable`; it cannot be keyed"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        var, level = row["variable"], row.get("level")
+        key = var if level in (None, "") else f"{var}: {level}"
+        by_key[key] = row
+        kind = row.get("kind")
+        if var in kinds and kinds[var] != kind:
+            findings.append(finding(
+                "DECISION_MISMATCH", var, "decision", None,
+                f"{kinds[var]} / {kind}",
+                "Path B reports two different kinds for the same variable; the "
+                "kind is a property of the variable, not of one row"))
+        kinds[var] = kind
+    return by_key, kinds, findings
+
+
+def compare_table1(case, figura, exact, python):
+    """The full table1 branch: counts, decisions, displayed cells, script."""
+    findings = []
+    compared = 0
+    targets = _Targets(case.get("exact_targets") or [])
+
+    # -- counts. Same shape/severity as every other branch's count loop. There
+    # is no `n_event`: Table 1 has no event.
+    for key in ("n", "n_dropped"):
+        a, b = exact.get(key), python.get(key)
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", key, a, b,
+                f"{missing} did not report {key}; the count could not be "
+                "compared"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        targets.credit(key)
+        if a != b:
+            findings.append(finding(
+                "COUNT_MISMATCH", "-", key, a, b,
+                "the two paths analysed different rows"))
+
+    text = figura.get("text")
+    if not isinstance(text, str):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed table", text, None,
+            "Path A's displayed artifact has no `text` field to parse"))
+        text = ""
+    headers, shown_group_n, rows, parse_findings = parse_table1_tsv(text, case)
+    findings.extend(parse_findings)
+    rows_by_key = {r["key"]: r for r in rows}
+    py_by_key, py_kinds, py_findings = python_table1_rows(python)
+    findings.extend(py_findings)
+
+    # A table1 with nothing in it must never pass: every loop below is driven by
+    # these collections, so an empty one means the comparison proved nothing.
+    if not rows:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed table", text, None,
+            "the displayed table carried no rows to compare"))
+    if not py_by_key:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "Path B rows", None, None,
+            "Path B produced no rows to compare"))
+    if not (exact.get("continuous") or exact.get("categorical")):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "exported script harvest", None, None,
+            "the exported script's harvest carried no per-variable statistics"))
+
+    # -- per-group Ns, from BOTH directions. The displayed `(N=...)` headers are
+    # a display claim; the harvest's n_per_group is Path A's own count. Both are
+    # compared against Path B over the key union, so a level present on only one
+    # side is a finding either way.
+    py_group_n = python.get("n_per_group") or {}
+    exact_group_n = exact.get("n_per_group") or {}
+    if not py_group_n:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "n_per_group", None, None,
+            "Path B produced no per-group counts to compare"))
+    if not exact_group_n:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "n_per_group", None, None,
+            "Path A's harvest carried no per-group counts to compare"))
+    for level in sorted(set(headers) | set(py_group_n) | set(exact_group_n)):
+        shown, a, b = (shown_group_n.get(level), exact_group_n.get(level),
+                       py_group_n.get(level))
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", level, "n_per_group", a, b,
+                f"{missing} has no count for this group level"))
+        else:
+            compared += 1
+            if a != b:
+                findings.append(finding(
+                    "COUNT_MISMATCH", level, "n_per_group", a, b,
+                    "the two paths analysed different rows for this group"))
+        if shown is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", level, "displayed group header", None, b,
+                "the displayed table has no column header for this group "
+                "level"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        if b is None:
+            continue  # already recorded as MISSING_QUANTITY above
+        compared += 1
+        if shown != b:
+            findings.append(finding(
+                "COUNT_MISMATCH", level, "displayed group header", shown, b,
+                "the displayed column header's N disagrees with Path B's "
+                "per-group count"))
+
+    # -- ORDER. The spec pins both orders as normative — group levels in
+    # FIRST-APPEARANCE order (never sorted), and rows as all continuous
+    # variables then all categorical, in selection order. Neither is checked by
+    # any loop above (they all run over sorted key unions), so without this a
+    # correctly-valued table printed in the wrong order would pass silently.
+    # Both comparisons are gated on the two sides carrying the same keys, so a
+    # missing row or level is reported once, as MISSING_QUANTITY, rather than
+    # also as a spurious ordering difference.
+    py_levels = python.get("levels")
+    if not isinstance(py_levels, list):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "level order", headers, py_levels,
+            "Path B reports no `levels` list, so the displayed column order "
+            "could not be checked"))
+    elif set(py_levels) == set(headers):
+        compared += 1
+        if py_levels != headers:
+            findings.append(finding(
+                "DEFECT", "-", "level order", headers, py_levels,
+                "the group columns are in a different order; the app orders "
+                "levels by first appearance in the file, never sorted"))
+    py_order = [k for k in (
+        (r["variable"] if r.get("level") in (None, "")
+         else f"{r['variable']}: {r['level']}")
+        for r in (python.get("rows") or []) if isinstance(r, dict)
+        and "variable" in r)]
+    shown_order = [r["key"] for r in rows]
+    if set(py_order) == set(shown_order):
+        compared += 1
+        if py_order != shown_order:
+            findings.append(finding(
+                "DEFECT", "-", "row order", shown_order, py_order,
+                "the table rows are in a different order; the app emits every "
+                "continuous variable first, then every categorical one, in "
+                "selection order"))
+
+    # -- the DECISION tier. One kind per variable, on each side, compared as its
+    # own quantity: mean vs median vs count. This is the quantity that makes
+    # Table 1 different from every other analysis here.
+    shown_kinds = {}
+    for row in rows:
+        shown_kinds.setdefault(row["variable"], row["kind"])
+    for var in sorted(set(shown_kinds) | set(py_kinds)):
+        a, b = shown_kinds.get(var), py_kinds.get(var)
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", var, "decisions", a, b,
+                f"{missing} reports no summary kind for this variable"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        targets.credit("decisions")
+        if a != b:
+            findings.append(finding(
+                "DECISION_MISMATCH", var, "decisions", a, b,
+                "the two paths chose different summary statistics for this "
+                "variable; a wrong choice is a defect even when both sets of "
+                "numbers are individually correct"))
+
+    # -- display tier. Every cell string, exactly. No artifact tier: at three
+    # significant figures the rendered string IS the published claim.
+    for key in sorted(set(rows_by_key) | set(py_by_key)):
+        row, py = rows_by_key.get(key), py_by_key.get(key)
+        if row is None or py is None:
+            missing = "Path A" if row is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", key, "displayed row",
+                row["label"] if row else None, key if py else None,
+                f"{missing} has no row for this key"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        py_cells = py.get("cells")
+        if not isinstance(py_cells, dict):
+            findings.append(finding(
+                "MISSING_QUANTITY", key, "displayed cell", row["cells"],
+                py_cells, "Path B's row carries no `cells` mapping"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        for level in sorted(set(row["cells"]) | set(py_cells)):
+            shown, mine = row["cells"].get(level), py_cells.get(level)
+            if shown is None or mine is None:
+                missing = "Path A" if shown is None else "Path B"
+                findings.append(finding(
+                    "MISSING_QUANTITY", key, f"displayed cell [{level}]",
+                    shown, mine, f"{missing} has no cell for this group level"))
+                continue  # NOT a silent skip: MISSING_QUANTITY was recorded
+            compared += 1
+            if shown != mine:
+                findings.append(finding(
+                    "DEFECT", key, f"displayed cell [{level}]", shown, mine,
+                    "the displayed cell strings differ; for Table 1 the "
+                    "rendered string at 3 significant figures is the claim"))
+        mine_missing = py.get("missing")
+        if mine_missing is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", key, "displayed missing cell",
+                row["missing"], None,
+                "Path B's row carries no `missing` cell"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        if row["missing"] != mine_missing:
+            findings.append(finding(
+                "DEFECT", key, "displayed missing cell", row["missing"],
+                mine_missing,
+                "the displayed missing-value counts differ"))
+
+    # -- script tier. Path A against itself: does the exported .R, rendered
+    # through fig_summary's own display rule, reproduce the table on screen —
+    # both the numbers AND the statistic it chose? Never touches Path B.
+    script_findings, script_compared = _table1_script_tier(exact, rows_by_key)
+    findings.extend(script_findings)
+    compared += script_compared
+
+    findings.extend(targets.findings())
+    return findings, compared, targets
+
+
+def _table1_harvest_cells(exact):
+    """The exported script's harvest -> {row key: (kind, {level: cell string})}.
+
+    One place builds this so the script tier's count of comparisons and its
+    findings can never be derived from two different readings of the harvest.
+    """
+    out = {}
+    for var, info in (exact.get("continuous") or {}).items():
+        kind = info.get("kind")
+        cells = {}
+        for level, stat in (info.get("stats") or {}).items():
+            stat = stat or {}
+            if kind == "mean":
+                cells[level] = format_mean_cell_t1(stat.get("mean"),
+                                                   stat.get("sd"))
+            elif kind == "median":
+                cells[level] = format_median_cell_t1(
+                    stat.get("25%"), stat.get("50%"), stat.get("75%"))
+            else:
+                cells[level] = None
+        out[var] = (kind, cells)
+    for var, info in (exact.get("categorical") or {}).items():
+        denom = info.get("denom") or {}
+        counts = info.get("counts") or {}
+        out[var] = ("count", {level: "" for level in counts})
+        for level in info.get("levels") or []:
+            out[f"{var}: {level}"] = (
+                "count",
+                {g: format_count_cell_t1((counts.get(g) or {}).get(level, 0),
+                                         denom.get(g))
+                 for g in counts})
+    return out
+
+
+def _table1_script_tier(exact, rows_by_key):
+    """(findings, comparisons performed) for the script tier."""
+    findings = []
+    compared = 0
+    harvest = _table1_harvest_cells(exact)
+    for key, (kind, cells) in sorted(harvest.items()):
+        row = rows_by_key.get(key)
+        if row is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", key, "exported script row", None, key,
+                "the exported script produced a variable or level with no "
+                "displayed row"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1  # the kind claim itself
+        if kind != row["kind"]:
+            findings.append(finding(
+                "SCRIPT_DIVERGENCE", key, "exported script decision",
+                row["kind"], kind,
+                "the exported .R computed a different summary statistic than "
+                "the one the screen declared for this variable"))
+        for level, rendered in sorted(cells.items()):
+            shown = row["cells"].get(level)
+            if shown is None:
+                findings.append(finding(
+                    "MISSING_QUANTITY", key,
+                    f"exported script cell [{level}]", None, rendered,
+                    "the exported script produced a group the displayed row "
+                    "has no cell for"))
+                continue  # NOT a silent skip: MISSING_QUANTITY was recorded
+            if rendered is None:
+                findings.append(finding(
+                    "MISSING_QUANTITY", key,
+                    f"exported script cell [{level}]", shown, None,
+                    "the exported script's statistic could not be rendered "
+                    "through the app's display rule"))
+                continue  # NOT a silent skip: MISSING_QUANTITY was recorded
+            compared += 1
+            if rendered != shown:
+                findings.append(finding(
+                    "SCRIPT_DIVERGENCE", key,
+                    f"exported script cell [{level}]", shown, rendered,
+                    "the exported .R does not reproduce the cell the screen "
+                    "showed"))
+    for key, row in sorted(rows_by_key.items()):
+        if key not in harvest:
+            findings.append(finding(
+                "MISSING_QUANTITY", key, "exported script row", row["label"],
+                None,
+                "the displayed table has a row the exported script's harvest "
+                "does not account for"))
+    return findings, compared
+
+
 # Per-kind dispatch. Registering a kind is the ONLY way to compare it: an
 # unregistered kind stops loudly rather than being waved through as "nothing
 # to compare", which would publish a green result backed by zero evidence.
 KIND_HANDLERS = {"ratio_table": compare_ratio_table,
                  "km_summary": compare_km_summary,
-                 "gc_summary": compare_gc_summary}
+                 "gc_summary": compare_gc_summary,
+                 "table1": compare_table1}
 
-PENDING_KINDS = {
-    "table1": "Task 11 (Table 1 / summary)",
-}
+# Kinds this comparator knows are coming but cannot compare yet. Empty: every
+# display.kind any shipped case declares is implemented. (`table1` lived here
+# until Task 11 implemented it. The remaining Table 1 gap is Path B —
+# validate/summary.py — not the comparator; the Makefile carries that, so a
+# case whose python.json does not exist is never handed to compare.py at all.)
+PENDING_KINDS = {}
 
 
 # ---------------------------------------------------------------------------
