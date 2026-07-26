@@ -108,7 +108,9 @@ keep_default_na=False, na_filter=False)` and preserves cells exactly as written,
 
 The two therefore disagree on a **whitespace-only cell in a text column**: Path A sees an
 empty cell and drops the row; Path B sees a one-character value and keeps it, as its own
-covariate level or group level. They agree on padded *numeric* cells (`pandas`'
+covariate level. Scope: `cox.py`, `logistic.py` and `summary.py` only — `groupcompare.py`
+(`_mapped_frame`) and `km.py` trim inside their own readers, so the group-comparison and
+KM paths are NOT affected. They agree on padded *numeric* cells (`pandas`'
 `to_numeric` ignores surrounding whitespace, as R's coercion does), which is why
 `logistic-dirty`'s two trailing-space `age` cells produce no divergence and the gap has
 never shown up in a run.
