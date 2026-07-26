@@ -24,11 +24,17 @@ import pytest
 from compare import (
     DISPOSITIONS,
     classify_cell,
+    classify_km_logrank_display,
+    classify_km_median_display,
     close_enough,
     compare_case,
     display_key,
+    format_median_km,
+    format_p_km,
     format_ratio_cell,
     main,
+    parse_km_group_median,
+    parse_km_logrank,
     parse_ratio_tsv,
     reportable,
 )
@@ -456,11 +462,13 @@ def test_an_empty_table_never_passes_vacuously(tmp_path):
 
 
 def test_unknown_display_kind_exits_loudly(tmp_path):
+    # gc_summary (Task 10) is still pending as of this test; km_summary
+    # itself is implemented now (Task 9), so it can no longer stand in here.
     def mutate(case, figura, exact, python):
-        case["display"]["kind"] = "km_summary"
+        case["display"]["kind"] = "gc_summary"
     with pytest.raises(SystemExit) as excinfo:
         _run(tmp_path, mutate)
-    assert "km_summary" in str(excinfo.value)
+    assert "gc_summary" in str(excinfo.value)
 
 
 def test_a_figura_artifact_with_no_text_field_is_missing_quantity(tmp_path):
@@ -502,6 +510,236 @@ def test_a_malformed_display_cell_is_not_credited_as_a_comparison(tmp_path):
     assert len(hits) == 1 and hits[0]["term"] == "age"
     # 19 in the agreeing fixture: the uncomparable cell must not be counted.
     assert report["compared"] == 18
+
+
+# --------------------------------------------------------------------------
+# km_summary: the free-text methods sentence + curve/median/log-rank tiers
+# --------------------------------------------------------------------------
+
+EN2 = "–"
+
+# A real methods sentence shape, mirroring an actual run of km-twoarm
+# (verified end to end via run-figura.R/run-script.R): the HR clause is not
+# a km_summary target and is never parsed by anything under test here.
+KM_TEXT = (
+    "HR 1.23 (New treatment vs Standard care; 95% CI 0.80" + EN2 + "1.90); "
+    "log-rank p = 0.045. Median survival: New treatment 24.0 Time; "
+    "Standard care not reached."
+)
+
+
+def _base_km():
+    """A km_summary case whose three artifacts agree everywhere."""
+    case = {
+        "id": "k1",
+        "figure": "km",
+        "roles": {"time": "followup_months", "status": "status", "group": "group"},
+        "options": {"event_value": "Death"},
+        "display": {"kind": "km_summary"},
+        "exact_targets": [
+            "median_survival", "logrank_p", "curve", "n", "n_event", "n_dropped",
+        ],
+    }
+    figura = {"id": "k1", "text": KM_TEXT, "code": "# script"}
+    curve = {
+        "New treatment": [
+            {"t": 5.0, "surv": 0.9, "at_risk": 20},
+            {"t": 10.0, "surv": 0.8, "at_risk": 18},
+        ],
+        "Standard care": [
+            {"t": 6.0, "surv": 0.95, "at_risk": 22},
+        ],
+    }
+    medians = {"New treatment": 24.0, "Standard care": None}
+    exact = {
+        "id": "k1", "figure": "km",
+        "curve": copy.deepcopy(curve), "medians": copy.deepcopy(medians),
+        "logrank_p": 0.045, "n": 42, "n_event": 20, "n_dropped": 0,
+    }
+    python = {
+        "id": "k1", "figure": "km",
+        "curve": copy.deepcopy(curve), "medians": copy.deepcopy(medians),
+        "logrank_p": 0.045, "n": 42, "n_event": 20, "n_dropped": 0,
+    }
+    return case, figura, exact, python
+
+
+def _run_km(tmp_path, mutate=None):
+    case, figura, exact, python = _base_km()
+    if mutate is not None:
+        mutate(case, figura, exact, python)
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    return compare_case(case["id"], results=results, cases=cases)
+
+
+# -- pure-function vectors ---------------------------------------------------
+
+def test_format_p_km_uses_spaces_unlike_the_ratio_table_rule():
+    assert format_p_km(0.045) == "p = 0.045"
+    assert format_p_km(0.0004) == "p < 0.001"
+
+
+def test_format_median_km_is_one_decimal_place():
+    assert format_median_km(24.0) == "24.0"
+    assert format_median_km(3.14159) == "3.1"
+
+
+def test_parse_km_logrank_finds_the_lowercase_embedded_phrase():
+    assert parse_km_logrank(KM_TEXT) == "p = 0.045"
+    assert parse_km_logrank("Log-rank p < 0.001. Median survival: A 1.0 Time.") \
+        == "p < 0.001"
+    assert parse_km_logrank("no log-rank phrase here") is None
+
+
+def test_parse_km_group_median_finds_a_reached_value():
+    shown = parse_km_group_median(KM_TEXT, "New treatment")
+    assert shown == {"value": 24.0, "raw": "New treatment 24.0"}
+
+
+def test_parse_km_group_median_finds_not_reached():
+    shown = parse_km_group_median(KM_TEXT, "Standard care")
+    assert shown == {"not_reached": True, "raw": "Standard care not reached"}
+
+
+def test_parse_km_group_median_returns_none_for_an_absent_group():
+    assert parse_km_group_median(KM_TEXT, "Placebo") is None
+
+
+def test_classify_km_median_display_both_not_reached_is_a_pass():
+    f = classify_km_median_display(
+        "Standard care", {"not_reached": True, "raw": "Standard care not reached"},
+        None)
+    assert f["code"] == "PASS"
+
+
+def test_classify_km_median_display_one_sided_not_reached_is_a_defect():
+    # Addendum: one-sided not-reached is a DEFECT, not smoothed into an
+    # artifact — Figura says not reached, Python computed a real value.
+    f = classify_km_median_display(
+        "Standard care", {"not_reached": True, "raw": "Standard care not reached"},
+        30.0)
+    assert f["code"] == "DEFECT"
+
+
+def test_classify_km_median_display_rounding_only_is_an_artifact():
+    # 24.0500001 sits just past the 1-dp rounding boundary: Python renders
+    # "24.1", Figura showed "24.0". The two true values are indistinguishable
+    # at display precision (KM_DISPLAY_HALF_ULP = 0.05), so this is a
+    # formatting artifact, not arithmetic — mirrors the ratio-table version
+    # of this same test at its own (2-dp) boundary.
+    f = classify_km_median_display(
+        "New treatment", {"value": 24.0, "raw": "New treatment 24.0"}, 24.0500001)
+    assert f["code"] == "DISPLAY_ARTIFACT"
+
+
+def test_classify_km_median_display_real_disagreement_is_a_defect():
+    f = classify_km_median_display(
+        "New treatment", {"value": 24.0, "raw": "New treatment 24.0"}, 5.0)
+    assert f["code"] == "DEFECT"
+
+
+def test_classify_km_logrank_display_p_difference_is_never_an_artifact():
+    f = classify_km_logrank_display("p = 0.045", 0.046)
+    assert f["code"] == "DEFECT"
+    assert "never a display artifact" in f["note"]
+
+
+# -- whole-case wiring --------------------------------------------------------
+
+def test_km_agreeing_fixture_passes_everything(tmp_path):
+    report = _run_km(tmp_path)
+    assert report["findings"] == []
+    assert report["passed"] is True
+    assert report["targets_met"] is True
+    # 3 counts + curve(2 pts * 2 quantities + 1 pt * 2 quantities = 6)
+    # + 2 medians (exact) + 1 logrank (exact) + 2 medians (display)
+    # + 1 logrank (display) = 3 + 6 + 2 + 1 + 2 + 1 = 15
+    assert report["compared"] == 15
+
+
+def test_km_one_sided_not_reached_is_a_defect_end_to_end(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["medians"]["Standard care"] = 30.0
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "DEFECT")
+    assert any(h["term"] == "Standard care" and h["quantity"] == "median_survival"
+               for h in hits)
+
+
+def test_km_unmatched_curve_point_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["curve"]["New treatment"].append(
+            {"t": 99.0, "surv": 0.1, "at_risk": 1})
+    report = _run_km(tmp_path, mutate)
+    hits = [f for f in _by_code(report, "MISSING_QUANTITY")
+            if f["quantity"] == "curve t=99"]
+    assert hits
+    assert hits[0]["term"] == "New treatment"
+
+
+def test_km_curve_surv_mismatch_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["curve"]["New treatment"][0]["surv"] = 0.5
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "DEFECT")
+    assert any("survival estimate" in h["note"] for h in hits)
+
+
+def test_km_curve_at_risk_mismatch_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["curve"]["New treatment"][0]["at_risk"] = 999
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "DEFECT")
+    assert any("number at risk" in h["note"] for h in hits)
+
+
+def test_km_group_present_only_on_one_side_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["curve"]["Extra group"] = [{"t": 1.0, "surv": 1.0, "at_risk": 5}]
+    report = _run_km(tmp_path, mutate)
+    hits = [f for f in _by_code(report, "MISSING_QUANTITY")
+            if f["term"] == "Extra group"]
+    assert hits
+
+
+def test_km_logrank_p_beyond_tolerance_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["logrank_p"] = 0.9
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "DEFECT")
+    assert any(h["quantity"] == "logrank_p" for h in hits)
+
+
+def test_km_displayed_logrank_p_disagreement_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] = figura["text"].replace(
+            "log-rank p = 0.045", "log-rank p = 0.046")
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "DEFECT")
+    assert any(h["quantity"] == "displayed logrank" for h in hits)
+
+
+def test_km_count_mismatch(tmp_path):
+    report = _run_km(tmp_path, lambda c, f, e, p: p.__setitem__("n_event", 99))
+    hits = _by_code(report, "COUNT_MISMATCH")
+    assert len(hits) == 1 and hits[0]["quantity"] == "n_event"
+
+
+def test_km_unwired_exact_target_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        case["exact_targets"].append("adjusted_or")  # never credited by km_summary
+    report = _run_km(tmp_path, mutate)
+    hits = [f for f in _by_code(report, "MISSING_QUANTITY")
+            if f["quantity"] == "adjusted_or"]
+    assert hits
+    assert report["targets_met"] is False
+
+
+def test_km_absent_text_field_is_missing_quantity_not_a_crash(tmp_path):
+    report = _run_km(tmp_path, lambda c, f, e, p: f.pop("text"))
+    notes = [x["note"] for x in _by_code(report, "MISSING_QUANTITY")]
+    assert any("no `text` field" in n for n in notes)
+    assert report["passed"] is False
 
 
 # --------------------------------------------------------------------------

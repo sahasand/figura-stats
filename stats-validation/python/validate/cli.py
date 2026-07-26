@@ -63,8 +63,35 @@ def display_label(term: str, covariates) -> str:
 def run(case_dir: str) -> dict:
     df, case = load_case(case_dir)
     figure = case["figure"]
-    covariates = list(case["roles"]["covariates"])
     options = case.get("options", {})
+
+    # TODO(km clean-room integration): validate/km.py is written by the
+    # clean-room agent from stats-validation/spec/km-twoarm.md. Wiring recipe,
+    # same pattern cox's TODO used before its integration step:
+    #   1. `from .km import fit_km` at the top of this module.
+    #   2. km CANNOT flow through the `covariates = ...` line below, nor
+    #      through the FITTERS-generic branch nor the display_terms/
+    #      display_unadjusted block at the bottom of this function — km's
+    #      case.json has NO `roles["covariates"]` at all (only roles["time"]/
+    #      ["status"]/["group"]), and fit_km's return shape (medians/
+    #      logrank_p/n/n_event/curve/n_dropped) carries no `terms`/
+    #      `unadjusted` dict for display_terms/display_unadjusted to key off.
+    #      A literal `if figure == "km": covariates = list(case["roles"]...`
+    #      placement below this comment would KeyError immediately.
+    #   3. INTEGRATION STEP: replace the guard immediately below with an early
+    #      return, BEFORE the `covariates = ...` line:
+    #        if figure == "km":
+    #            out = fit_km(df, case["roles"]["time"], case["roles"]["status"],
+    #                         options["event_value"], case["roles"]["group"])
+    #            out["id"] = case["id"]
+    #            out["figure"] = figure
+    #            return out
+    if figure == "km":
+        raise SystemExit(
+            "Path B km not yet present — validate/km.py is written by the "
+            "clean-room agent from stats-validation/spec/km-twoarm.md")
+
+    covariates = list(case["roles"]["covariates"])
 
     if figure == "cox":
         out = fit_cox(

@@ -5,6 +5,7 @@ import path from "node:path";
 import { parseCsv } from "../../web/lib/csv.js";
 import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
 import { buildCoxSpec } from "../../web/guided/cox/spec.js";
+import { buildKmSpec } from "../../web/guided/km/spec.js";
 
 const BUILDERS = {
   logistic: (table, c) =>
@@ -25,6 +26,19 @@ const BUILDERS = {
       c.options.ref_levels || {},
       { source_filename: "data.csv" }
     ),
+  // buildKmSpec's real shape differs from buildLogisticSpec/buildCoxSpec: it
+  // returns { dropped, spec }, not the flat spec itself (KM recodes status to
+  // 0/1 and pre-drops blank time/status/group rows client-side, so the
+  // builder reports how many it dropped alongside the spec it built). Only
+  // `.spec` is what render_figure()/run-figura.R need.
+  km: (table, c) =>
+    buildKmSpec(
+      table,
+      { time: c.roles.time, status: c.roles.status, group: c.roles.group },
+      c.options.event_value,
+      { time_label: c.options.time_label, theme: c.options.theme,
+        source_filename: "data.csv" }
+    ).spec,
 };
 
 export async function buildSpecForCase(caseDir) {

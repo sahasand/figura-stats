@@ -131,7 +131,71 @@ harvest_cox <- function(env, id) {
        n_dropped = n_dropped_vs_csv(dat))
 }
 
-HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox)
+# survfit + survdiff. Verified against R/km.R's .km_script (both the
+# source_roles branch, used here since our case sets source_filename, and the
+# embedded-demo branch) before writing this: it always assigns `fit <-
+# survfit(Surv(time, status) ~ group, data = dat)` and `dat <-
+# data.frame(time = ..., status = ..., group = ..., stringsAsFactors = FALSE)`
+# with columns literally named time/status/group — never the user's real
+# column names, which only ever appear in the PREP lines that build `dat`.
+# Whenever the script's group count is >= 2 (always true for a real two-arm
+# km case, and true here) it ALSO assigns `lr <- survdiff(Surv(time, status)
+# ~ group, data = dat)` — but the log-rank P-VALUE itself is only ever a bare
+# printed expression in the exported script (`1 - pchisq(lr$chisq, ...)`,
+# never assigned to a name), so this harvester recomputes it from `lr` with
+# the IDENTICAL formula fig_km itself uses. If a future single-group km case
+# ever reaches this harvester, `lr` will not exist (fig_km never computes a
+# log-rank stat for one group either); logrank_p is harvested as NA (-> JSON
+# null) rather than failing loudly, since there is genuinely nothing to
+# harvest, not a bug.
+harvest_km <- function(env, id) {
+  fit <- need(env, "fit", id)
+  dat <- need(env, "dat", id)
+
+  # summary(fit) WITHOUT censored = TRUE returns event times only (its
+  # default) — exactly the spec's "every distinct EVENT time" requirement.
+  # (fig_km's OWN plot data instead calls summary(fit, censored = TRUE), for
+  # the censoring tick marks on the curve — that is a display-only need this
+  # harvest does not share.)
+  sf <- summary(fit)
+  strata <- if (is.null(sf$strata)) rep("Overall", length(sf$time))
+            else sub("^group=", "", as.character(sf$strata))
+  curve_rows <- data.frame(t = sf$time, surv = sf$surv, at_risk = sf$n.risk)
+  # Build each point as a PLAIN named list, not a 1-row data.frame slice:
+  # jsonlite always serialises a data.frame (even one row) as an ARRAY of
+  # row-objects, so `lapply(split(d, seq_len(nrow(d))), identity)` on 1-row
+  # frames double-wraps every point as `[{...}]` instead of `{...}` — caught
+  # by actually running this harvester end to end and reading the JSON, not
+  # by inspection. A named list of scalars auto-unboxes to a bare object,
+  # which is the {t, surv, at_risk} shape the interface contract requires.
+  curve <- lapply(split(curve_rows, strata), function(d) {
+    lapply(seq_len(nrow(d)), function(i)
+      list(t = unname(d$t[i]), surv = unname(d$surv[i]),
+           at_risk = unname(d$at_risk[i])))
+  })
+
+  # summary(fit)$table: a plain named vector for a single stratum, a matrix
+  # (one row per stratum) for two or more — mirrored from fig_km's own
+  # median-line code so this harvest can never disagree with the app's own
+  # reading of the same object. NA (median not reached) -> JSON null via
+  # jsonlite's default NA handling; never rewritten to a sentinel here.
+  med_tab <- summary(fit)$table
+  if (is.null(dim(med_tab))) med_tab <- t(as.matrix(med_tab))
+  med_names <- sub("^group=", "", rownames(med_tab))
+  medians <- setNames(as.list(unname(med_tab[, "median"])), med_names)
+
+  logrank_p <- NA_real_
+  if (exists("lr", envir = env, inherits = FALSE)) {
+    lr <- get("lr", envir = env, inherits = FALSE)
+    logrank_p <- 1 - stats::pchisq(lr$chisq, length(lr$n) - 1)
+  }
+
+  list(curve = curve, medians = medians, logrank_p = logrank_p,
+       n = nrow(dat), n_event = sum(dat$status == 1),
+       n_dropped = n_dropped_vs_csv(dat))
+}
+
+HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox, km = harvest_km)
 
 # ---- harvest orchestration -------------------------------------------------
 
@@ -183,8 +247,14 @@ main <- function() {
 
   # digits = NA is load-bearing: jsonlite truncates to 4 significant digits by
   # default, which would silently cap this file far below the precision the
-  # comparison gate needs.
-  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, digits = NA, pretty = TRUE)
+  # comparison gate needs. na = "null" is load-bearing too (added for km's
+  # not-reached medians / no-second-group logrank_p, verified empirically —
+  # jsonlite's OWN default for a bare NA is the STRING "NA", not JSON null):
+  # a Python reader's `json.loads` must see `null` (-> None), never the
+  # 2-character string "NA", or every not-reached comparison downstream would
+  # silently compare a string against a float instead of None against None.
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, digits = NA,
+                       pretty = TRUE, na = "null")
   cat(sprintf("wrote %s\n", out_path))
 }
 

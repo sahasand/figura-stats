@@ -1,0 +1,8 @@
+{
+  "id": "km-twoarm",
+  "figure": "km",
+  "roles": { "time": "followup_months", "status": "status", "group": "group" },
+  "options": { "event_value": "Death" },
+  "display": { "kind": "km_summary" },
+  "exact_targets": ["median_survival", "logrank_p", "curve", "n", "n_event", "n_dropped"]
+}

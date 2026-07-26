@@ -66,4 +66,37 @@ assert.deepEqual(
   ["age", "arm", "followup_months", "status"].sort()
 );
 
+// --- km: the real case dir builds via the shipped buildKmSpec. Its real
+// signature returns { dropped, spec } (verified against web/guided/km/spec.js),
+// unlike buildLogisticSpec/buildCoxSpec's flat spec — build-spec.mjs's km
+// builder must unwrap `.spec` itself, so buildSpecForCase's return here IS
+// already the flat spec.
+const kmSpec = await buildSpecForCase("stats-validation/cases/km-twoarm");
+
+assert.equal(kmSpec.figure, "km");
+assert.ok(Array.isArray(kmSpec.data), "km spec data must be an array of row objects");
+assert.ok(kmSpec.data.length > 0, "km spec data must not be empty");
+// No-egress narrowing, for real: the real fixture's header is
+// participant_id,followup_months,status,group — only time/status/group are
+// mapped roles, so participant_id (unmapped) must never cross into the spec.
+// fig_km reads spec$data[[i]]$time/$status/$group directly (no `roles` key
+// at all, unlike logistic/cox), so the row keys themselves ARE the contract.
+assert.deepEqual(
+  Object.keys(kmSpec.data[0]).sort(),
+  ["group", "status", "time"].sort()
+);
+assert.ok(!("participant_id" in kmSpec.data[0]),
+  "unmapped column participant_id must not cross into the spec");
+// status is recoded 0/1 client-side by buildKmSpec, keyed off event_value
+// "Death" — never a raw "Death"/"Censored" string reaching R.
+assert.ok(
+  kmSpec.data.every((r) => r.status === 0 || r.status === 1),
+  "km spec status must be recoded to 0/1"
+);
+assert.equal(kmSpec.options.source_roles.time, "followup_months");
+assert.equal(kmSpec.options.source_roles.status, "status");
+assert.equal(kmSpec.options.source_roles.group, "group");
+assert.equal(kmSpec.options.source_roles.event, "Death");
+assert.equal(kmSpec.options.source_filename, "data.csv");
+
 console.log("build-spec.test.mjs ok");

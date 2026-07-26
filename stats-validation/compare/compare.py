@@ -50,6 +50,12 @@ REL_TOL, ABS_TOL = 1e-6, 1e-9
 DISPLAY_DP = 2
 DISPLAY_HALF_ULP = 0.5 * 10.0 ** -DISPLAY_DP
 
+# KM's median survival is displayed at 1 dp (`sprintf("%.1f", x)` in
+# R/km.R), not 2 — its own half-display-step, kept separate from the
+# ratio-table constant above rather than reusing it under a different name.
+KM_DISPLAY_DP = 1
+KM_DISPLAY_HALF_ULP = 0.5 * 10.0 ** -KM_DISPLAY_DP
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 CASES = ROOT / "cases"
@@ -94,6 +100,14 @@ TARGET_QUANTITIES = {
     "n": ("n",),
     "n_event": ("n_event",),
     "n_dropped": ("n_dropped",),
+    # km_summary's own targets: each names itself directly, since km_summary
+    # has no shared ratio-scale abstraction (est/lo/hi/p) to alias into —
+    # unlike adjusted_hr/adjusted_or above, credited only by the EXACT tier
+    # (exact.json vs python.json), never by the display-tier text parse, per
+    # the same convention ratio_table's own targets follow.
+    "median_survival": ("median_survival",),
+    "logrank_p": ("logrank_p",),
+    "curve": ("curve",),
 }
 
 
@@ -591,13 +605,302 @@ def compare_ratio_table(case, figura, exact, python):
     return findings, compared, targets
 
 
+# ---------------------------------------------------------------------------
+# km_summary: the free-text methods sentence, checked against R/km.R reality.
+#
+# Unlike ratio_table's TSV, fig_km's `text` carries no table at all — just a
+# prose sentence with a per-group median clause and (for >= 2 groups) a
+# log-rank clause. Verified against a real run of this exact case:
+#   "HR 1.56 (Standard care vs New treatment; 95% CI 0.90-2.71); log-rank
+#   p = 0.108. Median survival: New treatment not reached; Standard care
+#   26.0 Time."
+# The HR clause is not one of km_summary's targets and is never parsed here.
+# ---------------------------------------------------------------------------
+
+# R: `fmt_p <- function(p) if (p < 0.001) "p < 0.001" else sprintf("p = %.3f", p)`
+# WITH spaces around "=" / "<" — deliberately not `format_p` above, which
+# restates the DIFFERENT, space-free ratio-table convention (`p=%.3f`).
+def format_p_km(p: float) -> str:
+    return "p < 0.001" if p < 0.001 else f"p = {p:.3f}"
+
+
+# R: `fmt1 <- function(x) sprintf("%.1f", x)`.
+def format_median_km(value: float) -> str:
+    return f"{value:.1f}"
+
+
+LOGRANK_RE = re.compile(r"[Ll]og-rank (p (?:< 0\.001|= \d+\.\d{3}))")
+
+
+def parse_km_logrank(text: str):
+    """Pull the displayed log-rank p-phrase out of fig_km's text, or None."""
+    m = LOGRANK_RE.search(text)
+    return m.group(1) if m else None
+
+
+def parse_km_group_median(text: str, group: str):
+    """What Figura displayed for one group's median line, or None if that
+    group's phrase cannot be found in the text at all.
+
+    Returns {"not_reached": True, "raw": <matched text>} or
+    {"value": <float>, "raw": <matched text>}. Matched by the LITERAL group
+    name (known independently from exact/python's own median/curve keys, not
+    guessed from the text), the same "search for something already known"
+    approach `display_key`/`parse_ratio_cell` use elsewhere in this file —
+    not a generic decomposition of arbitrary prose.
+    """
+    esc = re.escape(group)
+    m = re.search(rf"\b{esc} not reached\b", text)
+    if m is not None:
+        return {"not_reached": True, "raw": m.group(0)}
+    m = re.search(rf"\b{esc} (\d+\.\d)\b", text)
+    if m is not None:
+        return {"value": float(m.group(1)), "raw": m.group(0)}
+    return None
+
+
+def display_agrees_km(value: float, shown: float) -> bool:
+    """km's own half-display-step rule, mirroring `display_agrees` above at
+    1 dp instead of 2 (R/km.R's `fmt1` is `sprintf("%.1f", x)`)."""
+    value, shown = float(value), float(shown)
+    slack = max(ABS_TOL, REL_TOL * max(abs(value), abs(shown)))
+    return abs(value - shown) <= KM_DISPLAY_HALF_ULP + slack
+
+
+def classify_km_median_display(group: str, shown, python_value) -> dict:
+    """One group's displayed median line, Path A vs Path B. Mirrors
+    classify_cell's PASS/DISPLAY_ARTIFACT/DEFECT/MISSING_QUANTITY shape."""
+    if shown is None:
+        return finding(
+            "MISSING_QUANTITY", group, "displayed median", None, python_value,
+            "the displayed text carries no median phrase for this group")
+    if shown.get("not_reached"):
+        if python_value is None:
+            return finding("PASS", group, "displayed median", shown["raw"],
+                           "not reached",
+                           "both paths agree the median was not reached")
+        return finding(
+            "DEFECT", group, "displayed median", shown["raw"], python_value,
+            "Figura displayed 'not reached'; Python computed a value")
+    if python_value is None:
+        return finding(
+            "DEFECT", group, "displayed median", shown["raw"], "not reached",
+            "Figura displayed a value; Python reports the median as not "
+            "reached")
+    rendered = format_median_km(python_value)
+    rendered_phrase = f"{group} {rendered}"
+    if rendered == f"{shown['value']:.1f}":
+        return finding("PASS", group, "displayed median", shown["raw"],
+                       rendered_phrase, "Python's value through Figura's "
+                       "display rule is the identical string")
+    if display_agrees_km(python_value, shown["value"]):
+        return finding(
+            "DISPLAY_ARTIFACT", group, "displayed median", shown["raw"],
+            rendered_phrase, "values agree to within half a display step; "
+            "the rendered strings differ")
+    return finding(
+        "DEFECT", group, "displayed median", shown["raw"], rendered_phrase,
+        "displayed values disagree by more than a rounding boundary")
+
+
+def classify_km_logrank_display(shown_text, python_p) -> dict:
+    """The displayed log-rank p-phrase, Path A vs Path B."""
+    if shown_text is None:
+        return finding(
+            "MISSING_QUANTITY", "-", "displayed logrank", None, python_p,
+            "the displayed text carries no log-rank phrase")
+    if python_p is None:
+        return finding(
+            "MISSING_QUANTITY", "-", "displayed logrank", shown_text, None,
+            "no Path B log-rank p to compare against the displayed text")
+    rendered = format_p_km(python_p)
+    if rendered == shown_text:
+        return finding(
+            "PASS", "-", "displayed logrank", shown_text, rendered,
+            "Python's log-rank p through Figura's display rule is the "
+            "identical string")
+    # Mirrors addendum 6 above: a differing p-part is never a display
+    # artifact, so there is no "close enough" leniency here at all.
+    return finding(
+        "DEFECT", "-", "displayed logrank", shown_text, rendered,
+        "the log-rank p-value part differs; a p disagreement is never a "
+        "display artifact")
+
+
+def compare_km_summary(case, figura, exact, python):
+    """The full km_summary branch: counts, curve, medians, log-rank p (exact
+    tier), and the displayed methods-sentence median/log-rank clauses
+    (display tier)."""
+    findings = []
+    compared = 0
+    targets = _Targets(case.get("exact_targets") or [])
+
+    # -- counts. Same shape/severity as compare_ratio_table's own count loop.
+    for key in ("n", "n_event", "n_dropped"):
+        a, b = exact.get(key), python.get(key)
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", key, a, b,
+                f"{missing} did not report {key}; the count could not be "
+                "compared"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        targets.credit(key)
+        if a != b:
+            findings.append(finding(
+                "COUNT_MISMATCH", "-", key, a, b,
+                "the two paths analysed different rows"))
+
+    # -- exact tier: curve. The strongest check available for KM — it
+    # compares the entire step function, not just a headline number.
+    exact_curve = exact.get("curve") or {}
+    python_curve = python.get("curve") or {}
+    if not exact_curve:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "curve", None, None,
+            "Path A's harvest carried no curve to compare"))
+    if not python_curve:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "curve", None, None,
+            "Path B produced no curve to compare"))
+    for group in sorted(set(exact_curve) | set(python_curve)):
+        a_points = {p["t"]: p for p in exact_curve.get(group, [])}
+        b_points = {p["t"]: p for p in python_curve.get(group, [])}
+        # Symmetric: a Path B time with no Path A match, AND a Path A time
+        # with no Path B match, are both MISSING_QUANTITY — never a silent
+        # skip in either direction (addendum 4).
+        for t in sorted(set(a_points) | set(b_points)):
+            ap, bp = a_points.get(t), b_points.get(t)
+            if ap is None or bp is None:
+                missing = "Path A" if ap is None else "Path B"
+                findings.append(finding(
+                    "MISSING_QUANTITY", group, f"curve t={t:g}", ap, bp,
+                    f"{missing} has no curve point at this time"))
+                continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+            # surv and at_risk are two independent pieces of evidence about
+            # the same point; each is compared and credited on its own.
+            compared += 1
+            targets.credit("curve")
+            if not close_enough(ap["surv"], bp["surv"]):
+                findings.append(finding(
+                    "DEFECT", group, f"S(t={t:g})", ap["surv"], bp["surv"],
+                    "survival estimate disagrees"))
+            compared += 1
+            targets.credit("curve")
+            if ap["at_risk"] != bp["at_risk"]:
+                findings.append(finding(
+                    "DEFECT", group, f"at_risk(t={t:g})", ap["at_risk"],
+                    bp["at_risk"], "number at risk disagrees"))
+
+    # -- exact tier: median survival per group. Addendum: both-not-reached
+    # (both None) is a real agreement (PASS, no finding); one-sided
+    # not-reached is a DEFECT, never smoothed over as a display artifact.
+    exact_medians = exact.get("medians") or {}
+    python_medians = python.get("medians") or {}
+    if not exact_medians:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "median_survival", None, None,
+            "Path A's harvest carried no medians to compare"))
+    if not python_medians:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "median_survival", None, None,
+            "Path B produced no medians to compare"))
+    for group in sorted(set(exact_medians) | set(python_medians)):
+        if group not in exact_medians or group not in python_medians:
+            missing = "Path A" if group not in exact_medians else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", group, "median_survival",
+                exact_medians.get(group), python_medians.get(group),
+                f"{missing} has no median for this group"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        a, b = exact_medians[group], python_medians[group]
+        compared += 1
+        targets.credit("median_survival")
+        if a is None and b is None:
+            pass  # both not-reached: a real agreement, not a hole.
+        elif a is None or b is None:
+            findings.append(finding(
+                "DEFECT", group, "median_survival", a, b,
+                "one path reports the median as not reached, the other a "
+                "value"))
+        elif not close_enough(a, b):
+            findings.append(finding(
+                "DEFECT", group, "median_survival", a, b,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+
+    # -- exact tier: log-rank p.
+    lr_a, lr_b = exact.get("logrank_p"), python.get("logrank_p")
+    if lr_a is None or lr_b is None:
+        missing = "Path A" if lr_a is None else "Path B"
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "logrank_p", lr_a, lr_b,
+            f"{missing} did not report a log-rank p-value"))
+    else:
+        compared += 1
+        targets.credit("logrank_p")
+        if not close_enough(lr_a, lr_b):
+            findings.append(finding(
+                "DEFECT", "-", "logrank_p", lr_a, lr_b,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+
+    # -- display tier. Path B's own numbers, pushed through Figura's real
+    # display rule (format_p_km/format_median_km), string-compared against
+    # what the screen actually showed. Independent of the exact tier above —
+    # run over the SAME group union so a Path B absence is flagged here too,
+    # exactly as compare_ratio_table's display loop independently flags it
+    # alongside its own exact-tier MISSING_QUANTITY.
+    text = figura.get("text")
+    if not isinstance(text, str):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed text", text, None,
+            "Path A's displayed artifact has no `text` field to parse"))
+        text = ""
+    for group in sorted(set(exact_medians) | set(python_medians)):
+        shown = parse_km_group_median(text, group)
+        if shown is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", group, "displayed median", None,
+                python_medians.get(group),
+                "the displayed text carries no median phrase for this "
+                "group"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        if group not in python_medians:
+            findings.append(finding(
+                "MISSING_QUANTITY", group, "displayed median", shown["raw"],
+                None, "no Path B median for this group"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        f = classify_km_median_display(group, shown, python_medians[group])
+        if f["code"] != "PASS":
+            findings.append(f)
+
+    shown_logrank = parse_km_logrank(text)
+    if shown_logrank is None:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed logrank", None, lr_b,
+            "the displayed text carries no log-rank phrase"))
+    elif lr_b is None:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed logrank", shown_logrank,
+            None, "no Path B log-rank p to compare against the displayed "
+            "text"))
+    else:
+        compared += 1
+        f = classify_km_logrank_display(shown_logrank, lr_b)
+        if f["code"] != "PASS":
+            findings.append(f)
+
+    findings.extend(targets.findings())
+    return findings, compared, targets
+
+
 # Per-kind dispatch. Registering a kind is the ONLY way to compare it: an
 # unregistered kind stops loudly rather than being waved through as "nothing
 # to compare", which would publish a green result backed by zero evidence.
-KIND_HANDLERS = {"ratio_table": compare_ratio_table}
+KIND_HANDLERS = {"ratio_table": compare_ratio_table, "km_summary": compare_km_summary}
 
 PENDING_KINDS = {
-    "km_summary": "Task 9 (Kaplan-Meier)",
     "gc_summary": "Task 10 (group comparison)",
     "table1": "Task 11 (Table 1 / summary)",
 }
