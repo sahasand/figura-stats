@@ -2,9 +2,9 @@
   "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
   "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.",
   "date": "2026-07-26",
-  "commit": "c2b74c867a07ceb9cb0a2afb805931b3f621dfdd",
+  "commit": "ca00c72b762b321bb16b542b0ee13c0e4cb50e7b",
   "native_digest": "sha256:84ff81841c6f40f96b50315501610c8cd0607122f042b6cf7af5053026305038",
-  "web_digest": "sha256:fcefbb4fda4f4d15918ae0ee5af3fc5b97265e7e324650719c65838ee8f6609c",
+  "web_digest": "sha256:a762b8f550b0b733f740f068cab21f2174fdb04071d418ef8de3b6b69a28d1f7",
   "web_files": 50,
   "cases": [
     {
