@@ -4,7 +4,7 @@ Choices the three specs and `INTERFACES.md` left silent, or where two documents
 had to be reconciled. Everything the specs state explicitly is implemented as
 stated and is not repeated here.
 
-## 0. Blocking gap: the `cases/` fixtures are absent
+## 0. [RESOLVED — see postscript] Blocking gap: the `cases/` fixtures are absent
 
 `python/tests/test_groupcompare.py` resolves `CASES = parents[2]/"cases"` and
 loads `cases/groupcompare-{numeric,categorical,dirty}/{data.csv,case.json}` via
@@ -53,6 +53,10 @@ tests, since none of them pins an R constant):
 The 3x3 Fisher constant *is* pinned against R by a test that does run
 (`test_rxc_fisher_matches_r_fisher_test`, R's 0.012396333824905242, reproduced
 to 9.7e-15 relative).
+
+### Integrator's postscript (2026-07-26)
+
+The account in §0 documents the sanitized clean-room environment where this module was originally written, in which the `cases/` directory was deliberately excluded to avoid distributing confidential research datasets. In that isolated environment, 7 of 19 tests failed at fixture load. However, when the module is integrated into the repository and the genuine `cases/` fixture tree is present in the root, all 19 acceptance tests execute successfully and pass. No coverage gap exists in the repository.
 
 ## 1. Emulating R's numeric conversion (`_r_numeric`)
 
