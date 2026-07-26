@@ -3,7 +3,7 @@
     {
       "id": "logistic-confounding",
       "kind": "ratio_table",
-      "compared": 35,
+      "compared": 44,
       "passed": true,
       "targets_met": true,
       "targets": {
@@ -12,21 +12,20 @@
         "adjusted_p": 4,
         "n": 1,
         "n_event": 1,
-        "n_dropped": 1
+        "n_dropped": 1,
+        "c_statistic": 1,
+        "vif_note": 1,
+        "epv_note": 1,
+        "cooks_note": 1,
+        "separation_note": 1
       },
-      "deferred_targets": [
-        "c_statistic",
-        "vif_note",
-        "epv_note",
-        "cooks_note",
-        "separation_note"
-      ],
+      "deferred_targets": [],
       "findings": []
     },
     {
       "id": "cox-adjusted",
       "kind": "ratio_table",
-      "compared": 19,
+      "compared": 28,
       "passed": true,
       "targets_met": true,
       "targets": {
@@ -35,14 +34,13 @@
         "adjusted_p": 2,
         "n": 1,
         "n_event": 1,
-        "n_dropped": 1
+        "n_dropped": 1,
+        "zph": 1,
+        "ph_note": 2,
+        "epv_note": 1,
+        "separation_note": 1
       },
-      "deferred_targets": [
-        "zph",
-        "ph_note",
-        "epv_note",
-        "separation_note"
-      ],
+      "deferred_targets": [],
       "findings": []
     },
     {
@@ -110,7 +108,7 @@
     {
       "id": "logistic-dirty",
       "kind": "ratio_table",
-      "compared": 37,
+      "compared": 46,
       "passed": false,
       "targets_met": true,
       "targets": {
@@ -119,15 +117,14 @@
         "adjusted_p": 4,
         "n": 1,
         "n_event": 1,
-        "n_dropped": 1
+        "n_dropped": 1,
+        "c_statistic": 1,
+        "vif_note": 1,
+        "epv_note": 1,
+        "cooks_note": 1,
+        "separation_note": 1
       },
-      "deferred_targets": [
-        "c_statistic",
-        "vif_note",
-        "epv_note",
-        "cooks_note",
-        "separation_note"
-      ],
+      "deferred_targets": [],
       "findings": [
         {
           "code": "COUNT_MISMATCH",
@@ -207,6 +204,16 @@
           "figura": "3.30 (1.66\u20136.55, p<0.001)",
           "python": "3.34 (1.68\u20136.67, p<0.001)",
           "note": "the exported .R does not reproduce the adjusted cell the screen showed",
+          "source": "screen vs exported script"
+        },
+        {
+          "code": "SCRIPT_DIVERGENCE",
+          "disposition": "defect",
+          "term": "-",
+          "quantity": "exported script C-statistic",
+          "figura": "Overall model discrimination: apparent (in-sample) C-statistic = 0.69.",
+          "python": "C-statistic = 0.68.",
+          "note": "the exported .R's C-statistic does not reproduce the value the screen showed",
           "source": "screen vs exported script"
         },
         {
@@ -408,6 +415,16 @@
           "python": 0.0006624343383404345,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
+        },
+        {
+          "code": "DEFECT",
+          "disposition": "defect",
+          "term": "-",
+          "quantity": "c_statistic",
+          "figura": 0.682656449553001,
+          "python": 0.6866452324967609,
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         }
       ]
     },
@@ -426,6 +443,6 @@
       "findings": []
     }
   ],
-  "total_compared": 298,
-  "total_findings": 28
+  "total_compared": 325,
+  "total_findings": 30
 }

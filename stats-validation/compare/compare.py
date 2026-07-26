@@ -648,7 +648,11 @@ class _Targets:
 # Delete the entries when validate/logistic.py and validate/cox.py return their
 # diagnostics blocks — that is the whole activation step, and the acceptance
 # tests in python/tests/ are already red until then.
-PENDING_PATH_B_DIAGNOSTICS = {"logistic", "cox"}
+#
+# ACTIVATED (task A14): both modules now return `diagnostics` (clean-room; see
+# python/DECISIONS-diagnostics.md), so the gate is empty and every case's
+# diagnostics comparison runs for real.
+PENDING_PATH_B_DIAGNOSTICS = set()
 
 # exact_targets discharged ONLY by the diagnostics block, per figure. Used to
 # mark them deferred while the block is; nothing else keys off it.

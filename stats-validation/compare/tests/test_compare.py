@@ -80,6 +80,27 @@ TSV = "\n".join([
 ]) + "\n\nMultivariable logistic regression (n = 320, 91 events)."
 
 
+# The real methods sentence R/logistic.R appends once the advisory diagnostics
+# are activated (task A14), reproduced character for character from a live run
+# of the shipped logistic-confounding case — same string `_base_diag()` below
+# uses. `_base()` carries it (not the bare "Multivariable logistic regression
+# (n = 320, 91 events)." sentence) because Path B's `diagnostics` block is no
+# longer optional: PENDING_PATH_B_DIAGNOSTICS is empty, so EVERY logistic case
+# — including this one, the shared "everything agrees" fixture ~90 other tests
+# build on — goes through the advisory-diagnostics comparison for real. A
+# `_base()` with no `diagnostics` key would not be an agreeing fixture at all;
+# it would publish a stray MISSING_QUANTITY on every test built on it.
+_BASE_L_METHODS = (
+    "Multivariable logistic regression (n = 320, 91 events) adjusted for arm, "
+    "age. Unadjusted odds ratios are from single-covariate models; adjusted "
+    "odds ratios are from the joint model. Overall model discrimination: "
+    "apparent (in-sample) C-statistic = 0.68. 13 observation(s) were flagged "
+    "as influential (Cook's distance > 4/n); inspect them for data-entry "
+    "errors."
+)
+_BASE_L_C_STAT = 0.683502087432218
+
+
 def _base():
     """A case whose three artifacts agree everywhere. Real Figura numbers."""
     case = {
@@ -96,7 +117,11 @@ def _base():
             "adjusted_or", "adjusted_ci", "adjusted_p", "n", "n_event", "n_dropped",
         ],
     }
-    figura = {"id": "c1", "text": TSV, "code": "# script"}
+    figura = {
+        "id": "c1",
+        "text": TSV.split("\n\n")[0] + "\n\n" + _BASE_L_METHODS,
+        "code": "# script",
+    }
     exact_terms = {
         "armNew treatment": {
             "est": 0.504705489501454, "se": 0.300877969145577,
@@ -112,6 +137,7 @@ def _base():
     exact = {
         "id": "c1", "figure": "logistic", "terms": copy.deepcopy(exact_terms),
         "n": 320, "n_event": 91, "n_dropped": 0,
+        "diagnostics": {"c_statistic": _BASE_L_C_STAT},
     }
     unadjusted = {
         "armNew treatment": {
@@ -134,6 +160,20 @@ def _base():
             "age": copy.deepcopy(unadjusted["age"]),
         },
         "n": 320, "n_event": 91, "n_dropped": 0, "c_statistic": 0.6812,
+        # Matches the text above: C-statistic fires and agrees, VIF/EPV/
+        # separation are silent (one continuous covariate, ample events, no
+        # unreportable cell), and Cook's fires with the count the sentence
+        # names — the same shape `_base_diag()` below pins explicitly.
+        "diagnostics": {
+            "c_statistic": _BASE_L_C_STAT,
+            "vif": None,               # one continuous covariate: never computed
+            "vif_triggered": False,
+            "epv": 22.75,
+            "epv_triggered": False,
+            "cooks_influential": 13,
+            "cooks_triggered": True,
+            "separation_caution": False,
+        },
     }
     return case, figura, exact, python
 
@@ -411,8 +451,12 @@ def test_the_agreeing_fixture_passes_everything(tmp_path):
     assert report["findings"] == []
     assert report["passed"] is True
     assert report["targets_met"] is True
-    # 3 counts + 4 displayed cells + 2 terms x 5 exact quantities + 2 script cells
-    assert report["compared"] == 19
+    # 3 counts + 4 displayed cells + 2 terms x 5 exact quantities + 2 script
+    # cells (19) + the advisory-diagnostics block, now active for real: C-stat
+    # note+value (2), VIF note (1), EPV note (1), Cook's note+value (2),
+    # separation note (1), C-stat exact tier (1), C-stat script tier (1) = 9.
+    # 19 + 9 = 28.
+    assert report["compared"] == 28
 
 
 def test_count_mismatch_when_both_sides_present_and_unequal(tmp_path):
@@ -559,8 +603,8 @@ def test_a_malformed_display_cell_is_not_credited_as_a_comparison(tmp_path):
     hits = [f for f in _by_code(report, "MISSING_QUANTITY")
             if f["quantity"] == "displayed adjusted cell"]
     assert len(hits) == 1 and hits[0]["term"] == "age"
-    # 19 in the agreeing fixture: the uncomparable cell must not be counted.
-    assert report["compared"] == 18
+    # 28 in the agreeing fixture: the uncomparable cell must not be counted.
+    assert report["compared"] == 27
 
 
 # --------------------------------------------------------------------------
@@ -2233,46 +2277,26 @@ def test_t1_tier_sources(tmp_path):
 # ==========================================================================
 # the advisory diagnostics (task A14)
 #
-# The base fixture below AGREES everywhere, like every other base fixture in
-# this file, and it is the one that ACTIVATES the diagnostics block: the block
-# is deferred while Path B publishes no `diagnostics` key at all
-# (PENDING_PATH_B_DIAGNOSTICS), which is why the `_base()` fixture at the top of
-# this file — and every test built on it — is untouched by any of this.
+# ACTIVATED: PENDING_PATH_B_DIAGNOSTICS is now empty (both validate/logistic.py
+# and validate/cox.py return a `diagnostics` block — see
+# python/DECISIONS-diagnostics.md), so the comparison always runs for real and
+# `_base()` at the top of this file already carries a full, agreeing
+# diagnostics story of its own — see the comment there. `_base_diag()` layers
+# only the exact_targets declarations on top, so `targets_met`/
+# `deferred_targets` can be exercised without widening the contract every
+# other `_base()`-derived test in this file relies on.
 #
 # The displayed sentences are R/logistic.R's and R/cox.R's real sprintf output,
-# reproduced character for character (the C-statistic and Cook's clauses below
-# are copied from a live run of the shipped logistic-confounding case, the
-# proportional-hazards clause from cox-adjusted).
+# reproduced character for character (the C-statistic and Cook's clauses are
+# copied from a live run of the shipped logistic-confounding case, the
+# proportional-hazards clause from cox-adjusted) — same strings `_base()`
+# uses, via _BASE_L_METHODS/_BASE_L_C_STAT.
 # ==========================================================================
-
-_L_METHODS = (
-    "Multivariable logistic regression (n = 320, 91 events) adjusted for arm, "
-    "age. Unadjusted odds ratios are from single-covariate models; adjusted "
-    "odds ratios are from the joint model. Overall model discrimination: "
-    "apparent (in-sample) C-statistic = 0.68. 13 observation(s) were flagged "
-    "as influential (Cook's distance > 4/n); inspect them for data-entry "
-    "errors."
-)
-
-_L_C_STAT = 0.683502087432218
-
 
 def _base_diag():
     case, figura, exact, python = _base()
-    figura["text"] = TSV.split("\n\n")[0] + "\n\n" + _L_METHODS
     case["exact_targets"] = case["exact_targets"] + [
         "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"]
-    exact["diagnostics"] = {"c_statistic": _L_C_STAT}
-    python["diagnostics"] = {
-        "c_statistic": _L_C_STAT,
-        "vif": None,               # one continuous covariate: never computed
-        "vif_triggered": False,
-        "epv": 22.75,
-        "epv_triggered": False,
-        "cooks_influential": 13,
-        "cooks_triggered": True,
-        "separation_caution": False,
-    }
     return case, figura, exact, python
 
 
@@ -2312,36 +2336,26 @@ def test_the_agreeing_diagnostics_fixture_passes_everything(tmp_path):
         assert report["targets"][target] > 0, target
 
 
-def test_diagnostics_are_deferred_while_path_b_has_no_block(tmp_path):
-    """The clean-room gate. No `diagnostics` key on Path B -> the block does not
-    run, its targets are published as DEFERRED rather than failed, and nothing
-    else about the case changes."""
-    report = _run_diag(tmp_path, lambda c, f, e, p: p.pop("diagnostics"))
-    assert report["findings"] == []
-    assert report["deferred_targets"] == [
-        "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"]
-    # the deferred targets are not silently credited either
-    assert "c_statistic" not in report["targets"]
-    assert "logistic" in PENDING_PATH_B_DIAGNOSTICS
+def test_diagnostics_are_no_longer_pending_for_logistic_or_cox():
+    """`logistic` and `cox` used to be announced as deferred "until Path B
+    publishes its `diagnostics` contract". Both landed (task A14's clean-room
+    half; see python/DECISIONS-diagnostics.md) — mirrors
+    test_table1_is_no_longer_a_pending_kind's precedent for PENDING_KINDS."""
+    assert PENDING_PATH_B_DIAGNOSTICS == set()
 
 
-def test_targets_met_and_deferred_targets_are_published_together(tmp_path):
-    """The real logistic-confounding/cox-adjusted shape: a case declares BOTH
-    a met, non-deferred target (`_base()`'s adjusted_or/n/n_event/...) and
-    diagnostics targets that are all deferred while Path B has no
-    `diagnostics` block. `targets_met` reads True here — deferred targets are
-    deliberately excluded from that computation, since a deferred target is
-    neither met nor failed — so a machine consumer reading `targets_met`
-    alone would see "true" and miss that five targets were never checked.
-    `deferred_targets` is published in the SAME dict for exactly this reason:
-    it is always present (see compare_case), never conditional on whether it
-    is empty, so the qualification sits right next to the claim it
-    qualifies."""
+def test_absent_diagnostics_block_is_no_longer_deferred(tmp_path):
+    """Post-activation mirror of the old deferral test this replaces: an
+    absent `diagnostics` key on Path B is no longer read as "not implemented
+    yet" for logistic — it is a real coverage failure, same as the malformed-
+    value cases below (empty dict / None / [] / "oops")."""
     report = _run_diag(tmp_path, lambda c, f, e, p: p.pop("diagnostics"))
-    assert report["targets_met"] is True
-    assert "deferred_targets" in report
-    assert report["deferred_targets"] == [
-        "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"]
+    assert report["deferred_targets"] == []
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["targets_met"] is False
+    # the unmet target is published (declared, not deferred) but not silently
+    # credited: zero comparisons were actually performed for it.
+    assert report["targets"]["c_statistic"] == 0
 
 
 def test_a_present_but_empty_diagnostics_block_is_not_deferred(tmp_path):
@@ -2635,12 +2649,14 @@ def test_cox_epv_note_carries_no_number_only_a_state(tmp_path):
     assert report["findings"] == []
 
 
-def test_cox_diagnostics_are_deferred_while_path_b_has_no_block(tmp_path):
+def test_absent_cox_diagnostics_block_is_no_longer_deferred(tmp_path):
+    """Cox's twin of test_absent_diagnostics_block_is_no_longer_deferred: the
+    deferral gate is shared code (`compare_ratio_table`), and PENDING_PATH_B_
+    DIAGNOSTICS is empty for both figures now, not just logistic."""
     report = _run_cox_diag(tmp_path, lambda c, f, e, p: p.pop("diagnostics"))
-    assert report["findings"] == []
-    assert report["deferred_targets"] == ["zph", "ph_note", "epv_note",
-                                          "separation_note"]
-    assert "cox" in PENDING_PATH_B_DIAGNOSTICS
+    assert report["deferred_targets"] == []
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["targets_met"] is False
 
 
 @pytest.mark.parametrize("bogus", [None, [], "oops"])
