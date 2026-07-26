@@ -31,9 +31,26 @@ from .logistic import fit_logistic
 RESULTS = Path(__file__).resolve().parents[2] / "results"
 
 # TODO(cox clean-room integration): once validate/cox.py lands (written from
-# stats-validation/spec/cox-adjusted.md), import fit_cox here and register it
-# as FITTERS["cox"] = fit_cox. Kept lazy/absent until then so this module
-# keeps importing cleanly with no cox.py on disk.
+# stats-validation/spec/cox-adjusted.md), wire it as an EXPLICIT branch in
+# run() below — do NOT just add it to FITTERS. The generic call site further
+# down assumes fit_logistic's shape: a single `roles["outcome"]` column, and
+# the positional order `(df, outcome, event_value, covariates, ref_levels,
+# increments)`. cox has no `outcome` role at all — it has `roles["time"]`
+# and `roles["status"]`, both required — and fit_cox's positional order is
+# `(df, time, status, event_value, covariates, ref_levels, increments)`
+# (INTERFACES.md). Registering FITTERS["cox"] = fit_cox unchanged would
+# KeyError on `roles["outcome"]` before fit_cox's arguments could ever line
+# up. The dispatch needs, roughly:
+#
+#   if figure == "cox":
+#       from .cox import fit_cox
+#       out = fit_cox(df, case["roles"]["time"], case["roles"]["status"],
+#                     options["event_value"], covariates,
+#                     options.get("ref_levels", {}))
+#       ... (skip the generic FITTERS.get(figure) call below for this figure)
+#
+# Kept lazy/absent until then so this module keeps importing cleanly with no
+# cox.py on disk.
 FITTERS = {"logistic": fit_logistic}
 
 

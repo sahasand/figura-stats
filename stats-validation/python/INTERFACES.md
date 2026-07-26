@@ -51,14 +51,15 @@ Report all floats at full precision — never round inside the module.
 
 Report all floats at full precision — never round inside the module.
 
-**Numerical precision.** Cox's partial-likelihood optimum is found by
-Newton-Raphson, unlike logistic's IRLS — verified empirically (a throwaway
-solver run against both the real `cox-adjusted` case and a small heavily-tied
-fixture) that a correctly-Efron-fitted model can still land ~1e-5 relative
-from R's `survival::coxph` optimum on est/lo/hi/p at a solver's DEFAULT
-stopping tolerance — not a modelling error, just an under-converged fit. The
-exact tier's comparator gate (`compare.py`'s `REL_TOL`) is rel 1e-6, tighter
-than that observed noise floor, so a default-tolerance solver risks a false
-DEFECT there. Converge well past the default before returning: e.g.
-lifelines' `CoxPHFitter.fit(..., fit_options={"precision": 1e-11,
-"r_precision": 1e-13})` closed the same gap to ~1e-8 in the same check.
+**Numerical precision.** Cox's partial-likelihood optimum is found
+iteratively, unlike logistic's closed-form-per-step IRLS — verified
+empirically (a throwaway solver run against both the real `cox-adjusted`
+case and a small heavily-tied fixture) that a correctly-Efron-fitted model
+can still land ~1e-5 relative from R's `survival::coxph` optimum on
+est/lo/hi/p at a solver's default stopping tolerance — not a modelling
+error, just an under-converged fit. A default-tolerance solver therefore
+risks a false DEFECT: `stats-validation/python/tests/test_cox.py`'s
+tied-times acceptance test enforces rel 1e-6, the same tolerance the exact
+tier's comparator gate (`compare.py`'s `REL_TOL`) enforces. Converge well
+past whatever your solver's defaults are before returning — tightening the
+convergence criteria closed the same gap to ~1e-8 in the same check.

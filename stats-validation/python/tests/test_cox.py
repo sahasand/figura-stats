@@ -81,16 +81,25 @@ def test_n_dropped_counts_a_blank_covariate_cell():
 #    exp(coef +/- 1.96*se) — the spec's literal-1.96 rule, not confint()'s
 #    exact normal quantile.
 #
-# Tolerance is rel 1e-4, not the comparator's rel 1e-6 (compare.py's
-# REL_TOL): verified empirically (a throwaway lifelines.CoxPHFitter run
-# against this exact fixture, at its DEFAULT solver settings) that a
-# correctly-Efron-fitted Cox model can still land ~1e-5 relative from R's
-# optimum on est/lo/hi/p, purely from Newton-Raphson stopping-tolerance
-# differences between implementations — not a modelling error. 1e-4 is
-# ~40x looser than that observed noise floor yet ~50x tighter than the gap
-# a WRONG tie method produces (Breslow's est differs from Efron's by
-# roughly 0.5% here), so it still catches a real defect while tolerating a
-# solver's default precision. See INTERFACES.md's numerical-precision note.
+# Tolerance is rel 1e-6 — the same REL_TOL compare.py's exact tier enforces
+# (binding requirement) — not a looser one. Verified empirically on this
+# exact fixture with a throwaway lifelines.CoxPHFitter:
+#   - DEFAULT solver settings: only ~1e-5 relative from R's optimum on
+#     est/lo/hi/p (se lands ~2e-7), purely from Newton-Raphson
+#     stopping-tolerance differences between implementations — not a
+#     modelling error, but it WOULD fail rel 1e-6 here.
+#   - Tightly converged (fit_options={"precision": 1e-11,
+#     "r_precision": 1e-13, "max_steps": 1000}): every one of
+#     coef/se/p/est/lo/hi lands within rel 2.5e-12 to 5.4e-10 of R — three
+#     to nine orders of magnitude inside rel 1e-6. No quantity needs an
+#     exemption; the tolerance below is fully achievable when the
+#     implementation converges as INTERFACES.md's numerical-precision note
+#     requires. A WRONG tie method (Breslow instead of Efron) misses by
+#     roughly 0.5% on this fixture — ~5000x outside this tolerance — so the
+#     test still catches a real defect, and now also catches an
+#     under-converged solver, which is the point: rel 1e-6 forces the
+#     clean-room implementer to converge well past their library's
+#     defaults, exactly as INTERFACES.md warns them to.
 _TIED_TIME = [1, 5, 1, 1, 2, 4, 2, 2, 1, 8, 7, 8, 7, 4, 1, 5, 6, 4, 2, 2,
               7, 3, 1, 1, 3, 4, 5, 7, 5, 5, 4, 2, 4, 8, 3, 2, 1, 2, 8, 6]
 _TIED_STATUS = [1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1,
@@ -116,10 +125,10 @@ def _tied_frame():
 def test_tied_times_match_r_efron_at_full_precision():
     out = fit_cox(_tied_frame(), "time", "status", "1", ["arm"], {"arm": "A"})
     t = out["terms"]["armB"]
-    assert math.isclose(t["est"], _R_EST, rel_tol=1e-4)
-    assert math.isclose(t["se"], _R_SE, rel_tol=1e-4)
-    assert math.isclose(t["p"], _R_P, rel_tol=1e-4)
-    assert math.isclose(t["lo"], _R_LO, rel_tol=1e-4)
-    assert math.isclose(t["hi"], _R_HI, rel_tol=1e-4)
+    assert math.isclose(t["est"], _R_EST, rel_tol=1e-6)
+    assert math.isclose(t["se"], _R_SE, rel_tol=1e-6)
+    assert math.isclose(t["p"], _R_P, rel_tol=1e-6)
+    assert math.isclose(t["lo"], _R_LO, rel_tol=1e-6)
+    assert math.isclose(t["hi"], _R_HI, rel_tol=1e-6)
     assert out["n"] == 40
     assert out["n_event"] == 29

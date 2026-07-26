@@ -105,6 +105,22 @@ harvest_logistic <- function(env, id) {
 # frame with a 0/1 `status` column (both names come from .cox_script in
 # R/cox.R, verified against its `dat <- data.frame(time = ..., status = ...)`
 # and `fit <- coxph(Surv(time, status) ~ ..., data = dat)`).
+#
+# KNOWN DISPLAY NUANCE (cox only): ratio_terms() above derives lo/hi with the
+# literal 1.96, per the pinned convention this whole file follows. The APP's
+# own on-screen cell (.cox_hr_cell / .cox_rows in R/cox.R) instead calls
+# `stats::confint()` on the joint coxph fit, and `survival` defines no
+# `confint.coxph` method, so that call falls through to `confint.default`,
+# which uses the exact normal quantile qnorm(0.975) = 1.959963985 — not
+# 1.96. (Logistic has no such gap: R/logistic.R hand-computes its displayed
+# CI with the literal 1.96 directly.) The two z constants agree to ~1.8e-5
+# relative, almost always invisible after 2-dp rounding, but a bound sitting
+# right at a `.xx5` boundary can round to a different digit under each
+# constant — which would surface here as a spurious SCRIPT_DIVERGENCE
+# (compare.py's script tier does an exact string compare of this harvest's
+# rendered cell against the app's displayed cell). Do NOT change the literal
+# 1.96 here to "fix" that; see spec/cox-adjusted.md's "Known display
+# nuance" section.
 harvest_cox <- function(env, id) {
   fit <- need(env, "fit", id)
   dat <- need(env, "dat", id)
