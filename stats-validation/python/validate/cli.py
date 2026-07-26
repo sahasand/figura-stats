@@ -30,6 +30,10 @@ from .logistic import fit_logistic
 
 RESULTS = Path(__file__).resolve().parents[2] / "results"
 
+# TODO(cox clean-room integration): once validate/cox.py lands (written from
+# stats-validation/spec/cox-adjusted.md), import fit_cox here and register it
+# as FITTERS["cox"] = fit_cox. Kept lazy/absent until then so this module
+# keeps importing cleanly with no cox.py on disk.
 FITTERS = {"logistic": fit_logistic}
 
 
@@ -55,6 +59,14 @@ def display_label(term: str, covariates) -> str:
 def run(case_dir: str) -> dict:
     df, case = load_case(case_dir)
     figure = case["figure"]
+    if figure == "cox" and figure not in FITTERS:
+        # Explicit, self-documenting stop rather than falling through to the
+        # generic message below: cox is a REGISTERED figure (case.json,
+        # build-spec.mjs, this dispatch site) whose Path B implementation is
+        # simply not written yet — see the TODO above FITTERS.
+        raise SystemExit(
+            "Path B cox not yet present — validate/cox.py is written by the "
+            "clean-room agent from stats-validation/spec/cox-adjusted.md")
     fitter = FITTERS.get(figure)
     if fitter is None:
         raise SystemExit(

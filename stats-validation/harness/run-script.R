@@ -36,10 +36,6 @@
 # ratio_terms() below stops instead when a named column is absent.
 # ---------------------------------------------------------------------------
 
-args <- commandArgs(trailingOnly = TRUE)
-stopifnot(length(args) == 4L)
-id <- args[[1]]; figura_path <- args[[2]]; case_dir <- args[[3]]; out_path <- args[[4]]
-
 # ---- shared helpers -------------------------------------------------------
 
 # Write Figura's exported code to a temp file and source it into a clean
@@ -104,35 +100,76 @@ harvest_logistic <- function(env, id) {
        n_dropped = n_dropped_vs_csv(dat))
 }
 
-HARVESTERS <- list(logistic = harvest_logistic)
+# coxph: summary()$coefficients columns are "coef" / "se(coef)" / "Pr(>|z|)"
+# (NOT glm's "Estimate" / "Std. Error"). `dat` is the script's complete-case
+# frame with a 0/1 `status` column (both names come from .cox_script in
+# R/cox.R, verified against its `dat <- data.frame(time = ..., status = ...)`
+# and `fit <- coxph(Surv(time, status) ~ ..., data = dat)`).
+harvest_cox <- function(env, id) {
+  fit <- need(env, "fit", id)
+  dat <- need(env, "dat", id)
+  sm <- summary(fit)$coefficients
+  list(terms = ratio_terms(sm, "coef", "se(coef)", "Pr(>|z|)"),
+       n = nrow(dat),
+       n_event = sum(dat$status == 1),
+       n_dropped = n_dropped_vs_csv(dat))
+}
 
-# ---- run ------------------------------------------------------------------
+HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox)
+
+# ---- harvest orchestration -------------------------------------------------
 
 # Source and harvest with the case dir as the working directory; on.exit puts
 # the process back where it started so out_path stays repo-root relative.
 harvest_in_case_dir <- function(harvest, code, id, case_dir) {
   old <- setwd(case_dir)
   on.exit(setwd(old), add = TRUE)
-  harvest(source_export(code, id), id)
+  env <- source_export(code, id)
+  # A future harvester might only need counts and never touch `env`'s
+  # contents (e.g. a summary-only figure). Function arguments are lazy
+  # promises in R, so `harvest(env, id)` alone would let such a harvester
+  # skip sourcing the exported script entirely — and re-running that script
+  # is a correctness check in its own right (it is what proves the script
+  # the user downloaded still reproduces the model), independent of what
+  # gets harvested from it. force() makes the source_export() side effect
+  # unconditional, regardless of what the harvester goes on to read.
+  force(env)
+  harvest(env, id)
 }
 
-case <- jsonlite::fromJSON(file.path(case_dir, "case.json"), simplifyVector = TRUE)
-figure <- case$figure
-if (is.null(figure) || length(figure) != 1L || is.na(figure) || !nzchar(figure))
-  stop(sprintf("%s/case.json declares no `figure`", case_dir))
+# ---- run ------------------------------------------------------------------
+# Wrapped in main() so args/case/figure/... never become globalenv() bindings
+# themselves: source_export() sources the exported script with
+# parent = globalenv(), and a harness variable sitting in globalenv() would
+# be silently visible to that script's own lookups (e.g. if it happened to
+# reference a bare `id` or `case`) instead of raising "object not found" the
+# way a genuinely undefined name should. Only function defs (and the
+# HARVESTERS registry above) stay at top level.
+main <- function() {
+  args <- commandArgs(trailingOnly = TRUE)
+  stopifnot(length(args) == 4L)
+  id <- args[[1]]; figura_path <- args[[2]]; case_dir <- args[[3]]; out_path <- args[[4]]
 
-harvest <- HARVESTERS[[figure]]
-# Loud by design: a figure with no harvester must fail here, not be squeezed
-# through another figure's summary layout.
-if (is.null(harvest))
-  stop(sprintf("no harvester for figure: %s — added by its analysis task", figure))
+  case <- jsonlite::fromJSON(file.path(case_dir, "case.json"), simplifyVector = TRUE)
+  figure <- case$figure
+  if (is.null(figure) || length(figure) != 1L || is.na(figure) || !nzchar(figure))
+    stop(sprintf("%s/case.json declares no `figure`", case_dir))
 
-fj <- jsonlite::fromJSON(figura_path, simplifyVector = TRUE)
-payload <- c(list(id = id, figure = figure),
-             harvest_in_case_dir(harvest, fj$code, id, case_dir))
+  harvest <- HARVESTERS[[figure]]
+  # Loud by design: a figure with no harvester must fail here, not be squeezed
+  # through another figure's summary layout.
+  if (is.null(harvest))
+    stop(sprintf("no harvester for figure: %s — added by its analysis task", figure))
 
-# digits = NA is load-bearing: jsonlite truncates to 4 significant digits by
-# default, which would silently cap this file far below the precision the
-# comparison gate needs.
-jsonlite::write_json(payload, out_path, auto_unbox = TRUE, digits = NA, pretty = TRUE)
-cat(sprintf("wrote %s\n", out_path))
+  fj <- jsonlite::fromJSON(figura_path, simplifyVector = TRUE)
+  payload <- c(list(id = id, figure = figure),
+               harvest_in_case_dir(harvest, fj$code, id, case_dir))
+
+  # digits = NA is load-bearing: jsonlite truncates to 4 significant digits by
+  # default, which would silently cap this file far below the precision the
+  # comparison gate needs.
+  jsonlite::write_json(payload, out_path, auto_unbox = TRUE, digits = NA, pretty = TRUE)
+  cat(sprintf("wrote %s\n", out_path))
+}
+
+main()

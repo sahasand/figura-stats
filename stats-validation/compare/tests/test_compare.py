@@ -519,6 +519,22 @@ def test_a_case_with_no_exact_targets_is_never_targets_met(tmp_path):
     assert hits and "no coverage contract" in hits[0]["note"]
 
 
+def test_adjusted_hr_alias_credits_the_same_est_quantity_as_adjusted_or(tmp_path):
+    # Cox cases declare `adjusted_hr` where logistic cases declare
+    # `adjusted_or`; both alias to the same `est` quantity, so a Cox case's
+    # exact_targets contract is discharged by the identical comparison
+    # adjusted_or already performs — no Cox-specific wiring needed here.
+    def mutate(case, figura, exact, python):
+        case["exact_targets"] = [
+            "adjusted_hr" if t == "adjusted_or" else t
+            for t in case["exact_targets"]
+        ]
+    report = _run(tmp_path, mutate)
+    assert report["targets_met"] is True
+    assert report["targets"]["adjusted_hr"] > 0
+    assert "adjusted_or" not in report["targets"]
+
+
 def test_an_empty_exact_targets_list_is_treated_the_same(tmp_path):
     report = _run(tmp_path, lambda c, f, e, p: c.__setitem__("exact_targets", []))
     assert report["targets_met"] is False

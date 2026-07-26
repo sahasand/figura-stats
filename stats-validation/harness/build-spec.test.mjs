@@ -48,4 +48,22 @@ assert.ok(
   "unmapped column site_id must not cross into the spec"
 );
 
+// --- cox: the real case dir builds via the shipped buildCoxSpec, with the
+// correct roles/event/refs and narrowed data (no increments arg — verified
+// against web/guided/cox/spec.js's real export signature).
+const coxSpec = await buildSpecForCase("stats-validation/cases/cox-adjusted");
+
+assert.equal(coxSpec.figure, "cox");
+assert.equal(coxSpec.roles.time, "followup_months");
+assert.equal(coxSpec.roles.status, "status");
+assert.deepEqual(coxSpec.roles.covariates, ["arm", "age"]);
+assert.equal(coxSpec.options.event_value, "Death");
+assert.deepEqual(coxSpec.options.ref_levels, { arm: "Standard care" });
+assert.ok(Array.isArray(coxSpec.data), "cox spec data must be an array of row objects");
+assert.ok(coxSpec.data.length > 0, "cox spec data must not be empty");
+assert.deepEqual(
+  Object.keys(coxSpec.data[0]).sort(),
+  ["age", "arm", "followup_months", "status"].sort()
+);
+
 console.log("build-spec.test.mjs ok");

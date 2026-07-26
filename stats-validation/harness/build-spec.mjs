@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCsv } from "../../web/lib/csv.js";
 import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
+import { buildCoxSpec } from "../../web/guided/cox/spec.js";
 
 const BUILDERS = {
   logistic: (table, c) =>
@@ -13,6 +14,15 @@ const BUILDERS = {
       c.options.event_value,
       c.options.ref_levels || {},
       c.options.increments || {},
+      { source_filename: "data.csv" }
+    ),
+  cox: (table, c) =>
+    buildCoxSpec(
+      table,
+      { time: c.roles.time, status: c.roles.status,
+        covariates: c.roles.covariates },
+      c.options.event_value,
+      c.options.ref_levels || {},
       { source_filename: "data.csv" }
     ),
 };

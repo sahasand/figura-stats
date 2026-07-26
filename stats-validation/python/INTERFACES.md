@@ -36,3 +36,29 @@ call signatures and return shapes the harness and comparator depend on.
   per the spec's Reportability rule.
 
 Report all floats at full precision — never round inside the module.
+
+## validate/cox.py
+
+- `fit_cox(df, time, status, event_value, covariates, ref_levels,
+  increments=None) -> dict` with keys:
+  - `terms`: `{term: {est, se, lo, hi, p}}` — adjusted (joint-model) hazard
+    ratios on the ratio scale. `se` is REQUIRED — the raw log-scale standard
+    error. Term naming is identical to `fit_logistic`: continuous covariate
+    → the column name; categorical level → column name immediately followed
+    by the level string (e.g. `armNew treatment`).
+  - `unadjusted`: same shape, one univariable Cox model per covariate.
+  - `n`, `n_event`, `n_dropped`: integers.
+
+Report all floats at full precision — never round inside the module.
+
+**Numerical precision.** Cox's partial-likelihood optimum is found by
+Newton-Raphson, unlike logistic's IRLS — verified empirically (a throwaway
+solver run against both the real `cox-adjusted` case and a small heavily-tied
+fixture) that a correctly-Efron-fitted model can still land ~1e-5 relative
+from R's `survival::coxph` optimum on est/lo/hi/p at a solver's DEFAULT
+stopping tolerance — not a modelling error, just an under-converged fit. The
+exact tier's comparator gate (`compare.py`'s `REL_TOL`) is rel 1e-6, tighter
+than that observed noise floor, so a default-tolerance solver risks a false
+DEFECT there. Converge well past the default before returning: e.g.
+lifelines' `CoxPHFitter.fit(..., fit_options={"precision": 1e-11,
+"r_precision": 1e-13})` closed the same gap to ~1e-8 in the same check.

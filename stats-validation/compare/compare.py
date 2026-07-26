@@ -88,6 +88,7 @@ SEVERITY = ["COUNT_MISMATCH", "MISSING_QUANTITY", "SCRIPT_DIVERGENCE",
 # credits is a hole in the guarantee, not a pass.
 TARGET_QUANTITIES = {
     "adjusted_or": ("est",),
+    "adjusted_hr": ("est",),  # Cox's name for the same ratio-scale estimate
     "adjusted_ci": ("lo", "hi", "se"),
     "adjusted_p": ("p",),
     "n": ("n",),
