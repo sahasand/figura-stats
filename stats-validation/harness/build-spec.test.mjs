@@ -99,4 +99,50 @@ assert.equal(kmSpec.options.source_roles.group, "group");
 assert.equal(kmSpec.options.source_roles.event, "Death");
 assert.equal(kmSpec.options.source_filename, "data.csv");
 
+// --- groupcompare: three cases, one per branch the analysis routes on.
+// buildGroupCompareSpec's real signature is (table, roles, options) — three
+// arguments, no event value and no reference levels (verified against
+// web/guided/groupcompare/spec.js), and it returns the FLAT spec like
+// buildLogisticSpec/buildCoxSpec, not km's { dropped, spec }.
+for (const [id, outcome] of [
+  ["groupcompare-numeric", "biomarker_normal"],
+  ["groupcompare-categorical", "responder"],
+  ["groupcompare-dirty", "site_code"],
+]) {
+  const gc = await buildSpecForCase(`stats-validation/cases/${id}`);
+  assert.equal(gc.figure, "groupcompare", `${id}: figure`);
+  assert.equal(gc.roles.group, "arm", `${id}: group role`);
+  assert.equal(gc.roles.outcome, outcome, `${id}: outcome role`);
+  assert.equal(gc.options.plot, "box", `${id}: plot option`);
+  assert.equal(gc.options.test, "auto", `${id}: test option`);
+  assert.equal(gc.options.source_filename, "data.csv", `${id}: source filename`);
+  assert.ok(Array.isArray(gc.data) && gc.data.length === 150, `${id}: 150 rows`);
+  // No-egress narrowing, for real: every one of these fixtures carries
+  // columns that are NOT mapped roles (los_skewed/responder/biomarker_normal),
+  // so a builder that returned raw rows would leak them here.
+  assert.deepEqual(
+    Object.keys(gc.data[0]).sort(), ["arm", outcome].sort(),
+    `${id}: spec rows must carry only the two mapped role columns`
+  );
+}
+
+// The dirty case specifically: the shipped parseCsv must have absorbed the
+// CRLF line endings and trimmed the padded cells BEFORE the spec was built —
+// this is what makes R's numeric type detection see "01" rather than " 01\r",
+// and it is the difference between a Kruskal-Wallis and a chi-square.
+const dirty = await buildSpecForCase("stats-validation/cases/groupcompare-dirty");
+const codes = dirty.data.map((r) => r.site_code);
+assert.ok(codes.every((v) => !/[\r\n]/.test(v)),
+  "no CR/LF may survive into a dirty-case cell");
+assert.ok(codes.every((v) => v === v.trim()),
+  "every dirty-case site_code cell must arrive trimmed");
+assert.deepEqual([...new Set(codes)].sort(), ["", "01", "02", "03"],
+  "trimming must collapse the padded cells to exactly three codes plus blank");
+assert.equal(codes.filter((v) => v === "").length, 4,
+  "the dirty case must carry exactly four blank site_code cells");
+// The unmapped los_skewed column has blanks of its own; they must not be here
+// at all, let alone affect anything.
+assert.ok(!("los_skewed" in dirty.data[0]),
+  "unmapped column los_skewed must not cross into the spec");
+
 console.log("build-spec.test.mjs ok");

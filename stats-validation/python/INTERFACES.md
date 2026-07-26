@@ -87,3 +87,60 @@ convergence criteria closed the same gap to ~1e-8 in the same check.
     Population filter.
 
 Report all floats at full precision — never round inside the module.
+
+## validate/groupcompare.py
+
+- `compare_groups(df, outcome, group, nonparametric=None) -> dict` with keys:
+  - `test_name`: `str` — the app's own test-name string, verbatim, including
+    its EN DASHes: one of `"Welch t-test"`, `"Mann–Whitney U test"`,
+    `"one-way ANOVA (Welch)"`, `"Kruskal–Wallis test"`,
+    `"Pearson chi-square test"`, `"Fisher's exact test"`.
+  - `p_value`: `float` — the omnibus test's two-sided p-value.
+  - `statistic`: `float | None` — the chosen test's own statistic (`t`, `W`,
+    Welch `F`, tie-corrected `H`, or the UNCORRECTED Pearson chi-square).
+    **`None` for Fisher's exact test, which structurally has none** — R's
+    htest carries no `statistic` component there. Never substitute the
+    chi-square statistic in its place; the comparator encodes "a null
+    statistic is not-applicable for Fisher, and MISSING_QUANTITY for anything
+    else".
+  - `effect`: `{"label": str, "value": float, "lo": float | None,
+    "hi": float | None}` — value-plus-label, NOT a pre-rendered display
+    string; the comparator restates R's own `.fmt_num`/`.gc_ci_phrase`
+    formatting itself, so the effect is judged at full precision with a
+    display-artifact tier of its own. `label` is the app's own effect name,
+    verbatim, including its accent: `"Cohen's d"`, `"rank-biserial r"`,
+    `"eta-squared"`, `"epsilon-squared"`, `"Cramér's V"`. `lo`/`hi` are
+    `None` for exactly the two effects the app reports without an interval
+    (epsilon-squared and Cramér's V) and floats for the rest.
+  - `n_per_group`: `{group level: int}` — surviving groups only, keyed by the
+    literal group-column strings (never a synthetic or normalised label).
+  - `n`, `n_dropped`: integers. `n_dropped` is the TOTAL not analysed —
+    missing-value drops plus, in the numeric branch, rows in groups left with
+    fewer than two values.
+  - `posthoc`: `None`, or `{"test": str, "significant_pairs": [str, ...]}`.
+    `None` and `{"significant_pairs": []}` are DIFFERENT claims: `None` means
+    no post-hoc ran at all (fewer than three groups, or an omnibus p >= 0.05,
+    or the categorical branch, which never runs one), while an empty list
+    means one ran and no pair survived adjustment. Pair names follow the app's
+    two MUTUALLY OPPOSITE conventions — Tukey's `"<later>-<earlier>"`, from
+    R's own `TukeyHSD` row labels, and Dunn's `"<earlier>-<later>"`, from the
+    app's own pairing loop. Do not normalise them to one order.
+
+`nonparametric` is the parametric/non-parametric override: `None` runs the
+spec's routing rule, `True`/`False` force the branch. It is ignored entirely in
+the categorical branch, which has no such routing decision.
+
+Report all floats at full precision — never round inside the module.
+
+**No 2x2 odds ratio in this contract.** The app additionally displays an odds
+ratio beside Cramér's V when a categorical table is exactly 2x2. No shipped
+case is 2x2, and `compare_groups` does not report it; the comparator detects
+that clause in the displayed text and raises MISSING_QUANTITY rather than
+ignoring it, so adding such a case requires extending this contract first.
+
+**Fisher's exact test must be exact.** For r x c tables `scipy.stats.
+fisher_exact` runs a MONTE CARLO test (measured: two different answers from two
+calls on the identical 3x3 input, scipy 1.16.1) and cannot meet the 1e-6 exact
+tier. Enumerate the fixed-margin tables instead — an exhaustive enumeration was
+verified against R to within 1e-14 relative. The 2x2 path is genuinely exact
+and reproduces R.

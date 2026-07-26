@@ -224,7 +224,56 @@ harvest_km <- function(env, id) {
        n_dropped = n_dropped_vs_csv(dat))
 }
 
-HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox, km = harvest_km)
+# Group comparison. Verified against R/groupcompare.R's TWO script builders
+# (.gc_script_numeric and .gc_script_categorical) by generating and reading the
+# real exported script for all three gc cases before writing this: BOTH
+# branches assign exactly two objects this harvest needs, under the same two
+# names —
+#   `dat` — the complete-case frame, columns literally `value`/`group` (never
+#           the user's real column names, which appear only in the prep lines
+#           that BUILD dat). The numeric branch adds one further filter line
+#           (`dat[dat$group %in% names(which(table(dat$group) >= 2)), ]`); the
+#           categorical branch has no such line, mirroring .gc_categorical,
+#           which likewise never drops a small group. Either way `dat` is the
+#           frame the test actually ran on, so counts come from it, not from a
+#           re-derivation.
+#   `ht`  — the htest object from the ONE test the app selected and ran
+#           (oneway.test / kruskal.test / t.test / wilcox.test / chisq.test /
+#           fisher.test). `.gc_numeric`/`.gc_categorical` evaluate the SAME
+#           quoted expression they deparse into the script, so `ht` here is
+#           the same call, not a reconstruction.
+#
+# `ht$statistic` is present for five of the six tests (F / Kruskal-Wallis
+# chi-squared / t / W / X-squared) but **stats::fisher.test returns an htest
+# with NO `statistic` component at all** — Fisher's exact test has no test
+# statistic to report, it works directly on the hypergeometric probability of
+# the table. That is a structural property of the test, not a missing harvest,
+# so it is emitted as NA (-> JSON null via na = "null" in main()) and the
+# comparator encodes the matching rule: a null statistic is "not applicable"
+# for Fisher's exact test, and MISSING_QUANTITY for anything else.
+#
+# The post-hoc significant-pair set is deliberately NOT harvested: the
+# exported script only ever `cat()`s `.gc_posthoc(...)`'s sentence, never
+# assigns it, and the sentence is a DISPLAY artifact — the comparator checks
+# the pair set on the display tier (Path A's `text` vs Path B's
+# posthoc$significant_pairs) rather than re-running an embedded helper here.
+harvest_groupcompare <- function(env, id) {
+  ht <- need(env, "ht", id)
+  dat <- need(env, "dat", id)
+  counts <- table(dat$group)
+  list(test_p = unname(ht$p.value),
+       # unname(): R names the component after the test ("F", "X-squared",
+       # ...), which would serialise as a one-element named object instead of
+       # a bare number.
+       test_statistic = if (is.null(ht$statistic)) NA_real_
+                        else unname(ht$statistic),
+       n = nrow(dat),
+       n_per_group = as.list(setNames(as.integer(counts), names(counts))),
+       n_dropped = n_dropped_vs_csv(dat))
+}
+
+HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox,
+                   km = harvest_km, groupcompare = harvest_groupcompare)
 
 # ---- harvest orchestration -------------------------------------------------
 

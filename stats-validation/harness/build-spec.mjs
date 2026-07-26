@@ -6,6 +6,7 @@ import { parseCsv } from "../../web/lib/csv.js";
 import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
 import { buildCoxSpec } from "../../web/guided/cox/spec.js";
 import { buildKmSpec } from "../../web/guided/km/spec.js";
+import { buildGroupCompareSpec } from "../../web/guided/groupcompare/spec.js";
 
 const BUILDERS = {
   logistic: (table, c) =>
@@ -39,6 +40,22 @@ const BUILDERS = {
       { time_label: c.options.time_label, theme: c.options.theme,
         source_filename: "data.csv" }
     ).spec,
+  // buildGroupCompareSpec(table, roles, options) — verified against
+  // web/guided/groupcompare/spec.js's real 3-argument export signature (NOT
+  // logistic/cox/km's event-value + ref-levels shape: group comparison has no
+  // event value, no reference level, and no client-side recoding at all). It
+  // returns the FLAT spec, like logistic/cox and unlike km. `plot` and `test`
+  // are the two select values the real analyze form submits (defaults "box" /
+  // "auto"); they are passed through from case.json so a case can pin the
+  // parametric/non-parametric override instead of relying on the R-side
+  // `%||% "auto"` fallback.
+  groupcompare: (table, c) =>
+    buildGroupCompareSpec(
+      table,
+      { group: c.roles.group, outcome: c.roles.outcome },
+      { plot: c.options.plot, test: c.options.test,
+        source_filename: "data.csv" }
+    ),
 };
 
 export async function buildSpecForCase(caseDir) {

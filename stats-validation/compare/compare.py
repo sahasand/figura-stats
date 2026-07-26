@@ -56,6 +56,13 @@ DISPLAY_HALF_ULP = 0.5 * 10.0 ** -DISPLAY_DP
 KM_DISPLAY_DP = 1
 KM_DISPLAY_HALF_ULP = 0.5 * 10.0 ** -KM_DISPLAY_DP
 
+# Group comparison renders every number in its sentence through R's `.fmt_num`
+# (R/summarize.R): `format(signif(v, 3), scientific = FALSE, drop0trailing =
+# TRUE)`. That is SIGNIFICANT figures, not decimal places, so unlike the two
+# constants above there is no single half-display-step — the step depends on
+# the value's magnitude. See `gc_display_half_ulp`.
+GC_SIGNIF_DIGITS = 3
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 CASES = ROOT / "cases"
@@ -108,6 +115,11 @@ TARGET_QUANTITIES = {
     "median_survival": ("median_survival",),
     "logrank_p": ("logrank_p",),
     "curve": ("curve",),
+    # gc_summary's own targets, same self-naming convention as km_summary's.
+    # Both are credited by the EXACT tier only (figura-exact.json vs
+    # python.json), never by the display-tier text parse.
+    "test_p": ("test_p",),
+    "test_statistic": ("test_statistic",),
 }
 
 
@@ -924,13 +936,541 @@ def compare_km_summary(case, figura, exact, python):
     return findings, compared, targets
 
 
+# ---------------------------------------------------------------------------
+# gc_summary: group comparison's free-text methods sentence, checked against
+# R/groupcompare.R reality.
+#
+# fig_groupcompare emits one of two sentence shapes, verified by generating all
+# three real gc cases end to end:
+#
+#   numeric branch
+#     "<outcome> across groups: <per-group summaries>. <test name><reason>:
+#      <p>, <effect>.<post-hoc><notes>"
+#     e.g. "biomarker_normal across groups: High dose 58.4 ± 7.71; ... .
+#           one-way ANOVA (Welch) (approximately normal (Shapiro–Wilk
+#           p = 0.876)): p < 0.001, eta-squared = 0.321 (95% CI 0.197 to
+#           0.421). Tukey HSD, significant pairs: Low dose-High dose, ... ."
+#
+#   categorical branch (no per-group summaries, NO routing reason, NO post-hoc)
+#     "<outcome> by group (n = <n>): <test name>: <p>, <effect>.<notes>"
+#     e.g. "responder by group (n = 150): Pearson chi-square test: p < 0.001,
+#           Cramér's V = 0.421."
+#
+# The per-group summaries (mean ± SD / median (IQR)) are deliberately NOT part
+# of this contract: they are a Table-1-style rendering of the same quantities
+# Task 11's `table1` kind owns, and `compare_groups`'s pinned return shape
+# (INTERFACES.md) carries no per-group location/spread. That is a stated scope
+# boundary, not a skipped comparison — nothing in this branch silently drops a
+# quantity the contract does declare.
+# ---------------------------------------------------------------------------
+
+# R (R/groupcompare.R, both branches):
+#   `pfmt <- if (pv < 0.001) "p < 0.001" else sprintf("p = %.3f", pv)`
+# The rendered strings coincide with km's `format_p_km`, but this is restated
+# from groupcompare's own source rather than aliased to it: the two figures
+# format independently, and sharing one function here would let a change in one
+# silently retune the comparator for the other.
+def format_p_gc(p: float) -> str:
+    return "p < 0.001" if p < 0.001 else f"p = {p:.3f}"
+
+
+def _signif(value: float, digits: int = GC_SIGNIF_DIGITS) -> float:
+    """R's `signif(v, 3)`."""
+    value = float(value)
+    if value == 0.0 or not math.isfinite(value):
+        return value
+    return round(value, -int(math.floor(math.log10(abs(value)))) + (digits - 1))
+
+
+def format_num_gc(value: float) -> str:
+    """R/summarize.R `.fmt_num`: 3 significant figures, plain notation, no
+    trailing zeros. 250000 -> "250000", 1.125 -> "1.13", 0.00123 -> "0.00123",
+    7.70 -> "7.7"."""
+    x = _signif(float(value))
+    if x == 0.0:
+        return "0"
+    if not math.isfinite(x):
+        return str(x)
+    exponent = math.floor(math.log10(abs(x)))
+    decimals = max(0, (GC_SIGNIF_DIGITS - 1) - exponent)
+    text = f"{x:.{decimals}f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+def gc_display_half_ulp(value: float) -> float:
+    """Half of one step at 3 significant figures, for `value`'s magnitude.
+
+    The ratio-table and km rules above are fixed decimal places, so their half
+    step is a constant. `.fmt_num` rounds to significant figures instead, so
+    the step is 10^(exponent - 2) and the half step scales with the number.
+    """
+    value = abs(float(value))
+    if value == 0.0 or not math.isfinite(value):
+        return 0.0
+    return 0.5 * 10.0 ** (math.floor(math.log10(value)) - (GC_SIGNIF_DIGITS - 1))
+
+
+def format_effect_gc(effect: dict) -> str:
+    """R/groupcompare.R `.gc_ci_phrase`:
+    `sprintf("%s = %s (95%% CI %s to %s)", name, v, lo, hi)`, or just
+    `"<name> = <v>"` for the two effect sizes the app reports without an
+    interval (epsilon-squared and Cramér's V)."""
+    label = effect["label"]
+    value = format_num_gc(effect["value"])
+    lo, hi = effect.get("lo"), effect.get("hi")
+    if lo is None or hi is None:
+        return f"{label} = {value}"
+    return (f"{label} = {value} (95% CI {format_num_gc(lo)} "
+            f"to {format_num_gc(hi)})")
+
+
+def effect_values(effect):
+    """`{label, value, lo, hi}` normalised, or None when unusable.
+
+    Mirrors `cell_values` above: a Path B effect missing its label/value, or
+    carrying a non-numeric one, is a hole in the evidence rather than a crash.
+    """
+    if not isinstance(effect, dict):
+        return None
+    try:
+        label = effect["label"]
+        value = float(effect["value"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not isinstance(label, str):
+        return None
+    bounds = {}
+    for key in ("lo", "hi"):
+        raw = effect.get(key)
+        if raw is None:
+            bounds[key] = None
+            continue
+        try:
+            bounds[key] = float(raw)
+        except (TypeError, ValueError):
+            return None
+    return {"label": label, "value": value, **bounds}
+
+
+# A trailing " (<second sorted group> vs <first sorted group>)" direction clause
+# is appended by BOTH two-group effect sizes (.gc_effect_t, .gc_effect_wilcox)
+# and by neither of the others — so its presence is a pure function of the group
+# count, not of the effect label.
+def gc_direction_suffix(group_levels) -> str:
+    levels = sorted(group_levels)
+    return f" ({levels[1]} vs {levels[0]})" if len(levels) == 2 else ""
+
+
+# The 2x2-only odds-ratio clause R appends after Cramér's V. `compare_groups`'s
+# pinned return shape carries no odds ratio, so a case that displays one needs
+# the contract extended before it can be judged — detected and reported, never
+# quietly ignored.
+GC_OR_CLAUSE = "; odds ratio for "
+
+
+def _gc_clause_re(test_name: str):
+    """`<test name>[ (<reason>)]: <p>, <effect>.` anchored on a KNOWN test name.
+
+    Built from Path B's own `test_name` rather than from a general grammar of
+    the sentence — the same "search for something already known" approach
+    `parse_ratio_cell` and `parse_km_group_median` use. The optional reason
+    group allows ONE level of nesting because the real reason strings nest:
+    " (approximately normal (Shapiro–Wilk p = 0.876))".
+
+    The effect runs to the first "." followed by whitespace or end-of-string;
+    every "." inside a rendered number is followed by a digit, so this cannot
+    truncate a value. (A group level containing ". " could truncate the
+    two-group direction clause; no real level does, and the mismatch would
+    surface as a DEFECT rather than as a silent pass.)
+    """
+    reason = r"(?: \((?:[^()]|\([^()]*\))*\))?"
+    return re.compile(
+        re.escape(test_name) + reason +
+        r": (?P<p>p < 0\.001|p = \d+\.\d{3}), (?P<eff>.+?)\.(?=\s|$)")
+
+
+def parse_gc_test_clause(text: str, test_name: str):
+    """The displayed p-phrase and effect phrase for a known test name, or None
+    when that test's clause is not in the text at all."""
+    m = _gc_clause_re(test_name).search(text)
+    if m is None:
+        return None
+    return {"p_text": m["p"], "effect": m["eff"]}
+
+
+GC_POSTHOC_SIG_RE = re.compile(
+    r"\s(?P<test>[^:.]+), significant pairs: (?P<pairs>.+?)\.(?=\s|$)")
+GC_POSTHOC_NONE_RE = re.compile(
+    r"\s(?P<test>[^:.]+): no pairwise differences at 0\.05\.")
+
+
+def parse_gc_posthoc(text: str):
+    """R/groupcompare.R `.gc_posthoc`'s sentence, or None when there is none.
+
+    `.gc_posthoc` returns the empty string — no sentence at all — whenever
+    there are fewer than three groups or the omnibus p is >= 0.05, so None here
+    means "the app ran no post-hoc", which is itself a claim both paths must
+    agree on. `{"significant_pairs": []}` is the DIFFERENT claim "a post-hoc
+    ran and nothing survived adjustment".
+
+    The test label is captured rather than matched against a fixed vocabulary,
+    so a future third post-hoc method is read back rather than silently
+    reported as an absent sentence.
+    """
+    m = GC_POSTHOC_SIG_RE.search(text)
+    if m is not None:
+        return {"test": m["test"].strip(),
+                "significant_pairs": [p.strip() for p in m["pairs"].split(", ")],
+                "raw": m.group(0).strip()}
+    m = GC_POSTHOC_NONE_RE.search(text)
+    if m is not None:
+        return {"test": m["test"].strip(), "significant_pairs": [],
+                "raw": m.group(0).strip()}
+    return None
+
+
+GC_EFFECT_RE_TAIL = (
+    r" = (?P<value>-?[0-9][0-9.]*)"
+    r"(?: \(95% CI (?P<lo>-?[0-9][0-9.]*) to (?P<hi>-?[0-9][0-9.]*)\))?"
+    r"(?P<suffix>.*)$")
+
+
+def parse_gc_effect(shown: str, label: str):
+    """Read Figura's displayed effect phrase back into numbers, using Path B's
+    own label as the anchor. None when the phrase does not match the display
+    rule (which includes the case where the two paths named the effect
+    differently — a real disagreement, not a parse shrug)."""
+    m = re.match(re.escape(label) + GC_EFFECT_RE_TAIL, shown)
+    if m is None:
+        return None
+    out = {"value": float(m["value"]), "suffix": m["suffix"]}
+    out["lo"] = float(m["lo"]) if m["lo"] is not None else None
+    out["hi"] = float(m["hi"]) if m["hi"] is not None else None
+    return out
+
+
+def display_agrees_gc(value: float, shown: float) -> bool:
+    """gc's own half-display-step rule, at 3 significant figures."""
+    value, shown = float(value), float(shown)
+    slack = max(ABS_TOL, REL_TOL * max(abs(value), abs(shown)))
+    return abs(value - shown) <= gc_display_half_ulp(shown) + slack
+
+
+def classify_gc_effect_display(shown: str, python_effect,
+                               group_levels) -> dict:
+    """One displayed effect phrase, Path A vs Path B. Mirrors classify_cell's
+    PASS/DISPLAY_ARTIFACT/DEFECT/MISSING_QUANTITY shape."""
+    eff = effect_values(python_effect)
+    if eff is None:
+        return finding(
+            "MISSING_QUANTITY", "-", "displayed effect", shown, python_effect,
+            "Path B's effect is missing label/value or carries a non-numeric "
+            "bound; the displayed effect could not be compared")
+    if GC_OR_CLAUSE in shown:
+        return finding(
+            "MISSING_QUANTITY", "-", "displayed effect", shown,
+            format_effect_gc(eff),
+            "the displayed effect carries a 2x2 odds-ratio clause, which "
+            "compare_groups' return shape does not report; the contract must "
+            "be extended before this case can be judged")
+
+    rendered = format_effect_gc(eff) + gc_direction_suffix(group_levels)
+    if rendered == shown:
+        return finding("PASS", "-", "displayed effect", shown, rendered,
+                       "Python's effect through Figura's display rule is the "
+                       "identical string")
+
+    parsed = parse_gc_effect(shown, eff["label"])
+    if parsed is None:
+        return finding(
+            "DEFECT", "-", "displayed effect", shown, rendered,
+            "Figura's effect phrase does not match the display rule for Path "
+            "B's effect label and could not be read back")
+    if parsed["suffix"] != gc_direction_suffix(group_levels):
+        return finding(
+            "DEFECT", "-", "displayed effect", shown, rendered,
+            "the effect phrase's trailing direction clause differs from the "
+            "one the group levels imply")
+
+    pairs = [(eff["value"], parsed["value"]),
+             (eff["lo"], parsed["lo"]), (eff["hi"], parsed["hi"])]
+    for mine, theirs in pairs:
+        if (mine is None) != (theirs is None):
+            return finding(
+                "DEFECT", "-", "displayed effect", shown, rendered,
+                "one path reports a confidence interval for this effect and "
+                "the other does not")
+    same = all(display_agrees_gc(mine, theirs)
+               for mine, theirs in pairs if mine is not None)
+    if same:
+        return finding("DISPLAY_ARTIFACT", "-", "displayed effect", shown,
+                       rendered, "values agree to within half a display step; "
+                       "the rendered strings differ")
+    return finding("DEFECT", "-", "displayed effect", shown, rendered,
+                   "displayed effect values disagree by more than a rounding "
+                   "boundary")
+
+
+def _is_fisher(name) -> bool:
+    """Fisher's exact test is the one test here with NO test statistic — R's
+    htest carries no `statistic` component at all. That is structural, so a
+    null statistic on BOTH sides is an agreement rather than a hole."""
+    return isinstance(name, str) and "Fisher" in name
+
+
+def compare_gc_summary(case, figura, exact, python):
+    """The full gc_summary branch: counts and per-group counts, test_p and
+    test_statistic (exact tier), the displayed test-name/p/effect phrases and
+    the post-hoc pair set (display tier), and the exported script's p rendered
+    against the screen (script tier)."""
+    findings = []
+    compared = 0
+    targets = _Targets(case.get("exact_targets") or [])
+
+    # -- counts. Same shape/severity as the other branches' count loops. There
+    # is no `n_event` in a group comparison: nothing here is an event.
+    for key in ("n", "n_dropped"):
+        a, b = exact.get(key), python.get(key)
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", key, a, b,
+                f"{missing} did not report {key}; the count could not be "
+                "compared"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        targets.credit(key)
+        if a != b:
+            findings.append(finding(
+                "COUNT_MISMATCH", "-", key, a, b,
+                "the two paths analysed different rows"))
+
+    # -- per-group counts. Symmetric over the key union, so a group present on
+    # only one side is a finding in either direction. This is also what
+    # establishes the group-level vocabulary the display tier's direction
+    # clause is built from, so a disagreement here must surface before it can
+    # quietly mis-key anything downstream.
+    exact_groups = exact.get("n_per_group") or {}
+    python_groups = python.get("n_per_group") or {}
+    if not exact_groups:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "n_per_group", None, None,
+            "Path A's harvest carried no per-group counts to compare"))
+    if not python_groups:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "n_per_group", None, None,
+            "Path B produced no per-group counts to compare"))
+    for group in sorted(set(exact_groups) | set(python_groups)):
+        a, b = exact_groups.get(group), python_groups.get(group)
+        if a is None or b is None:
+            missing = "Path A" if a is None else "Path B"
+            findings.append(finding(
+                "MISSING_QUANTITY", group, "n_per_group", a, b,
+                f"{missing} has no count for this group"))
+            continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
+        compared += 1
+        if a != b:
+            findings.append(finding(
+                "COUNT_MISMATCH", group, "n_per_group", a, b,
+                "the two paths analysed different rows for this group"))
+
+    # -- exact tier: the omnibus p-value. Path A's harvest names it `test_p`
+    # (it is harvested off the htest object); Path B's contract names it
+    # `p_value`. The two names are deliberately different and are mapped here
+    # once, rather than one side renaming to match the other.
+    name = python.get("test_name")
+    p_a, p_b = exact.get("test_p"), python.get("p_value")
+    if p_a is None or p_b is None:
+        missing = "Path A" if p_a is None else "Path B"
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "test_p", p_a, p_b,
+            f"{missing} did not report the test p-value"))
+    else:
+        compared += 1
+        targets.credit("test_p")
+        if not close_enough(float(p_a), float(p_b)):
+            findings.append(finding(
+                "DEFECT", "-", "test_p", p_a, p_b,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+
+    # -- exact tier: the test statistic, with the Fisher rule.
+    s_a, s_b = exact.get("test_statistic"), python.get("statistic")
+    if s_a is None and s_b is None:
+        if _is_fisher(name):
+            # Both paths agree there is no statistic, because the test has
+            # none. A real agreement, so no finding — and no credit either,
+            # since no comparison was performed: a case that nonetheless
+            # DECLARES test_statistic as an exact target will (correctly) fail
+            # its coverage contract via _Targets rather than pass vacuously.
+            pass
+        else:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "test_statistic", s_a, s_b,
+                "neither path reported a test statistic, and the test is not "
+                "Fisher's exact test (the only one that structurally has "
+                "none)"))
+    elif s_a is None or s_b is None:
+        missing = "Path A" if s_a is None else "Path B"
+        if _is_fisher(name):
+            findings.append(finding(
+                "DEFECT", "-", "test_statistic", s_a, s_b,
+                "Fisher's exact test has no test statistic, but one path "
+                "reported one"))
+        else:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "test_statistic", s_a, s_b,
+                f"{missing} did not report a test statistic"))
+    else:
+        compared += 1
+        targets.credit("test_statistic")
+        if not close_enough(float(s_a), float(s_b)):
+            findings.append(finding(
+                "DEFECT", "-", "test_statistic", s_a, s_b,
+                f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+
+    # -- display tier.
+    text = figura.get("text")
+    if not isinstance(text, str):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed text", text, None,
+            "Path A's displayed artifact has no `text` field to parse"))
+        text = ""
+
+    group_levels = sorted(set(exact_groups) | set(python_groups))
+    clause = None
+    if not isinstance(name, str) or not name:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "displayed test name", text or None, name,
+            "Path B reported no test name, so the displayed test clause "
+            "cannot be located"))
+    else:
+        clause = parse_gc_test_clause(text, name)
+        compared += 1
+        if clause is None:
+            findings.append(finding(
+                "DEFECT", "-", "displayed test name", text, name,
+                "the displayed sentence carries no clause for Path B's test "
+                "name; the two paths chose different tests, or the display "
+                "rule changed"))
+
+    if clause is None:
+        # The clause is the anchor for the displayed p, the displayed effect,
+        # and the script tier's p. Losing it means those three comparisons did
+        # not happen — each is recorded as a hole rather than left to look like
+        # a pass, so a wrong test name can never mask a wrong effect size
+        # sitting behind it.
+        for quantity in ("displayed p", "displayed effect",
+                         "exported script p"):
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", quantity, None, None,
+                "the displayed test clause could not be located, so this "
+                "quantity had no displayed value to compare against"))
+    else:
+        # p, display tier. Mirrors addendum 6 / classify_km_logrank_display: a
+        # differing p-part is NEVER a display artifact.
+        rendered_p = format_p_gc(float(p_b)) if p_b is not None else None
+        if rendered_p is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "displayed p", clause["p_text"], None,
+                "no Path B p-value to compare against the displayed text"))
+            # NOT a silent skip: MISSING_QUANTITY was just recorded, and
+            # `compared` is deliberately NOT credited for a comparison that
+            # could not be performed.
+        else:
+            compared += 1
+            if rendered_p != clause["p_text"]:
+                findings.append(finding(
+                    "DEFECT", "-", "displayed p", clause["p_text"], rendered_p,
+                    "the p-value part differs; a p disagreement is never a "
+                    "display artifact"))
+
+        f = classify_gc_effect_display(clause["effect"], python.get("effect"),
+                                       group_levels)
+        if f["code"] == "MISSING_QUANTITY":
+            # The effect was unusable, so no comparison happened: record the
+            # hole and do NOT credit a comparison that was never performed.
+            findings.append(f)
+        else:
+            compared += 1
+            if f["code"] not in PASS_CODES:
+                findings.append(f)
+
+    # -- display tier: the post-hoc sentence. Presence/absence is itself a
+    # claim both paths must agree on, and it is checked before the pair set.
+    shown_posthoc = parse_gc_posthoc(text)
+    py_posthoc = python.get("posthoc")
+    compared += 1
+    if (shown_posthoc is None) != (py_posthoc is None):
+        present, absent = (("Figura", "Python") if py_posthoc is None
+                           else ("Python", "Figura"))
+        findings.append(finding(
+            "DEFECT", "-", "post-hoc presence",
+            shown_posthoc["raw"] if shown_posthoc else None,
+            py_posthoc,
+            f"{present} reports a post-hoc comparison and {absent} does not; "
+            "the two paths disagree about whether one was warranted"))
+    elif shown_posthoc is not None:
+        compared += 1
+        py_test = py_posthoc.get("test") if isinstance(py_posthoc, dict) else None
+        if py_test != shown_posthoc["test"]:
+            findings.append(finding(
+                "DEFECT", "-", "post-hoc test", shown_posthoc["test"], py_test,
+                "the two paths ran different post-hoc methods"))
+        py_pairs = (py_posthoc.get("significant_pairs")
+                    if isinstance(py_posthoc, dict) else None)
+        if py_pairs is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "post-hoc pairs",
+                shown_posthoc["significant_pairs"], None,
+                "Path B's post-hoc carries no significant_pairs list"))
+        else:
+            compared += 1
+            shown_set = set(shown_posthoc["significant_pairs"])
+            py_set = set(py_pairs)
+            if shown_set != py_set:
+                findings.append(finding(
+                    "DEFECT", "-", "post-hoc pairs",
+                    sorted(shown_set), sorted(py_set),
+                    "the significant-pair sets differ; only Figura: "
+                    f"{sorted(shown_set - py_set)}, only Python: "
+                    f"{sorted(py_set - shown_set)}"))
+
+    # -- script tier. Path A against itself: does the exported .R's harvested
+    # p-value, rendered through fig_groupcompare's own display rule, reproduce
+    # the p the screen showed? Never touches Path B — a finding here means the
+    # user cannot reproduce the screen from the script they downloaded.
+    if clause is not None:
+        if p_a is None:
+            findings.append(finding(
+                "MISSING_QUANTITY", "-", "exported script p",
+                clause["p_text"], None,
+                "the exported script's harvest carried no p-value, so the "
+                "screen could not be checked against it"))
+            # NOT a silent skip: MISSING_QUANTITY was just recorded.
+        else:
+            compared += 1
+            rendered = format_p_gc(float(p_a))
+            if rendered != clause["p_text"]:
+                findings.append(finding(
+                    "SCRIPT_DIVERGENCE", "-", "exported script p",
+                    clause["p_text"], rendered,
+                    "the exported .R's p-value does not reproduce the p the "
+                    "screen showed"))
+
+    findings.extend(targets.findings())
+    return findings, compared, targets
+
+
 # Per-kind dispatch. Registering a kind is the ONLY way to compare it: an
 # unregistered kind stops loudly rather than being waved through as "nothing
 # to compare", which would publish a green result backed by zero evidence.
-KIND_HANDLERS = {"ratio_table": compare_ratio_table, "km_summary": compare_km_summary}
+KIND_HANDLERS = {"ratio_table": compare_ratio_table,
+                 "km_summary": compare_km_summary,
+                 "gc_summary": compare_gc_summary}
 
 PENDING_KINDS = {
-    "gc_summary": "Task 10 (group comparison)",
     "table1": "Task 11 (Table 1 / summary)",
 }
 

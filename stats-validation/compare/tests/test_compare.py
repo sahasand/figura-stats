@@ -24,15 +24,22 @@ import pytest
 from compare import (
     DISPOSITIONS,
     classify_cell,
+    classify_gc_effect_display,
     classify_km_logrank_display,
     classify_km_median_display,
     close_enough,
     compare_case,
     display_key,
+    format_effect_gc,
     format_median_km,
+    format_num_gc,
+    format_p_gc,
     format_p_km,
     format_ratio_cell,
+    gc_display_half_ulp,
     main,
+    parse_gc_posthoc,
+    parse_gc_test_clause,
     parse_km_group_median,
     parse_km_logrank,
     parse_ratio_tsv,
@@ -462,13 +469,14 @@ def test_an_empty_table_never_passes_vacuously(tmp_path):
 
 
 def test_unknown_display_kind_exits_loudly(tmp_path):
-    # gc_summary (Task 10) is still pending as of this test; km_summary
-    # itself is implemented now (Task 9), so it can no longer stand in here.
+    # table1 (Task 11) is still pending as of this test; km_summary (Task 9)
+    # and gc_summary (Task 10) are both implemented now, so neither can stand
+    # in here any longer.
     def mutate(case, figura, exact, python):
-        case["display"]["kind"] = "gc_summary"
+        case["display"]["kind"] = "table1"
     with pytest.raises(SystemExit) as excinfo:
         _run(tmp_path, mutate)
-    assert "gc_summary" in str(excinfo.value)
+    assert "table1" in str(excinfo.value)
 
 
 def test_a_figura_artifact_with_no_text_field_is_missing_quantity(tmp_path):
@@ -845,3 +853,597 @@ def test_missing_artifact_exits_loudly(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         compare_case("c1", results=results, cases=cases)
     assert "c1.python.json" in str(excinfo.value)
+
+
+# ==========================================================================
+# gc_summary (Task 10) — group comparison
+#
+# The two fixtures below are real sentence shapes, taken verbatim from actual
+# runs of the three shipped gc cases through run-figura.R (numeric/parametric
+# with a Tukey post-hoc, and categorical with none), so the parsers under test
+# are built against ground truth rather than a guess at the format.
+# ==========================================================================
+
+GC_TEXT_NUMERIC = (
+    "biomarker_normal across groups: High dose 58.4 ± 7.71; "
+    "Low dose 54.1 ± 7.82; Placebo 45.7 ± 7.7. "
+    "one-way ANOVA (Welch) (approximately normal (Shapiro–Wilk "
+    "p = 0.876)): p < 0.001, eta-squared = 0.321 (95% CI 0.197 to 0.421). "
+    "Tukey HSD, significant pairs: Low dose-High dose, Placebo-High dose, "
+    "Placebo-Low dose."
+)
+
+GC_TEXT_CATEGORICAL = (
+    "responder by group (n = 150): Pearson chi-square test: p < 0.001, "
+    "Cramér's V = 0.421."
+)
+
+GC_TEXT_DIRTY = (
+    "site_code across groups: High dose 3 (2" + EN2 + "3); Low dose 2 (1"
+    + EN2 + "2); Placebo 2 (1" + EN2 + "2). Kruskal–Wallis test "
+    "(departs from normal (Shapiro–Wilk p < 0.001)): p < 0.001, "
+    "epsilon-squared = 0.404. Dunn's test (BH-adjusted), significant pairs: "
+    "High dose-Low dose, High dose-Placebo. 4 row(s) with missing values were "
+    "excluded."
+)
+
+
+def _base_gc():
+    """A gc_summary case whose three artifacts agree everywhere. Real numbers
+    from the shipped groupcompare-numeric case."""
+    case = {
+        "id": "g1",
+        "figure": "groupcompare",
+        "roles": {"outcome": "biomarker_normal", "group": "arm"},
+        "options": {"plot": "box", "test": "auto"},
+        "display": {"kind": "gc_summary"},
+        "exact_targets": ["test_p", "test_statistic", "n", "n_dropped"],
+    }
+    figura = {"id": "g1", "text": GC_TEXT_NUMERIC, "code": "# script"}
+    per_group = {"High dose": 50, "Low dose": 50, "Placebo": 50}
+    exact = {
+        "id": "g1", "figure": "groupcompare",
+        "test_p": 3.7310304535906173e-12,
+        "test_statistic": 34.835216031005963,
+        "n": 150, "n_per_group": dict(per_group), "n_dropped": 0,
+    }
+    python = {
+        "id": "g1", "figure": "groupcompare",
+        "test_name": "one-way ANOVA (Welch)",
+        "p_value": 3.7310304535906173e-12,
+        "statistic": 34.835216031005963,
+        "effect": {"label": "eta-squared", "value": 0.32102532801259492,
+                   "lo": 0.19740468951566092, "hi": 0.42138945932347194},
+        "n": 150, "n_per_group": dict(per_group), "n_dropped": 0,
+        "posthoc": {"test": "Tukey HSD",
+                    "significant_pairs": ["Low dose-High dose",
+                                          "Placebo-High dose",
+                                          "Placebo-Low dose"]},
+    }
+    return case, figura, exact, python
+
+
+def _base_gc_categorical():
+    """A gc_summary case on the categorical branch: chi-square, an effect with
+    no interval, and NO post-hoc sentence on either side."""
+    case = {
+        "id": "g2",
+        "figure": "groupcompare",
+        "roles": {"outcome": "responder", "group": "arm"},
+        "options": {"plot": "box", "test": "auto"},
+        "display": {"kind": "gc_summary"},
+        "exact_targets": ["test_p", "test_statistic", "n", "n_dropped"],
+    }
+    figura = {"id": "g2", "text": GC_TEXT_CATEGORICAL, "code": "# script"}
+    per_group = {"High dose": 50, "Low dose": 50, "Placebo": 50}
+    exact = {
+        "id": "g2", "figure": "groupcompare",
+        "test_p": 1.6476905471843762e-06,
+        "test_statistic": 26.63227183775129,
+        "n": 150, "n_per_group": dict(per_group), "n_dropped": 0,
+    }
+    python = {
+        "id": "g2", "figure": "groupcompare",
+        "test_name": "Pearson chi-square test",
+        "p_value": 1.6476905471843762e-06,
+        "statistic": 26.63227183775129,
+        "effect": {"label": "Cramér's V", "value": 0.42136501862202791,
+                   "lo": None, "hi": None},
+        "n": 150, "n_per_group": dict(per_group), "n_dropped": 0,
+        "posthoc": None,
+    }
+    return case, figura, exact, python
+
+
+def _base_gc_dirty():
+    """The dirty case: a numeric-LOOKING categorical outcome that the app
+    routes to the NUMERIC branch, non-parametric, with Dunn pair names in the
+    opposite order from Tukey's."""
+    case = {
+        "id": "g3",
+        "figure": "groupcompare",
+        "roles": {"outcome": "site_code", "group": "arm"},
+        "options": {"plot": "box", "test": "auto"},
+        "display": {"kind": "gc_summary"},
+        "exact_targets": ["test_p", "test_statistic", "n", "n_dropped"],
+    }
+    figura = {"id": "g3", "text": GC_TEXT_DIRTY, "code": "# script"}
+    per_group = {"High dose": 48, "Low dose": 49, "Placebo": 49}
+    exact = {
+        "id": "g3", "figure": "groupcompare",
+        "test_p": 1.8682142740540386e-13,
+        "test_statistic": 58.617246335913329,
+        "n": 146, "n_per_group": dict(per_group), "n_dropped": 4,
+    }
+    python = {
+        "id": "g3", "figure": "groupcompare",
+        "test_name": "Kruskal–Wallis test",
+        "p_value": 1.8682142740540386e-13,
+        "statistic": 58.617246335913329,
+        "effect": {"label": "epsilon-squared", "value": 0.40425687128216087,
+                   "lo": None, "hi": None},
+        "n": 146, "n_per_group": dict(per_group), "n_dropped": 4,
+        "posthoc": {"test": "Dunn's test (BH-adjusted)",
+                    "significant_pairs": ["High dose-Low dose",
+                                          "High dose-Placebo"]},
+    }
+    return case, figura, exact, python
+
+
+def _run_gc(tmp_path, mutate=None, base=_base_gc):
+    case, figura, exact, python = base()
+    if mutate is not None:
+        mutate(case, figura, exact, python)
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    return compare_case(case["id"], results=results, cases=cases)
+
+
+# -- pure-function vectors ---------------------------------------------------
+
+def test_format_p_gc_matches_groupcompares_own_pfmt():
+    assert format_p_gc(0.876) == "p = 0.876"
+    assert format_p_gc(0.0004) == "p < 0.001"
+    # Exactly 0.001 is NOT below the threshold.
+    assert format_p_gc(0.001) == "p = 0.001"
+
+
+def test_format_num_gc_is_three_significant_figures_not_decimal_places():
+    # Probes checked against R itself, by running
+    #   Rscript -e 'f <- function(v) format(signif(v, 3), trim=TRUE,
+    #                 scientific=FALSE, drop0trailing=TRUE); f(<v>)'
+    # rather than trusting R/summarize.R's own worked examples: that source
+    # comment claims "1.125 -> 1.13", and R actually prints 1.12 (`signif`
+    # inherits IEEE round-half-to-even on an exactly-representable tie). The
+    # comment is wrong; the code is what ships, so the code is what is
+    # restated here. Python's `round` reproduces R's tie behaviour on every
+    # probe below, including 1.125 -> 1.12 and 1.135 -> 1.14.
+    assert format_num_gc(250000) == "250000"
+    assert format_num_gc(1.125) == "1.12"
+    assert format_num_gc(1.135) == "1.14"
+    assert format_num_gc(0.00123) == "0.00123"
+    assert format_num_gc(7.7) == "7.7"
+    assert format_num_gc(1e-8) == "0.00000001"  # never scientific notation
+    assert format_num_gc(0.999999) == "1"
+    # Real values from the shipped cases.
+    assert format_num_gc(0.32102532801259492) == "0.321"
+    assert format_num_gc(0.40425687128216087) == "0.404"
+    assert format_num_gc(58.4123) == "58.4"
+    assert format_num_gc(0) == "0"
+
+
+def test_gc_display_half_ulp_scales_with_magnitude():
+    # Three significant figures: the step is 0.001 near 0.3 and 0.1 near 58.
+    assert gc_display_half_ulp(0.321) == pytest.approx(0.0005)
+    assert gc_display_half_ulp(58.4) == pytest.approx(0.05)
+    assert gc_display_half_ulp(250000) == pytest.approx(500.0)
+
+
+def test_format_effect_gc_renders_with_and_without_an_interval():
+    assert format_effect_gc({"label": "eta-squared",
+                             "value": 0.32102532801259492,
+                             "lo": 0.19740468951566092,
+                             "hi": 0.42138945932347194}) == \
+        "eta-squared = 0.321 (95% CI 0.197 to 0.421)"
+    assert format_effect_gc({"label": "epsilon-squared", "value": 0.404,
+                             "lo": None, "hi": None}) == \
+        "epsilon-squared = 0.404"
+
+
+def test_parse_gc_test_clause_reads_past_a_nested_reason():
+    # "one-way ANOVA (Welch)" has parentheses in the NAME, and the routing
+    # reason that follows has parentheses nested one deep.
+    clause = parse_gc_test_clause(GC_TEXT_NUMERIC, "one-way ANOVA (Welch)")
+    assert clause["p_text"] == "p < 0.001"
+    assert clause["effect"] == "eta-squared = 0.321 (95% CI 0.197 to 0.421)"
+
+
+def test_parse_gc_test_clause_reads_the_reasonless_categorical_shape():
+    clause = parse_gc_test_clause(GC_TEXT_CATEGORICAL,
+                                  "Pearson chi-square test")
+    assert clause["p_text"] == "p < 0.001"
+    assert clause["effect"] == "Cramér's V = 0.421"
+
+
+def test_parse_gc_test_clause_returns_none_for_the_wrong_test_name():
+    assert parse_gc_test_clause(GC_TEXT_NUMERIC, "Kruskal–Wallis test") \
+        is None
+
+
+def test_parse_gc_posthoc_reads_tukey_pairs():
+    ph = parse_gc_posthoc(GC_TEXT_NUMERIC)
+    assert ph["test"] == "Tukey HSD"
+    assert ph["significant_pairs"] == ["Low dose-High dose",
+                                       "Placebo-High dose", "Placebo-Low dose"]
+
+
+def test_parse_gc_posthoc_reads_dunn_pairs_in_the_opposite_naming_order():
+    # Tukey names a pair "<later>-<earlier>"; Dunn names it
+    # "<earlier>-<later>". Both conventions are real and must survive intact.
+    ph = parse_gc_posthoc(GC_TEXT_DIRTY)
+    assert ph["test"] == "Dunn's test (BH-adjusted)"
+    assert ph["significant_pairs"] == ["High dose-Low dose",
+                                       "High dose-Placebo"]
+
+
+def test_parse_gc_posthoc_distinguishes_no_pairs_from_no_posthoc():
+    none_ran = parse_gc_posthoc(GC_TEXT_CATEGORICAL)
+    assert none_ran is None  # the categorical branch never runs a post-hoc
+    ran_but_empty = parse_gc_posthoc(
+        "y across groups: A 1; B 2. Kruskal–Wallis test (r): p = 0.040, "
+        "epsilon-squared = 0.1. Dunn's test (BH-adjusted): no pairwise "
+        "differences at 0.05.")
+    assert ran_but_empty["significant_pairs"] == []
+    assert ran_but_empty["test"] == "Dunn's test (BH-adjusted)"
+
+
+def test_classify_gc_effect_display_rounding_only_is_an_artifact():
+    # 0.3215001 renders as "0.322" but sits within half a 3-significant-figure
+    # step of the displayed 0.321 — the step near 0.321 is 0.001, so the half
+    # step is 0.0005, widened by the exact tier's own slack exactly as
+    # `display_agrees`/`display_agrees_km` do. A formatting artifact, not
+    # arithmetic.
+    f = classify_gc_effect_display(
+        "eta-squared = 0.321 (95% CI 0.197 to 0.421)",
+        {"label": "eta-squared", "value": 0.3215001,
+         "lo": 0.19740468951566092, "hi": 0.42138945932347194},
+        ["High dose", "Low dose", "Placebo"])
+    assert f["code"] == "DISPLAY_ARTIFACT"
+
+
+def test_classify_gc_effect_display_real_disagreement_is_a_defect():
+    f = classify_gc_effect_display(
+        "eta-squared = 0.321 (95% CI 0.197 to 0.421)",
+        {"label": "eta-squared", "value": 0.9,
+         "lo": 0.8, "hi": 0.95},
+        ["High dose", "Low dose", "Placebo"])
+    assert f["code"] == "DEFECT"
+
+
+def test_classify_gc_effect_display_a_different_effect_label_is_a_defect():
+    f = classify_gc_effect_display(
+        "eta-squared = 0.321 (95% CI 0.197 to 0.421)",
+        {"label": "epsilon-squared", "value": 0.321, "lo": None, "hi": None},
+        ["High dose", "Low dose", "Placebo"])
+    assert f["code"] == "DEFECT"
+
+
+def test_classify_gc_effect_display_two_groups_require_the_direction_clause():
+    two = ["New treatment", "Standard care"]
+    ok = classify_gc_effect_display(
+        "Cohen's d = 1.66 (95% CI 0.643 to 2.68) "
+        "(Standard care vs New treatment)",
+        {"label": "Cohen's d", "value": 1.659052981163355,
+         "lo": 0.64285125388414688, "hi": 2.67525470844256308}, two)
+    assert ok["code"] == "PASS"
+    reversed_clause = classify_gc_effect_display(
+        "Cohen's d = 1.66 (95% CI 0.643 to 2.68) "
+        "(New treatment vs Standard care)",
+        {"label": "Cohen's d", "value": 1.659052981163355,
+         "lo": 0.64285125388414688, "hi": 2.67525470844256308}, two)
+    assert reversed_clause["code"] == "DEFECT"
+
+
+def test_classify_gc_effect_display_a_2x2_odds_ratio_clause_is_missing_quantity():
+    # compare_groups' pinned return shape carries no odds ratio, so a 2x2
+    # categorical case cannot be judged until the contract is extended. That
+    # must be reported, never waved through.
+    f = classify_gc_effect_display(
+        "Cramér's V = 0.421; odds ratio for responder=No, A vs B = 2.5 "
+        "(95% CI 1.2 to 5.2)",
+        {"label": "Cramér's V", "value": 0.42136501862202791,
+         "lo": None, "hi": None},
+        ["A", "B"])
+    assert f["code"] == "MISSING_QUANTITY"
+    assert "odds-ratio clause" in f["note"]
+
+
+def test_classify_gc_effect_display_missing_path_b_effect_is_missing_quantity():
+    f = classify_gc_effect_display("eta-squared = 0.321", None,
+                                   ["A", "B", "C"])
+    assert f["code"] == "MISSING_QUANTITY"
+
+
+# -- whole-case wiring --------------------------------------------------------
+
+def test_gc_agreeing_numeric_fixture_passes_everything(tmp_path):
+    report = _run_gc(tmp_path)
+    assert report["findings"] == []
+    assert report["passed"] is True
+    assert report["targets_met"] is True
+    # 2 counts (n, n_dropped) + 3 per-group counts + test_p + test_statistic
+    # + displayed test name + displayed p + displayed effect
+    # + post-hoc presence + post-hoc test + post-hoc pair set
+    # + script-tier p = 2 + 3 + 2 + 3 + 3 + 1 = 14
+    assert report["compared"] == 14
+
+
+def test_gc_agreeing_categorical_fixture_passes_everything(tmp_path):
+    report = _run_gc(tmp_path, base=_base_gc_categorical)
+    assert report["findings"] == []
+    assert report["targets_met"] is True
+    # Same as above minus the two post-hoc comparisons that only happen when a
+    # post-hoc sentence is present (test + pair set): 14 - 2 = 12.
+    assert report["compared"] == 12
+
+
+def test_gc_agreeing_dirty_fixture_passes_everything(tmp_path):
+    # Dirty-case routing: a numeric-LOOKING categorical outcome that the app
+    # sends down the NUMERIC branch. The comparator must judge it as the
+    # Kruskal-Wallis it is, with Dunn pair names in Dunn's own order.
+    report = _run_gc(tmp_path, base=_base_gc_dirty)
+    assert report["findings"] == []
+    assert report["targets_met"] is True
+    assert report["compared"] == 14
+
+
+def test_gc_dirty_case_routed_to_the_wrong_branch_is_a_defect(tmp_path):
+    # If Path B "helpfully" treated the zero-padded site codes as categorical,
+    # it would report a chi-square where the app ran a Kruskal-Wallis. The
+    # displayed sentence then carries no clause for Path B's test name.
+    def mutate(case, figura, exact, python):
+        python["test_name"] = "Pearson chi-square test"
+    report = _run_gc(tmp_path, mutate, base=_base_gc_dirty)
+    codes = _codes(report)
+    assert "DEFECT" in codes
+    assert any("different tests" in f["note"] for f in report["findings"])
+
+
+def test_gc_posthoc_pair_set_mismatch_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["posthoc"]["significant_pairs"] = ["Low dose-High dose"]
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"] if f["quantity"] == "post-hoc pairs"]
+    assert len(hits) == 1
+    assert hits[0]["code"] == "DEFECT"
+    assert "only Figura" in hits[0]["note"]
+
+
+def test_gc_posthoc_pair_names_in_the_wrong_order_are_a_defect(tmp_path):
+    # Dunn's convention is "<earlier>-<later>". An implementation that
+    # normalised both post-hoc methods to Tukey's "<later>-<earlier>" spelling
+    # produces pair names the app never displayed.
+    def mutate(case, figura, exact, python):
+        python["posthoc"]["significant_pairs"] = ["Low dose-High dose",
+                                                  "Placebo-High dose"]
+    report = _run_gc(tmp_path, mutate, base=_base_gc_dirty)
+    hits = [f for f in report["findings"] if f["quantity"] == "post-hoc pairs"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+
+
+def test_gc_posthoc_missing_on_the_python_side_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["posthoc"] = None
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"]
+            if f["quantity"] == "post-hoc presence"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+    assert "Figura reports a post-hoc" in hits[0]["note"]
+
+
+def test_gc_posthoc_missing_on_the_figura_side_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] = GC_TEXT_NUMERIC.split(" Tukey HSD")[0]
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"]
+            if f["quantity"] == "post-hoc presence"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+    assert "Python reports a post-hoc" in hits[0]["note"]
+
+
+def test_gc_posthoc_ran_but_empty_is_not_the_same_as_no_posthoc(tmp_path):
+    # "a post-hoc ran and nothing survived" vs "no post-hoc ran" are different
+    # claims. Figura says the first, Python says the second.
+    def mutate(case, figura, exact, python):
+        figura["text"] = GC_TEXT_NUMERIC.replace(
+            "Tukey HSD, significant pairs: Low dose-High dose, "
+            "Placebo-High dose, Placebo-Low dose.",
+            "Tukey HSD: no pairwise differences at 0.05.")
+        python["posthoc"] = None
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"]
+            if f["quantity"] == "post-hoc presence"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+
+
+def test_gc_test_p_beyond_tolerance_is_a_defect(tmp_path):
+    # NOTE the mutation is a whole-number-scale move, not a small relative
+    # one: this case's real p is 3.7e-12, far below the comparator's ABS_TOL
+    # floor of 1e-9, so `close_enough` cannot distinguish it from ANY other
+    # equally tiny p. That floor is the shared, pre-existing convention for
+    # every branch (km's logrank_p has the same property); the discriminating
+    # evidence for a gc case at this magnitude is `test_statistic`, which is
+    # O(10-60) and compares relatively.
+    def mutate(case, figura, exact, python):
+        python["p_value"] = 0.04
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"] if f["quantity"] == "test_p"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+
+
+def test_gc_test_statistic_beyond_tolerance_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["statistic"] = exact["test_statistic"] + 1.0
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"] if f["quantity"] == "test_statistic"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+
+
+def test_gc_fisher_null_statistic_on_both_sides_is_not_missing_quantity(tmp_path):
+    # Fisher's exact test carries no statistic AT ALL: R's htest has no
+    # `statistic` component. Both paths reporting null is a real agreement.
+    # The case therefore must not declare test_statistic as an exact target —
+    # and the next test proves that declaring it anyway fails loudly.
+    def mutate(case, figura, exact, python):
+        case["exact_targets"] = ["test_p", "n", "n_dropped"]
+        figura["text"] = ("responder by group (n = 8): Fisher's exact test: "
+                          "p = 0.486, Cramér's V = 0.5.")
+        exact["test_statistic"] = None
+        exact["test_p"] = 0.4857142857142856
+        python["test_name"] = "Fisher's exact test"
+        python["statistic"] = None
+        python["p_value"] = 0.4857142857142856
+        python["effect"] = {"label": "Cramér's V", "value": 0.5,
+                            "lo": None, "hi": None}
+        python["posthoc"] = None
+    report = _run_gc(tmp_path, mutate, base=_base_gc_categorical)
+    assert report["findings"] == []
+    assert report["targets_met"] is True
+
+
+def test_gc_fisher_case_declaring_test_statistic_fails_its_coverage_contract(tmp_path):
+    # Same fixture as above but with test_statistic left in exact_targets: no
+    # comparison can be performed for it, so the coverage contract is unmet.
+    def mutate(case, figura, exact, python):
+        figura["text"] = ("responder by group (n = 8): Fisher's exact test: "
+                          "p = 0.486, Cramér's V = 0.5.")
+        exact["test_statistic"] = None
+        exact["test_p"] = 0.4857142857142856
+        python["test_name"] = "Fisher's exact test"
+        python["statistic"] = None
+        python["p_value"] = 0.4857142857142856
+        python["effect"] = {"label": "Cramér's V", "value": 0.5,
+                            "lo": None, "hi": None}
+        python["posthoc"] = None
+    report = _run_gc(tmp_path, mutate, base=_base_gc_categorical)
+    assert report["targets_met"] is False
+    assert any(f["quantity"] == "test_statistic"
+               and f["code"] == "MISSING_QUANTITY" for f in report["findings"])
+
+
+def test_gc_a_non_fisher_null_statistic_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        exact["test_statistic"] = None
+        python["statistic"] = None
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"] if f["quantity"] == "test_statistic"]
+    assert len(hits) >= 1
+    assert hits[0]["code"] == "MISSING_QUANTITY"
+
+
+def test_gc_one_sided_statistic_on_a_fisher_test_is_a_defect(tmp_path):
+    def mutate(case, figura, exact, python):
+        # A Fisher case correctly declares no test_statistic target, so the
+        # only finding left is the one under test.
+        case["exact_targets"] = ["test_p", "n", "n_dropped"]
+        figura["text"] = ("responder by group (n = 8): Fisher's exact test: "
+                          "p = 0.486, Cramér's V = 0.5.")
+        exact["test_statistic"] = None
+        exact["test_p"] = 0.4857142857142856
+        python["test_name"] = "Fisher's exact test"
+        python["statistic"] = 3.2
+        python["p_value"] = 0.4857142857142856
+        python["effect"] = {"label": "Cramér's V", "value": 0.5,
+                            "lo": None, "hi": None}
+        python["posthoc"] = None
+    report = _run_gc(tmp_path, mutate, base=_base_gc_categorical)
+    hits = [f for f in report["findings"] if f["quantity"] == "test_statistic"]
+    assert len(hits) == 1 and hits[0]["code"] == "DEFECT"
+
+
+def test_gc_displayed_p_disagreement_is_never_an_artifact(tmp_path):
+    def mutate(case, figura, exact, python):
+        figura["text"] = GC_TEXT_NUMERIC.replace("p < 0.001", "p = 0.040")
+        exact["test_p"] = 0.04
+    report = _run_gc(tmp_path, mutate)
+    display_hits = [f for f in report["findings"]
+                    if f["quantity"] == "displayed p"]
+    assert len(display_hits) == 1 and display_hits[0]["code"] == "DEFECT"
+    assert "never a display artifact" in display_hits[0]["note"]
+
+
+def test_gc_script_p_disagreeing_with_the_screen_is_script_divergence(tmp_path):
+    # Mutate ONLY the harvest, leaving Path B agreeing with the display, so
+    # the finding can only have come from the Path-A-internal script tier.
+    def mutate(case, figura, exact, python):
+        exact["test_p"] = 0.5
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"] if f["code"] == "SCRIPT_DIVERGENCE"]
+    assert len(hits) == 1
+    assert hits[0]["quantity"] == "exported script p"
+
+
+def test_gc_count_mismatch(tmp_path):
+    report = _run_gc(tmp_path, lambda c, f, e, p: p.update(n=149))
+    assert "COUNT_MISMATCH" in _codes(report)
+
+
+def test_gc_per_group_count_mismatch_is_a_count_mismatch(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["n_per_group"]["Placebo"] = 49
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"] if f["quantity"] == "n_per_group"]
+    assert len(hits) == 1 and hits[0]["code"] == "COUNT_MISMATCH"
+    assert hits[0]["term"] == "Placebo"
+
+
+def test_gc_a_group_present_on_only_one_side_is_missing_quantity(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["n_per_group"]["Extra arm"] = 5
+    report = _run_gc(tmp_path, mutate)
+    hits = [f for f in report["findings"]
+            if f["quantity"] == "n_per_group" and f["term"] == "Extra arm"]
+    assert len(hits) == 1 and hits[0]["code"] == "MISSING_QUANTITY"
+
+
+def test_gc_absent_text_field_is_missing_quantity_not_a_crash(tmp_path):
+    report = _run_gc(tmp_path, lambda c, f, e, p: f.pop("text"))
+    notes = [x["note"] for x in _by_code(report, "MISSING_QUANTITY")]
+    assert any("no `text` field" in n for n in notes)
+    assert report["passed"] is False
+
+
+def test_gc_absent_python_test_name_is_missing_quantity(tmp_path):
+    report = _run_gc(tmp_path, lambda c, f, e, p: p.pop("test_name"))
+    notes = [x["note"] for x in _by_code(report, "MISSING_QUANTITY")]
+    assert any("reported no test name" in n for n in notes)
+
+
+def test_gc_an_unlocatable_test_clause_records_the_downstream_holes(tmp_path):
+    # A wrong test name must never MASK a wrong effect size sitting behind it:
+    # the clause is the anchor for the displayed p, the displayed effect, and
+    # the script tier's p, so losing it makes all three MISSING_QUANTITY
+    # alongside the test-name DEFECT itself.
+    def mutate(case, figura, exact, python):
+        python["test_name"] = "one-way ANOVA"   # classical, not "(Welch)"
+        python["effect"]["value"] = 0.9         # also wrong, and must show up
+    report = _run_gc(tmp_path, mutate)
+    quantities = {f["quantity"]: f["code"] for f in report["findings"]}
+    assert quantities["displayed test name"] == "DEFECT"
+    for q in ("displayed p", "displayed effect", "exported script p"):
+        assert quantities[q] == "MISSING_QUANTITY", q
+
+
+def test_gc_no_silent_skips_every_continue_follows_a_recorded_finding():
+    """The file's own DESIGN RULE, enforced mechanically for the gc branch:
+    every `continue` inside compare_gc_summary must be immediately preceded by
+    a findings.append(...) call."""
+    src = (Path(__file__).resolve().parents[1] / "compare.py").read_text()
+    body = src.split("def compare_gc_summary(")[1].split("\ndef ")[0]
+    lines = body.split("\n")
+    continues = [i for i, ln in enumerate(lines) if ln.strip().startswith("continue")]
+    assert continues, "the gc branch is expected to contain `continue`s"
+    for i in continues:
+        window = "\n".join(lines[max(0, i - 8):i])
+        assert "findings.append(" in window, (
+            f"a `continue` at gc-branch line {i} has no recorded finding "
+            f"before it:\n{window}")

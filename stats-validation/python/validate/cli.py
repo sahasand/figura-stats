@@ -78,6 +78,36 @@ def run(case_dir: str) -> dict:
         out["figure"] = figure
         return out
 
+    # TODO(task 10 integration): wire Path B group comparison in here, once the
+    # clean-room `validate/groupcompare.py` exists. The recipe, verified
+    # against compare.py's `compare_gc_summary` (which reads `test_name`,
+    # `p_value`, `statistic`, `effect`, `n_per_group`, `n`, `n_dropped`, and
+    # `posthoc` straight off the top level of python.json — exactly the keys
+    # `compare_groups` returns, so no re-keying block is needed):
+    #
+    #     from .groupcompare import compare_groups
+    #     ...
+    #     if figure == "groupcompare":
+    #         override = {"parametric": False, "nonparametric": True}.get(
+    #             options.get("test", "auto"))   # "auto" -> None -> auto-route
+    #         out = compare_groups(df, case["roles"]["outcome"],
+    #                              case["roles"]["group"], override)
+    #         out["id"] = case["id"]
+    #         out["figure"] = figure
+    #         return out
+    #
+    # It must return EARLY, like km's branch above and for the same reason:
+    # a groupcompare case.json carries no `roles["covariates"]` key at all, so
+    # the `covariates = ...` line below would KeyError before any clean message
+    # could be printed, and `compare_groups`' return shape has no `terms` /
+    # `unadjusted` dicts for the display_terms/display_unadjusted block to key
+    # off. Hence this guard sits ABOVE that line, not after it.
+    if figure == "groupcompare":
+        raise SystemExit(
+            "Path B groupcompare not yet present — validate/groupcompare.py is "
+            "written by the clean-room agent from "
+            "stats-validation/spec/groupcompare-{numeric,categorical,dirty}.md")
+
     covariates = list(case["roles"]["covariates"])
 
     if figure == "cox":

@@ -12,7 +12,8 @@
 # The node build-spec step and the python steps run with stats-validation/ (or
 # a subdirectory of it) as cwd instead, per their own path conventions.
 PY := $(CURDIR)/.venv/bin/python
-CASES := logistic-confounding cox-adjusted km-twoarm
+CASES := logistic-confounding cox-adjusted km-twoarm \
+         groupcompare-numeric groupcompare-categorical groupcompare-dirty
 
 .PHONY: all test clean
 

@@ -1,0 +1,9 @@
+{
+  "id": "groupcompare-categorical",
+  "figure": "groupcompare",
+  "spec": "groupcompare-categorical",
+  "roles": { "outcome": "responder", "group": "arm" },
+  "options": { "plot": "box", "test": "auto" },
+  "display": { "kind": "gc_summary" },
+  "exact_targets": ["test_p", "test_statistic", "n", "n_dropped"]
+}
