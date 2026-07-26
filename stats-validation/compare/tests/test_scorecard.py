@@ -881,3 +881,224 @@ def test_no_deferred_cases_tile_when_nothing_is_deferred(tmp_path):
     must not render a stray "0" (or any) tile — mirroring how the pending
     tile is absent when nothing is pending."""
     assert "cases with deferred targets</span>" not in _build(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# THE PUBLIC PAGE (build_web -> web/validation.html)
+#
+# Same evidence, a different reader and a different set of ways to be wrong.
+# The scorecard is read by someone who can open findings.json; this page is
+# read by a clinician deciding whether to trust a number in a manuscript, so
+# the tests below are mostly about what it must never quietly assert.
+# ---------------------------------------------------------------------------
+
+def _build_web(tmp_path, findings=None, web_dir=None, cases_dir=None) -> str:
+    findings_path = tmp_path / "findings.json"
+    findings_path.write_text(json.dumps(FIXTURE if findings is None else findings))
+    out_path = build_scorecard.build_web(
+        findings_path=findings_path, out_path=tmp_path / "validation.html",
+        web_dir=web_dir, cases_dir=cases_dir)
+    return out_path.read_text()
+
+
+def test_web_page_links_the_stylesheet_rather_than_inlining_it(tmp_path):
+    """The page ships inside the app. It must ride the app's own tokens, not a
+    frozen copy of them — otherwise it drifts the first time styles.css moves,
+    and a validation page that looks like a different product is a validation
+    page nobody believes."""
+    html = _build_web(tmp_path)
+    assert '<link rel="stylesheet" href="styles.css">' in html
+    assert "@font-face" not in html          # fonts come from styles.css
+    assert "--accent" not in html.split("<style>")[1].split("</style>")[0].split(
+        "@media (prefers-color-scheme: dark)")[0], (
+        "page CSS must READ the tokens, not redefine them outside the dark remap")
+
+
+def test_web_page_issues_no_external_request(tmp_path):
+    """THE NO-EGRESS INVARIANT, on the one page that could most plausibly want
+    an analytics tag. Every href/src must be same-origin and relative, and there
+    must be no script at all."""
+    import re
+    html = _build_web(tmp_path)
+    for attr, value in re.findall(r'(href|src)="([^"]*)"', html):
+        assert not value.startswith(("http://", "https://", "//")), \
+            f"{attr}={value} leaves the origin"
+    assert "<script" not in html
+    assert "@import" not in html and "url(" not in html
+
+
+def test_web_page_states_the_claim_and_its_limit(tmp_path):
+    """The agreed wording, both halves. A page that says only what the harness
+    catches is the dishonest half of the sentence."""
+    # Prose in the template is hard-wrapped, so assert against a
+    # whitespace-normalised copy rather than pinning where the lines break.
+    html = " ".join(_build_web(tmp_path).split())
+    assert "never read the R" in html
+    assert "It cannot catch" in html
+    assert "misreading baked into the specification" in html
+    # ...and it must not claim a status the project does not have.
+    assert "not a medical device" in html
+    assert "independently validated" not in html
+
+
+def test_web_page_publishes_the_findings_rather_than_summarising_them(tmp_path):
+    """Every finding, with the comparison named on the row — the tile counts are
+    not the evidence, the rows are."""
+    html = _build_web(tmp_path)
+    assert "Every difference, unabridged" in html
+    assert SRC_EXACT in html and SRC_SCRIPT in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html   # escaped, still shown
+    assert "9.99" in html
+
+
+def test_web_export_path_narrative_claims_the_screen_was_right(tmp_path):
+    """When every finding on a case is Figura-vs-its-own-exported-script, the
+    page may say the displayed numbers were right — that is what the passing
+    display tier means."""
+    html = _build_web(tmp_path)
+    assert "The displayed numbers were right." in html
+
+
+def test_web_narrative_withdraws_that_claim_when_a_display_finding_exists(tmp_path):
+    """THE GUARD ON THE REASSURANCE. `case-decision` carries a screen-vs-Python
+    finding, so its block must NOT inherit the export-path story: nothing on the
+    page may tell a reader the screen was right about a case where the screen is
+    exactly what disagreed."""
+    findings = json.loads(json.dumps(FIXTURE))
+    findings["cases"] = [c for c in findings["cases"] if c["id"] == "case-decision"]
+    findings["total_findings"] = 1
+    html = _build_web(tmp_path, findings)
+    assert "The displayed numbers were right." not in html
+    assert "not all on the export path" in html
+    assert SRC_DISPLAY in html
+
+
+def test_web_download_caveat_is_tied_to_the_findings_that_justify_it(tmp_path):
+    """"Run the exported script yourself" carries a caveat only while an
+    export-path case is actually publishing findings. When the fix lands and
+    they go, the warning goes with them rather than warning about a defect that
+    no longer exists."""
+    with_findings = _build_web(tmp_path)
+    assert "One honest caveat on that first step" in with_findings
+
+    clean = json.loads(json.dumps(FIXTURE))
+    for case in clean["cases"]:
+        case["findings"] = []
+        case["passed"] = True
+    clean["total_findings"] = 0
+    html = _build_web(tmp_path, clean)
+    assert "One honest caveat on that first step" not in html
+    assert "Every difference, unabridged" not in html
+    # ...and a green page must still refuse to read as "nothing can be wrong".
+    assert "A validation page that only ever shows green is not evidence" in html
+
+
+def test_web_page_shows_a_registered_but_uncompared_case(tmp_path):
+    """The scorecard's own refusal, on the public page: a case that ran but was
+    never compared carries NO guarantee, and must be visible rather than absent
+    from a table of green rows."""
+    (tmp_path / "orphan.done").touch()
+    (tmp_path / "orphan.figura.json").write_text("{}")
+    html = _build_web(tmp_path)
+    assert "orphan" in html
+    assert "never compared" in html
+    assert "cases run but never compared" in html
+
+
+def test_web_every_declared_target_has_a_plain_language_gloss():
+    """A target added to compare.py's contract must not reach a published page
+    as a bare identifier. This is the only mapping on the page that a reader
+    cannot check against the artifact, so it is pinned rather than trusted."""
+    from compare import TARGET_QUANTITIES
+    missing = set(TARGET_QUANTITIES) - set(build_scorecard.TARGET_GLOSS)
+    assert not missing, f"no public gloss for {sorted(missing)}"
+
+
+def test_web_coverage_table_separates_precision_tiers(tmp_path):
+    """Full-precision agreement and as-displayed agreement are different
+    claims, and the page must not let the stronger one cover the weaker."""
+    html = _build_web(tmp_path)
+    assert "At full precision" in html
+    assert "As displayed" in html
+    assert "The downloaded script" in html
+    assert "What is not" in html
+
+
+def test_web_page_is_a_pure_function_of_its_inputs(tmp_path):
+    """Same precondition the scorecard has: CI byte-diffs the published page, so
+    a clock or a HEAD lookup would make the gate flap forever."""
+    import subprocess
+    first = _build_web(tmp_path)
+    second = _build_web(tmp_path)
+    assert first == second
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=STATS_VALIDATION,
+                          capture_output=True, text=True)
+    if head.returncode == 0 and head.stdout.strip():
+        assert head.stdout.strip()[:12] not in first
+
+
+def test_web_page_renders_in_dark_as_well_as_light(tmp_path):
+    """The app ships light-only and styles.css is not this page's to edit, so
+    the dark scheme is a remap of the SAME token names in the page's own style
+    block. Without it the page renders warm-paper-on-white inside a dark OS."""
+    html = _build_web(tmp_path)
+    assert "@media (prefers-color-scheme: dark)" in html
+    dark = html.split("@media (prefers-color-scheme: dark)")[1].split("}\n}")[0]
+    for token in ("--ink:", "--panel:", "--chrome:", "--accent:", "--error:"):
+        assert token in dark, f"{token} is not remapped for dark"
+
+
+def test_web_webr_section_states_its_coverage_ratio(tmp_path):
+    """Two green rows without "2 of 8" reads as whole-roster parity."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    (tmp_path / "km-twoarm.done").touch()
+    (tmp_path / "webr-tier.json").write_text(json.dumps(WEBR_TIER))
+    html = _build_web(tmp_path)
+    assert "Coverage: 2 of 3 cases." in html
+    assert "not</i> covered by any wasm-vs-native claim" in html
+
+
+def test_web_webr_empty_state_is_not_a_pass(tmp_path):
+    """No webr-tier.json means the gate was not run for this release. The page
+    must say so rather than omitting the section, which reads as "nothing to
+    report"."""
+    html = _build_web(tmp_path)
+    assert "has not been run for the current release" in html
+
+
+def test_web_webr_staleness_is_reported_to_the_reader(tmp_path):
+    """The digests the scorecard checks are checked here too: published webR
+    evidence measured against an older app must say so on the page a user
+    reads, not only on the maintainer's scorecard."""
+    payload = dict(WEBR_TIER)
+    payload["web_digest"] = "sha256:not-the-real-tree"
+    (tmp_path / "webr-tier.json").write_text(json.dumps(payload))
+    web_dir = tmp_path / "web"
+    web_dir.mkdir()
+    (web_dir / "app.js").write_text("// something")
+    html = _build_web(tmp_path, web_dir=web_dir)
+    assert "The shipped app has changed since this evidence was measured" in html
+
+
+def test_web_case_analysis_names_come_from_the_case_files(tmp_path):
+    """Grouping by analysis is read from each case's own case.json `figure`,
+    never guessed from the id — and an unreadable case file says so instead of
+    being filed under whatever analysis sorts first."""
+    cases_dir = tmp_path / "cases"
+    (cases_dir / "case-pass").mkdir(parents=True)
+    (cases_dir / "case-pass" / "case.json").write_text(json.dumps({"figure": "cox"}))
+    html = _build_web(tmp_path, cases_dir=cases_dir)
+    assert "Cox regression" in html
+    assert "unknown (case.json unreadable)" in html
+
+
+def test_web_page_names_the_open_defect_as_open(tmp_path):
+    """The real shipped case. A page that publishes 30 findings and does not say
+    they are known, tracked and being fixed reads as an unattended failure."""
+    real = json.loads((STATS_VALIDATION / "results" / "findings.json").read_text())
+    html = _build_web(tmp_path, real, cases_dir=STATS_VALIDATION / "cases")
+    assert "This is a known defect, and it is open." in html
+    assert "02-app-vs-exported-script-missing-values.md" in html
+    assert "fix is planned" in html
+    assert "Logistic regression" in html

@@ -95,6 +95,47 @@ const body = (text) => ({ ok: true, text, clone: () => body(text) });
   console.log("ok - routeFor sends R sources to their own branch");
 }
 
+// ---- Install: the precached shell ----------------------------------------
+
+{
+  // The precache is ALL-OR-NOTHING: `cache.addAll` rejects if a single entry
+  // 404s, which rejects install and leaves the app with NO service worker at
+  // all. So the list the install handler really passes to addAll is worth
+  // pinning — both its membership (validation.html is a second entry point,
+  // linked from the rail, and precaching it is the difference between reading
+  // the evidence offline and a dead link) and the scope-relative resolution
+  // every entry depends on: a root-absolute path 404s under a GitHub Pages
+  // PROJECT subpath, taking the whole install down with it.
+  let precached = null;
+  const cache = makeCache();
+  cache.addAll = async (urls) => { precached = urls; };
+  const { listeners } = loadSw({ cache });
+  const waits = [];
+  await listeners.install({ waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+
+  assert.ok(Array.isArray(precached), "install must precache the shell");
+  assert.ok(precached.includes(SCOPE + "index.html"), "the app shell is precached");
+  assert.ok(precached.includes(SCOPE + "validation.html"),
+    "the validation page is precached with the shell");
+  assert.ok(precached.includes(SCOPE + "styles.css"),
+    "validation.html renders through styles.css, so it must be cached too");
+  for (const url of precached) {
+    assert.ok(url.startsWith(SCOPE),
+      `every precache entry must resolve under the SW scope, not the origin root: ${url}`);
+  }
+  console.log("ok - install precaches the shell and the validation page, scope-relative");
+}
+
+{
+  // The validation page is ordinary same-origin chrome: stale-while-revalidate,
+  // so a regenerated page self-heals within one round trip. It is NOT an R
+  // source and must not be routed as one.
+  const { ctx } = loadSw();
+  assert.equal(ctx.routeFor(get(SCOPE + "validation.html")), "same-origin");
+  console.log("ok - the validation page is same-origin chrome, not statistical source");
+}
+
 // ---- Network-first for R sources ----------------------------------------
 
 {

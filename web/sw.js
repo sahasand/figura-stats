@@ -10,7 +10,7 @@
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
-const CACHE = "figura-v10";
+const CACHE = "figura-v11";
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath
@@ -24,8 +24,14 @@ const scoped = (p) => new URL(p, self.registration.scope).toString();
 // sources) lands in the cache the first time it's fetched via SWR below. The
 // scope root itself is runtime-cached on first same-origin visit; the offline
 // nav fallback matches scoped("index.html").
+// validation.html is a second entry point, not part of the app shell: it is a
+// static page generated from the validation harness's findings.json and linked
+// from the rail. It is precached because it is small, it shares the shell's
+// stylesheet and fonts, and it is exactly the page a user opens when they are
+// deciding whether to trust the numbers — which is a bad moment to be offline.
 const PRECACHE = [
-  "index.html", "app.js", "worker.js", "styles.css", "export-ui.js",
+  "index.html", "validation.html", "app.js", "worker.js", "styles.css",
+  "export-ui.js",
   "fonts/ibm-plex-sans-latin-400-normal.woff2",
   "fonts/ibm-plex-sans-latin-600-normal.woff2",
   "fonts/ibm-plex-mono-latin-400-normal.woff2",

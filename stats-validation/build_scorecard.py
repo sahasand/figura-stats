@@ -1,4 +1,15 @@
-"""findings.json -> a self-contained scorecard. No live computation.
+"""findings.json -> a scorecard for maintainers, and the public page for users.
+
+Two outputs, one evidence file, no live computation:
+
+  * `results/scorecard.html` — the internal scorecard (self-contained, opens
+    from `file://`), written by `build()`.
+  * `web/validation.html` — the page a clinical user reads, written by
+    `build_web()`. It is part of the shipped app: it LINKS `web/styles.css`
+    rather than inlining CSS, so it cannot drift from the design tokens.
+
+    $ python build_scorecard.py          # both
+    $ python build_scorecard.py --web    # the public page only
 
 Reads the exact shape compare.py's `main()` writes (verified against
 stats-validation/compare/compare.py and a real stats-validation/results/
@@ -82,7 +93,10 @@ WEB = Path(__file__).resolve().parent.parent / "web"
 COMPARE_DIR = Path(__file__).resolve().parent / "compare"
 sys.path.insert(0, str(COMPARE_DIR))
 
-from compare import DISPOSITIONS, PUBLISHED_SIGNIFICANT_DIGITS  # noqa: E402
+from compare import (  # noqa: E402
+    DISPOSITIONS, PUBLISHED_SIGNIFICANT_DIGITS, REL_TOL, SRC_COVERAGE,
+    SRC_DISPLAY, SRC_EXACT, SRC_HARVEST, SRC_PATH_B, SRC_SCREEN, SRC_SCRIPT,
+)
 
 CSS = """
 :root { --ink:#1a1a1a; --muted:#5b5b5b; --rule:#d8d4cc; --paper:#faf8f5;
@@ -733,5 +747,1264 @@ would see.</p>
     return out_path
 
 
+# ---------------------------------------------------------------------------
+# THE PUBLIC PAGE — web/validation.html
+#
+# Same evidence as the scorecard above, a different reader: a clinician
+# deciding whether to trust a number that is about to go into a manuscript,
+# not a maintainer auditing a run. Four rules govern everything below.
+#
+#   1. IT LINKS styles.css; IT DOES NOT INLINE CSS. This page ships inside the
+#      app, so it must age with the app's design tokens rather than freeze a
+#      copy of them. The <style> block carries only what the stylesheet cannot
+#      know about: a DOCUMENT layout instead of the fixed three-pane workbench,
+#      and a dark-scheme remap of the SAME token names (the app itself ships
+#      light-only, and styles.css is not this task's to edit).
+#   2. IT ADDS NO NETWORK CALL. No analytics, no CDN font, no external link —
+#      the no-egress invariant covers this page like every other byte of web/.
+#      Every href here is relative and same-origin; `python -c` grep for
+#      "http" over the built file is part of the verification.
+#   3. IT IS THE SAME PURE FUNCTION build() is (see the module header): files
+#      on disk in, HTML out — no clock, no environment, no `git rev-parse`. CI
+#      byte-diffs the regenerated page exactly as it does the scorecard, so a
+#      single live input would make the gate flap forever.
+#   4. NOTHING MAY READ AS COMPLETE WHEN IT IS NOT. Every honesty guard the
+#      scorecard grew — the registered-but-uncompared rows, the deferred
+#      targets, the webR coverage ratio, the two staleness digests — is
+#      rendered here too, in the reader's language rather than the
+#      maintainer's.
+# ---------------------------------------------------------------------------
+
+WEB_PAGE = WEB / "validation.html"
+CASES = Path(__file__).resolve().parent / "cases"
+
+# figure -> the name the app itself uses in its nav rail (web/index.html), so a
+# reader can map a row here onto the analysis they clicked.
+ANALYSES = (
+    ("summary", "Summary statistics (Table 1)"),
+    ("km", "Kaplan-Meier"),
+    ("groupcompare", "Group comparison"),
+    ("cox", "Cox regression"),
+    ("logistic", "Logistic regression"),
+)
+ANALYSIS_NAMES = dict(ANALYSES)
+
+# What each display KIND compares beyond its declared exact targets. Restated
+# from the compare_* branches in compare.py (compare_ratio_table,
+# compare_km_summary, compare_gc_summary, compare_table1) — the display tier
+# and the script tier are not in `exact_targets`, so they are invisible in
+# findings.json and would otherwise go unstated on the page that is supposed to
+# say what was checked.
+KIND_TIERS = {
+    "ratio_table": (
+        "every cell of the rendered ratio table &mdash; unadjusted and "
+        "adjusted, estimate, 95% CI and p-value &mdash; exactly as the app "
+        "prints it",
+        "the adjusted cells the exported <code>.R</code> produces when it is "
+        "re-run in R, rendered through the app's own display rule",
+    ),
+    "km_summary": (
+        "the median-survival and log-rank clauses of the sentence the app "
+        "displays",
+        "the medians and the log-rank p the exported <code>.R</code> produces "
+        "when it is re-run in R",
+    ),
+    "gc_summary": (
+        "the displayed test name, p-value and effect size, the per-group "
+        "counts, and the full set of post-hoc pairs",
+        "the p-value the exported <code>.R</code> produces when it is re-run "
+        "in R",
+    ),
+    "table1": (
+        "every displayed Table 1 cell, the missing-value counts and the row "
+        "order",
+        "the cells and the mean-vs-median choice the exported <code>.R</code> "
+        "produces when it is re-run in R",
+    ),
+}
+
+# What each kind does NOT compare. Stated per kind rather than once, because
+# the gaps are different: KM's displayed sentence carries a hazard-ratio clause
+# nothing parses, ratio_table's unadjusted column is a display claim only.
+KIND_NOT_COMPARED = {
+    "ratio_table": (
+        "the unadjusted column at full precision (it is compared as "
+        "displayed &mdash; only the joint model is harvested from the exported "
+        "script); the prose wrapped around the numbers; the rendered forest "
+        "plot, which draws the same adjusted estimates"
+    ),
+    "km_summary": (
+        "the hazard-ratio clause of the displayed sentence; the rendered "
+        "curve image (the curve itself is compared as coordinates)"
+    ),
+    "gc_summary": (
+        "the prose wrapped around the numbers; the rendered box or bar plot"
+    ),
+    "table1": (
+        "the prose wrapped around the table; the rendered distribution plots"
+    ),
+}
+
+# case.json `exact_targets` -> plain language. Every key of
+# compare.TARGET_QUANTITIES must appear here (test_scorecard.py pins that), so
+# a target added to the contract can never render on a public page as a bare
+# identifier a clinician cannot read.
+TARGET_GLOSS = {
+    "adjusted_or": "the adjusted odds ratio",
+    "adjusted_hr": "the adjusted hazard ratio",
+    "adjusted_ci": "its standard error and 95% confidence interval",
+    "adjusted_p": "its p-value",
+    "n": "the number of patients analysed",
+    "n_event": "the number of events",
+    "n_dropped": "the number of rows dropped",
+    "c_statistic": "the C-statistic",
+    "zph": "the global proportional-hazards test",
+    "median_survival": "median survival in each group",
+    "logrank_p": "the log-rank p-value",
+    "curve": "every step of the survival curve",
+    "test_p": "the test's p-value",
+    "test_statistic": "the test statistic",
+    "decisions": "the mean-vs-median choice for each variable",
+    "vif_note": "the collinearity (VIF) advisory",
+    "epv_note": "the events-per-variable advisory",
+    "cooks_note": "the influential-observations advisory",
+    "separation_note": "the separation caution",
+    "ph_note": "the proportional-hazards advisory",
+}
+
+# The targets credited by the DISPLAY tier rather than the exact tier, so the
+# page cannot claim full-precision agreement for a quantity that has no
+# full-precision Path A value at all. Same split compare.TARGET_QUANTITIES
+# documents at length: the exported script computes no VIF, no Cook's distance,
+# no EPV and no separation check, and Table 1's `decisions` target is a choice
+# rather than a number.
+DISPLAY_TIER_TARGETS = frozenset({
+    "decisions", "vif_note", "epv_note", "cooks_note", "separation_note",
+    "ph_note",
+})
+# Of those, the ones that are advisory SENTENCES (compared for whether they
+# fire). `decisions` is display-tier too but is not an advisory anything — it
+# is Table 1's choice between mean and median, a published output in its own
+# right — so it is glossed separately rather than filed under a heading that
+# would understate it.
+NOTE_TARGETS = frozenset(
+    t for t in DISPLAY_TIER_TARGETS if t.endswith("_note"))
+
+# compare.py's finding codes, in the reader's language. The codes themselves
+# are printed unchanged — they are the published vocabulary, and a reader who
+# opens findings.json must find the same words — with the gloss beside them.
+CODE_GLOSS = {
+    "COUNT_MISMATCH": "the two sides analysed a different number of rows",
+    "MISSING_QUANTITY": "something expected was never compared at all &mdash; "
+                        "a hole in the coverage, not a value disagreement",
+    "DECISION_MISMATCH": "the two sides chose different summary statistics for "
+                         "a Table 1 variable",
+    "SCRIPT_DIVERGENCE": "the exported <code>.R</code> does not reproduce what "
+                         "the screen showed",
+    "DEFECT": f"the values themselves disagree, beyond a relative tolerance of "
+              f"{REL_TOL:g}",
+    "DIAGNOSTIC_MISMATCH": "the two sides disagree about whether one of the "
+                           "app's advisory sentences fires at all",
+    "DISPLAY_ARTIFACT": "both sides computed the same number; only the "
+                        "rendered string differs, within half a display step",
+}
+
+# What the two value columns actually hold, per comparison. This is the single
+# most misreadable thing on the page: on the export-path rows the "Figura"
+# column is the app's own downloaded script, NOT the numbers the user saw.
+SOURCE_GLOSS = {
+    SRC_DISPLAY: "the numbers on screen, against the independent Python "
+                 "implementation",
+    SRC_EXACT: "the exported <code>.R</code> re-run in R, against the "
+               "independent Python implementation",
+    SRC_SCRIPT: "the numbers on screen, against Figura's own exported "
+                "<code>.R</code>",
+    SRC_SCREEN: "the displayed artifact alone &mdash; a one-sided finding, "
+                "with no second value to compare against",
+    SRC_HARVEST: "the exported script's output alone &mdash; a one-sided "
+                 "finding",
+    SRC_PATH_B: "the independent implementation's output alone &mdash; a "
+                "one-sided finding",
+    SRC_COVERAGE: "the case's declared coverage &mdash; a quantity it promised "
+                  "to compare and did not",
+}
+
+# The one thing on this page that findings.json does not contain: WHY a case's
+# exported script diverges. That is knowledge about a specific case, so it is
+# keyed by case id and rendered only for that case. Any other export-path case
+# gets the same structure WITHOUT a cause the page cannot know.
+CASE_CAUSE = {
+    "logistic-dirty": (
+        "<p>The case is an ordinary logistic regression on a deliberately "
+        "messy CSV: eight patients have the two letters <code>NA</code> typed "
+        "as text in the <code>stage</code> column, and two have a trailing "
+        "space in <code>age</code>. Figura's own CSV reader, which runs in "
+        "your browser, treats a typed <code>NA</code> as an ordinary value "
+        "&mdash; so the app fitted every patient and displayed a "
+        "<code>stage&nbsp;=&nbsp;NA</code> row in the table. The downloaded "
+        "script re-reads the same file with R's <code>read.csv</code>, which "
+        "converts that text into a real missing value, and the script's own "
+        "<code>complete.cases()</code> filter then drops those patients before "
+        "the model is fitted.</p>"
+    ),
+}
+
+# The disposition of a case's findings: open or fixed, tracked where, affecting
+# whom. Case-specific knowledge again, keyed by id, so a case this file has
+# never heard of cannot inherit another case's status. A case with findings and
+# no entry here says so plainly instead (see _web_narrative).
+CASE_STATUS = {
+    "logistic-dirty": (
+        "<div class=\"warn-box\">"
+        "<p><b>This is a known defect, and it is open.</b> It is tracked in "
+        "the repository as "
+        "<code>stats-validation/issues/02-app-vs-exported-script-missing-values.md</code>, "
+        "together with two siblings found the same way: a cell containing only "
+        "whitespace, and an untrimmed text cell that can add a phantom study "
+        "arm to a Group comparison. One change to the shared script preamble "
+        "in <code>R/script.R</code> &mdash; stop <code>read.csv</code> "
+        "inventing missing values, and trim text columns &mdash; closes all "
+        "three, and that fix is planned. It has not landed as of the evidence "
+        "on this page. When it does, this case turns green here and this "
+        "section changes with it.</p>"
+        "<p><b>Who this affects.</b> Only a downloaded script, and only for a "
+        "file that contains cells of that kind. Nothing about it changes the "
+        "numbers the app shows you. If your CSV has no <code>NA</code> text "
+        "and no padded values, the downloaded script reproduces the app "
+        "exactly.</p></div>"
+    ),
+}
+
+
+def _case_figure(cases_dir: Path, case_id: str) -> str | None:
+    """The analysis a case exercises, read from its own case.json.
+
+    Never guessed from the case id: `logistic-dirty` happens to name its
+    figure, but that is a convention, not a contract. An unreadable or absent
+    case.json returns None and the case is grouped under a visibly-unknown
+    analysis rather than silently filed under the wrong one.
+    """
+    path = Path(cases_dir) / case_id / "case.json"
+    try:
+        figure = json.loads(path.read_text()).get("figure")
+    except (json.JSONDecodeError, OSError):
+        return None
+    return figure if isinstance(figure, str) else None
+
+
+def _grouped_by_analysis(cases: list[dict], cases_dir: Path):
+    """[(figure, [case, ...]), ...] in the app's own nav order.
+
+    Analyses the app has but the harness does not cover contribute no row —
+    they are named in the prose instead, since an empty row would read like a
+    checked-and-passed one.
+    """
+    groups: dict[str | None, list[dict]] = {}
+    for case in cases:
+        groups.setdefault(_case_figure(cases_dir, case["id"]), []).append(case)
+    ordered = [(fig, groups.pop(fig)) for fig, _ in ANALYSES if fig in groups]
+    # Anything else (a new figure, or a case whose case.json could not be read)
+    # still renders, sorted, under whatever name it gave — never dropped.
+    ordered += [(fig, groups[fig]) for fig in sorted(groups, key=lambda f: f or "")]
+    return ordered
+
+
+def _analysis_name(figure: str | None) -> str:
+    if figure is None:
+        return "unknown (case.json unreadable)"
+    return ANALYSIS_NAMES.get(figure, figure)
+
+
+def _export_path_only(case: dict) -> bool:
+    """Every finding on this case is Figura disagreeing with its OWN exported
+    script, never with the independent implementation.
+
+    This is the condition the plain-language narrative below depends on: it is
+    what makes "the numbers on screen were right" a statement about the
+    evidence rather than a hope. If a future run adds a `screen vs Python`
+    finding, the narrative falls back to a generic block instead of repeating a
+    reassurance the evidence no longer supports.
+    """
+    findings = case.get("findings") or []
+    return bool(findings) and all(
+        f.get("source") in (SRC_EXACT, SRC_SCRIPT) for f in findings)
+
+
+def _count_pairs(case: dict) -> dict:
+    """{quantity: (exported script value, app value)} from COUNT_MISMATCH."""
+    return {f["quantity"]: (f["figura"], f["python"])
+            for f in case["findings"] if f["code"] == "COUNT_MISMATCH"}
+
+
+# A ratio cell ("1.66 (1.24-2.23, p<0.001)") is one value and must never break
+# across lines; a methods sentence is prose and must. Length is the honest
+# discriminator here — the comparator publishes both kinds in the same column,
+# and holding a 67-character sentence on one line is what pushed the second
+# value column off the right-hand edge of the sheet.
+LONG_VALUE = 34
+
+
+def _value_cell(value) -> str:
+    text = "" if value is None else str(value)
+    cls = "num long" if len(text) > LONG_VALUE else "num"
+    return f"<td class='{cls}'>{esc(text)}</td>"
+
+
+def _row_label(f: dict) -> str:
+    """What to call this row in the plain-language table.
+
+    A whole-model finding (the C-statistic, a count) carries `term = "-"`,
+    which is right for a machine-readable artifact and unreadable in a
+    published table. Fall back to the quantity, minus the tier prefix the
+    comparator puts in front of it.
+    """
+    term = f.get("term")
+    if term and term != "-":
+        return str(term)
+    quantity = str(f.get("quantity") or "")
+    return quantity.replace("exported script ", "") or "—"
+
+
+WEB_CSS = """
+/* validation.html — the app's own tokens, in a document layout.
+
+   styles.css is LINKED, never copied and never edited from here, so this page
+   cannot drift from the shipped design system. What follows is only what a
+   stylesheet built for a fixed three-pane workbench cannot provide: a
+   scrolling document, and a dark-scheme remap of the same variable names (the
+   app ships light-only). Every colour below is a token, never a literal. */
+
+/* The workbench pins html/body to the viewport and lays body out as a flex
+   column. A document scrolls instead. */
+html, body { height: auto; }
+body { display: block; font-size: 14px; line-height: 1.6; }
+
+/* Dark scheme: the same token names, re-pointed. Because every rule here and
+   in styles.css reads the variables rather than literals, this is the whole of
+   it — no second colour vocabulary, no duplicated rules. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chrome: #14130f;
+    --panel: #1c1b16;
+    --panel-raised: #232219;
+    --rail: #191813;
+    --output-canvas: #14130f;
+    --segment-track: #232219;
+    --sheet: #1f1e18;
+    --ink: #ece7dc;
+    --ink-2: #ddd8cc;
+    --ink-muted: #a49e90;
+    --ink-faint: #7c766a;
+    --line: #2e2c24;
+    --line-soft: #29271f;
+    --border-card: #3a372d;
+    --sheet-border: #35322a;
+    --accent: #5cb8ac;
+    --accent-dark: #7fd0c4;
+    --accent-wash: #172724;
+    --accent-tint-border: #2c4a45;
+    --ok: #74c08d;
+    --error: #e8877a;
+    --warn-bg: #2a2317;
+    --warn-border: #4b3f25;
+    --warn-ink: #e0b877;
+    --shadow-pane: 0 1px 2px rgba(0, 0, 0, .45), 0 2px 10px rgba(0, 0, 0, .35);
+    --shadow-sheet: 0 1px 0 #2a2820, 0 18px 44px -22px rgba(0, 0, 0, .8);
+  }
+}
+
+/* ---- Document frame ----------------------------------------------------- */
+
+/* Wider than the reading measure below on purpose: the prose is capped at
+   40rem wherever it appears, and the extra width goes to the evidence tables,
+   which have seven columns and must not push the second value column off the
+   edge of a laptop screen. */
+.doc { max-width: 58rem; margin: 0 auto; padding: 12px 10px 3.5rem; }
+
+/* The pane treatment from the workbench: a card floating on the warm desk. */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pane);
+  padding: 2rem 2.25rem 2.5rem;
+}
+
+/* Measure. Tables and figures may use the full card; prose may not. */
+.doc p, .doc li, .lede, .toc { max-width: 40rem; text-wrap: pretty; }
+
+.eyebrow {
+  margin: 0 0 .5rem;
+  font: .6875rem/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-muted);
+}
+
+.doc h1 {
+  margin: 0 0 .625rem;
+  font: 600 1.75rem/1.2 var(--serif);
+  letter-spacing: -.01em;
+}
+
+.lede { font: 1rem/1.6 var(--serif); color: var(--ink-2); margin: 0 0 1.25rem; }
+
+.doc h2 {
+  margin: 2.5rem 0 .75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font: 600 1.1875rem/1.25 var(--serif);
+}
+
+.doc h3 { margin: 1.75rem 0 .375rem; font: 600 1rem/1.35 var(--serif); }
+.doc h4 { margin: 1.25rem 0 .25rem; font-size: .8125rem; font-weight: 650; }
+.doc ul { padding-left: 1.125rem; }
+.doc li { margin: .25rem 0; }
+
+.doc code {
+  font: .8125em var(--mono);
+  background: var(--panel-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 3px;
+  padding: 0 .25rem;
+  overflow-wrap: anywhere;
+}
+
+.doc a { color: var(--accent); text-underline-offset: 2px; }
+.doc a:hover { color: var(--accent-dark); }
+
+/* ---- Masthead ----------------------------------------------------------- */
+
+/* .toolbar/.brand/.mark come from styles.css unchanged — the page wears the
+   app's own chrome. Only the wordmark needs restating, because in the app it
+   is an <h1> and here the <h1> belongs to the document. */
+.wordmark {
+  font: 600 1.0625rem/1.4 var(--serif);
+  letter-spacing: -.01em;
+  color: var(--ink);
+}
+.brand-link { display: flex; align-items: center; gap: .625rem; text-decoration: none; }
+.back-link { font: .75rem var(--mono); color: var(--ink-muted); text-decoration: none; }
+.back-link:hover { color: var(--accent); text-decoration: underline; }
+
+/* ---- Tiles -------------------------------------------------------------- */
+
+.tiles { display: flex; flex-wrap: wrap; gap: .625rem; margin: 1.5rem 0 1rem; }
+.tile {
+  flex: 1 1 9rem;
+  background: var(--panel-raised);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  padding: .8125rem .9375rem;
+}
+.tile b {
+  display: block;
+  font: 600 1.5rem/1.1 var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.tile span {
+  display: block;
+  margin-top: .25rem;
+  font: .625rem var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-muted);
+}
+
+.verdict { font: .9375rem/1.6 var(--serif); color: var(--ink-2); }
+
+/* ---- Boxes -------------------------------------------------------------- */
+
+.claim {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-tint-border);
+  border-radius: var(--radius-card);
+}
+.claim p { margin: 0 0 .625rem; }
+.claim p:last-child { margin-bottom: 0; }
+
+/* The open defect gets the app's own warn treatment — the same one the
+   synthetic-data banner wears, because it carries the same kind of weight:
+   read this before you rely on what is around it. */
+.warn-box {
+  margin: 1.25rem 0;
+  padding: .75rem 1rem;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-ctl);
+}
+.warn-box p { margin: 0 0 .5rem; }
+.warn-box p:last-child { margin-bottom: 0; }
+
+.aside {
+  margin: 1rem 0;
+  padding-left: .875rem;
+  border-left: 2px solid var(--border-card);
+  color: var(--ink-muted);
+  font-size: .8125rem;
+}
+
+.toc { margin: 1.25rem 0 0; padding: 0; list-style: none; }
+.toc li { margin: .1875rem 0; font: .8125rem var(--sans); }
+
+/* ---- Tables: the journal galley, on cells rather than on the table ------- */
+
+/* The wrapper is the sheet, and it is what scrolls on a narrow screen — never
+   the page body. Same contract R's own .summary-output > .table-scroll has. */
+.table-sheet {
+  overflow-x: auto;
+  background: var(--sheet);
+  border: 1px solid var(--sheet-border);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-sheet);
+  padding: 1.5rem 1.75rem 1.25rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.val-table {
+  border-collapse: collapse;
+  width: 100%;
+  font: .8125rem var(--sans);
+  color: var(--ink);
+}
+.val-table th, .val-table td {
+  padding: .375rem .875rem;
+  border: none;
+  text-align: left;
+  vertical-align: top;
+}
+.val-table th:first-child, .val-table td:first-child { padding-left: 0; }
+.val-table th:last-child, .val-table td:last-child { padding-right: 0; }
+.val-table thead th {
+  font: 600 .6875rem var(--mono);
+  letter-spacing: .02em;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  padding-top: .5rem;
+  padding-bottom: .5rem;
+  white-space: nowrap;
+}
+.val-table tbody tr:last-child td { border-bottom: 1.5px solid var(--ink); }
+.val-table tbody tr:hover td { background: var(--line-soft); }
+.val-table ul { margin: .25rem 0 .5rem; padding-left: 1rem; }
+.val-table li { margin: .125rem 0; max-width: 34rem; }
+.val-table .case-id, .val-table .num {
+  font-family: var(--mono);
+  font-size: .71875rem;
+  font-variant-numeric: tabular-nums;
+}
+.val-table .case-id { white-space: nowrap; }
+/* An estimate and its interval are one value: never break "1.66 (1.24-2.23)"
+   across lines — the sheet scrolls instead. A methods SENTENCE is not one
+   value, and holding it on one line is what pushed the second value column off
+   the page, so anything long enough to be prose wraps like prose. */
+.val-table .num { white-space: nowrap; }
+.val-table .num.long { white-space: normal; overflow-wrap: anywhere; }
+.val-table .tier { font: .6875rem var(--mono); color: var(--ink-muted); }
+/* One case id per line: they are long, hyphenated and mono, and inline they
+   wrap mid-token into something that reads like two ids. */
+.case-chip {
+  display: block;
+  font: .6875rem var(--mono);
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+
+/* Verdict colours, from the app's signal tokens. A difference is never quiet
+   and a pass is never loud. */
+.v-pass { color: var(--ok); }
+.v-warn { color: var(--warn-ink); font-weight: 600; }
+.v-fail { color: var(--error); font-weight: 600; }
+.v-code { font: 600 .6875rem var(--mono); letter-spacing: .02em; white-space: nowrap; }
+
+.doc-foot {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: .75rem;
+  color: var(--ink-muted);
+}
+.doc-foot p { margin: .25rem 0; max-width: 44rem; }
+
+/* ---- Responsive --------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .doc { padding: 8px 8px 2.5rem; }
+  .card { padding: 1.25rem 1.125rem 1.75rem; }
+  .table-sheet { padding: 1rem .875rem .75rem; }
+  .doc h1 { font-size: 1.5rem; }
+  .tile { flex: 1 1 7rem; }
+  .tile b { font-size: 1.25rem; }
+  /* A five- or six-column evidence table cannot be squeezed into a phone: at
+     100% width the percentage columns collapse to two or three words each and
+     a paragraph-length cell becomes a vertical ribbon. Give the table a floor
+     and let THE SHEET scroll — the same contract R's own rendered tables have
+     in the app (.summary-output > .table-scroll), and the reason the page body
+     itself never scrolls sideways. */
+  .val-table { min-width: 40rem; }
+}
+
+/* Touch: 16px is the documented floor for anything interactive (iOS Safari
+   zooms a smaller control on focus and never zooms back), and the body text
+   goes up with it — this page is read, not operated. */
+@media (pointer: coarse) {
+  body { font-size: 16px; }
+  .doc a, .doc summary { min-height: 24px; }
+  .back-link { font-size: 16px; }
+}
+"""
+
+
+def _web_tiles(data: dict, pending: list[str]) -> str:
+    """The headline counts. Same numbers as the scorecard's tiles, same
+    refusal to let any of them read as complete: the denominator is every
+    REGISTERED case, and a case with deferred targets does not count as
+    fully covered."""
+    cases = data["cases"]
+    with_findings = [c for c in cases if c["findings"]]
+    total = len(cases) + len(pending)
+    met = sum(1 for c in cases
+              if c["targets_met"] and not c.get("deferred_targets"))
+    deferred_cases = sum(1 for c in cases if c.get("deferred_targets"))
+    extra = ""
+    if deferred_cases:
+        extra += (f'<div class="tile"><b class="v-warn">{deferred_cases}</b>'
+                  f'<span>cases with unchecked declared coverage</span></div>')
+    if pending:
+        extra += (f'<div class="tile"><b class="v-warn">{len(pending)}</b>'
+                  f'<span>cases run but never compared</span></div>')
+    findings_class = "v-fail" if data["total_findings"] else "v-pass"
+    cases_class = "v-fail" if with_findings else "v-pass"
+    return f"""<div class="tiles">
+  <div class="tile"><b>{esc(data['total_compared'])}</b>
+    <span>values compared</span></div>
+  <div class="tile"><b class="{findings_class}">{esc(data['total_findings'])}</b>
+    <span>differences found</span></div>
+  <div class="tile"><b class="{cases_class}">{len(with_findings)} of {total}</b>
+    <span>cases with differences</span></div>
+  <div class="tile"><b>{met} of {total}</b>
+    <span>cases fully covered</span></div>{extra}
+</div>"""
+
+
+def _web_verdict(data: dict, pending: list[str]) -> str:
+    """One sentence a reader can stop at, derived from the findings alone."""
+    cases = data["cases"]
+    with_findings = [c for c in cases if c["findings"]]
+    clean = len(cases) - len(with_findings)
+    total = len(cases) + len(pending)
+    if not with_findings:
+        return ('<p class="verdict">Every compared value matched. That is the '
+                'whole of what these cases checked &mdash; read '
+                '<a href="#checked">what was checked</a> before reading it as '
+                'more.</p>')
+    export_only = all(_export_path_only(c) for c in with_findings)
+    where = ("one case" if len(with_findings) == 1
+             else f"{len(with_findings)} cases")
+    if export_only:
+        return (
+            f'<p class="verdict">{clean} of the {total} cases match exactly. '
+            f'All {data["total_findings"]} differences are on {where}, and '
+            f'every one of them is Figura disagreeing with the '
+            f'<code>.R</code> script it offers you to download &mdash; not '
+            f'with the independent implementation. <b>The numbers on screen '
+            f'were right;</b> the downloaded script was not. '
+            f'<a href="#differences">What that means for you</a>.</p>')
+    return (
+        f'<p class="verdict">{clean} of the {total} cases match exactly. '
+        f'{data["total_findings"]} differences remain, on {where}. '
+        f'<a href="#differences">Read them</a> before relying on the '
+        f'analyses they name.</p>')
+
+
+def _web_coverage_table(data: dict, cases_dir: Path) -> str:
+    """What is compared, per analysis — and what is not.
+
+    Built from the cases' own declared `targets` (the quantities a comparison
+    really credited) plus the per-kind display and script tiers, so a case that
+    stopped comparing something cannot leave this table claiming it still does.
+    """
+    rows = []
+    for figure, cases in _grouped_by_analysis(data["cases"], cases_dir):
+        kinds = sorted({c["kind"] for c in cases})
+        exact, notes, decisions = [], [], []
+        for key in dict.fromkeys(k for c in cases for k in c["targets"]):
+            gloss = TARGET_GLOSS.get(key, f"<code>{esc(key)}</code>")
+            if key in NOTE_TARGETS:
+                notes.append(gloss)
+            elif key in DISPLAY_TIER_TARGETS:
+                decisions.append(gloss)
+            else:
+                exact.append(gloss)
+        items = []
+        for kind in kinds:
+            display_tier, script_tier = KIND_TIERS.get(kind, (None, None))
+            if display_tier:
+                items.append(
+                    f"<li><b>As displayed</b> &mdash; {display_tier}, compared "
+                    f"character for character.</li>")
+            if script_tier:
+                items.append(
+                    f"<li><b>The downloaded script</b> &mdash; {script_tier}, "
+                    f"compared against the screen.</li>")
+        if exact:
+            items.insert(0, (
+                f"<li><b>At full precision</b> (agreement to a relative "
+                f"{REL_TOL:g}) &mdash; {', '.join(exact)}.</li>"))
+        if decisions:
+            items.append(
+                f"<li><b>The choice of statistic</b> &mdash; not just the "
+                f"number but which one: {', '.join(decisions)}.</li>")
+        if notes:
+            items.append(
+                f"<li><b>Advisory sentences</b> &mdash; whether each one fires "
+                f"at all: {', '.join(notes)}.</li>")
+        not_compared = " ".join(
+            KIND_NOT_COMPARED[k] for k in kinds if k in KIND_NOT_COMPARED)
+        case_list = "".join(
+            f"<span class='case-chip'>{esc(c['id'])}</span>" for c in cases)
+        rows.append(
+            f"<tr><td><b>{esc(_analysis_name(figure))}</b><br>"
+            f"<span class='tier'>{len(cases)} case"
+            f"{'s' if len(cases) != 1 else ''}</span>{case_list}</td>"
+            f"<td><ul>{''.join(items)}</ul></td>"
+            f"<td>{not_compared or '&mdash;'}</td></tr>")
+    return (
+        "<div class=\"table-sheet\"><table class=\"val-table\">"
+        "<colgroup><col style=\"width:20%\"><col style=\"width:48%\">"
+        "<col style=\"width:32%\"></colgroup><thead><tr>"
+        "<th>Analysis</th><th>What is compared</th><th>What is not</th>"
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+
+
+def _web_case_table(data: dict, pending: list[str], cases_dir: Path) -> str:
+    """One row per case: what it exercised, how much was compared, how it came
+    out. Registered-but-uncompared cases get their own visibly-incomplete row,
+    exactly as on the scorecard — a case that carries no guarantee must never
+    be invisible on the page that publishes the guarantees."""
+    rows = []
+    for case in data["cases"]:
+        findings = case["findings"]
+        if findings:
+            result = (f"<span class='v-fail'>{len(findings)} difference"
+                      f"{'s' if len(findings) != 1 else ''}</span> "
+                      f"&mdash; <a href='#differences'>read them</a>")
+        else:
+            result = "<span class='v-pass'>no differences</span>"
+        deferred = case.get("deferred_targets") or []
+        if deferred:
+            coverage = (f"<span class='v-warn'>{len(deferred)} not checked</span>"
+                        f"<br><span class='tier'>{esc(', '.join(deferred))}"
+                        f"</span>")
+        elif case["targets_met"]:
+            coverage = "<span class='v-pass'>complete</span>"
+        else:
+            coverage = "<span class='v-fail'>INCOMPLETE</span>"
+        rows.append(
+            f"<tr><td class='case-id'>{esc(case['id'])}</td>"
+            f"<td>{esc(_analysis_name(_case_figure(cases_dir, case['id'])))}</td>"
+            f"<td class='num'>{esc(case['compared'])}</td>"
+            f"<td>{coverage}</td><td>{result}</td></tr>")
+    for case_id in pending:
+        rows.append(
+            f"<tr><td class='case-id'>{esc(case_id)}</td>"
+            f"<td>{esc(_analysis_name(_case_figure(cases_dir, case_id)))}</td>"
+            f"<td class='num'>0</td>"
+            f"<td><span class='v-warn'>NONE</span></td>"
+            f"<td><span class='v-warn'>never compared</span> &mdash; this case "
+            f"ran but its two implementations were never set against each "
+            f"other, so it carries no guarantee at all</td></tr>")
+    return (
+        "<div class=\"table-sheet\"><table class=\"val-table\"><thead><tr>"
+        "<th>Case</th><th>Analysis</th><th>Values compared</th>"
+        "<th>Declared coverage</th><th>Result</th>"
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+
+
+def _web_narrative(case: dict) -> str:
+    """The findings of one case, in clinical language, from the findings alone.
+
+    Every number here is read out of findings.json. The only sentence that is
+    not derivable — WHY the exported script diverges — comes from CASE_CAUSE
+    and renders only for a case that has an entry there. A case whose findings
+    are not export-path-only gets the generic block instead, because the
+    reassurance in the export-path story ("the numbers on screen were right")
+    would then be false.
+    """
+    findings = case["findings"]
+    case_id = esc(case["id"])
+    if not _export_path_only(case):
+        sources = sorted({f.get("source") or "unattributed" for f in findings})
+        return (
+            f"<h3>{case_id} &mdash; {len(findings)} differences</h3>"
+            f"<p>These differences are not all on the export path: they were "
+            f"raised by {esc(', '.join(sources))}. Read the table below in "
+            f"full &mdash; the export-path explanation elsewhere on this page "
+            f"does not cover them, and nothing here should be read as a "
+            f"statement that the displayed numbers agree.</p>")
+
+    counts = _count_pairs(case)
+    script_cells = [f for f in findings if f["code"] == "SCRIPT_DIVERGENCE"]
+    missing = [f for f in findings if f["code"] == "MISSING_QUANTITY"]
+    parts = [f"<h3>{case_id} &mdash; {len(findings)} differences, all on the "
+             f"downloaded script</h3>"]
+    parts.append(CASE_CAUSE.get(case["id"], ""))
+
+    count_rows = []
+    labels = {"n": "patients analysed", "n_event": "patients with the outcome",
+              "n_dropped": "rows dropped"}
+    for quantity, (script, app) in counts.items():
+        count_rows.append(
+            f"<tr><td>{esc(labels.get(quantity, quantity))}</td>"
+            f"{_value_cell(app)}{_value_cell(script)}</tr>")
+    for f in script_cells:
+        count_rows.append(
+            f"<tr><td>{esc(_row_label(f))}</td>"
+            f"{_value_cell(f['figura'])}{_value_cell(f['python'])}</tr>")
+    for f in missing:
+        count_rows.append(
+            f"<tr><td>{esc(_row_label(f))}</td>"
+            f"<td class='num'>shown in the table</td>"
+            f"<td class='num v-fail'>absent entirely</td></tr>")
+    if count_rows:
+        parts.append(
+            "<div class=\"table-sheet\"><table class=\"val-table\">"
+            "<colgroup><col style=\"width:24%\"><col style=\"width:38%\">"
+            "<col style=\"width:38%\"></colgroup><thead><tr>"
+            "<th>Quantity</th><th>Figura</th>"
+            "<th>The downloaded <code>.R</code></th></tr></thead>"
+            f"<tbody>{''.join(count_rows)}</tbody></table></div>"
+            "<p class=\"aside\">For the estimates, the Figura column is the "
+            "string the app displayed. For the counts, it is what the "
+            "independent implementation computed from the same file &mdash; "
+            "the app's own displayed estimates match it cell for cell, which "
+            "is what this case's passing display comparison means.</p>")
+
+    parts.append(
+        "<p><b>The displayed numbers were right.</b> On this case the app's "
+        "screen and the independent Python implementation agree completely "
+        "&mdash; that comparison passed, and it is the comparison that speaks "
+        "to what you read off the screen. Every difference above is between "
+        "Figura and its own exported script.</p>")
+    parts.append(CASE_STATUS.get(
+        case["id"],
+        "<p class=\"aside\">This case has no recorded disposition in "
+        "<code>build_scorecard.py</code>'s <code>CASE_STATUS</code>, so this "
+        "page cannot say whether the differences above are being worked on. "
+        "Read the case's own files under <code>stats-validation/</code>.</p>"))
+    return "".join(parts)
+
+
+def _web_findings_table(data: dict) -> str:
+    """Every finding, unabridged, with the comparison named on each row."""
+    # The case column earns its width only when there is more than one case to
+    # tell apart. With a single failing case it repeats the same id down the
+    # page and squeezes the two VALUE columns — the ones the reader came for —
+    # off the right-hand edge of the sheet.
+    failing = [c for c in data["cases"] if c["findings"]]
+    show_case = len(failing) > 1
+    rows = []
+    for case in failing:
+        for f in case["findings"]:
+            case_cell = (f"<td class='case-id'>{esc(case['id'])}</td>"
+                         if show_case else "")
+            rows.append(
+                f"<tr>{case_cell}"
+                f"<td class='v-code v-fail'>{esc(f['code'])}</td>"
+                f"<td class='tier'>{esc(f.get('source') or '—')}</td>"
+                f"<td>{esc(f['term'])}</td><td>{esc(f['quantity'])}</td>"
+                f"{_value_cell(f['figura'])}{_value_cell(f['python'])}</tr>")
+    if not rows:
+        return ""
+    case_header = "<th>Case</th>" if show_case else ""
+    case_note = ("" if show_case else
+                 f"<p>Every row below is case "
+                 f"<code>{esc(failing[0]['id'])}</code>.</p>")
+    codes = dict.fromkeys(f["code"] for c in data["cases"] for f in c["findings"])
+    sources = dict.fromkeys(
+        f.get("source") for c in data["cases"] for f in c["findings"])
+    code_legend = "".join(
+        f"<li><code>{esc(code)}</code> &mdash; "
+        f"{CODE_GLOSS.get(code, 'see stats-validation/compare/compare.py')}</li>"
+        for code in codes)
+    source_legend = "".join(
+        f"<li><b>{esc(src)}</b> &mdash; "
+        f"{SOURCE_GLOSS.get(src, 'see stats-validation/compare/compare.py')}"
+        f"</li>" for src in sources if src)
+    return (
+        "<h3>Every difference, unabridged</h3>"
+        "<p>The two value columns hold different artifacts on different rows, "
+        "so each row names its own comparison. Read that column first:</p>"
+        f"<ul>{source_legend}</ul>"
+        f"<p>And the finding codes, which are the same words "
+        f"<code>findings.json</code> uses:</p><ul>{code_legend}</ul>"
+        f"{case_note}"
+        "<div class=\"table-sheet\"><table class=\"val-table\"><thead><tr>"
+        f"{case_header}<th>Code</th><th>Comparison</th><th>Term</th>"
+        "<th>Quantity</th><th>Figura</th><th>Python</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        f"<p class=\"aside\">Values are rounded to "
+        f"{PUBLISHED_SIGNIFICANT_DIGITS} significant digits for publication. "
+        f"The comparison itself ran at full double precision, at a relative "
+        f"tolerance of {REL_TOL:g} &mdash; nothing here was judged at "
+        f"{PUBLISHED_SIGNIFICANT_DIGITS} digits. This page simply is not in "
+        f"the business of publishing the last digits of a double, which differ "
+        f"between linear-algebra libraries and say nothing about the "
+        f"statistics.</p>")
+
+
+def _web_differences_section(data: dict) -> str:
+    with_findings = [c for c in data["cases"] if c["findings"]]
+    if not with_findings:
+        return (
+            "<p>No case currently publishes a difference. That is not the same "
+            "as \"nothing can be wrong\": read "
+            "<a href=\"#checked\">what was checked</a> for the boundary of the "
+            "claim, and the limits stated at the top of this page for what a "
+            "specification-based re-implementation cannot catch in "
+            "principle.</p>"
+            "<p class=\"aside\">A validation page that only ever shows green "
+            "is not evidence. When this harness finds something, it is "
+            "published here, in this section, before it is fixed.</p>")
+    parts = [
+        "<p>Differences are published here <b>before</b> they are fixed, and "
+        "they are described in the terms that matter clinically: which "
+        "patients were analysed, and which number changed.</p>"
+    ]
+    parts += [_web_narrative(c) for c in with_findings]
+    parts.append(_web_findings_table(data))
+    return "".join(parts)
+
+
+def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
+    """The wasm-vs-native-R tier, for the reader who actually runs webR.
+
+    Reuses the scorecard's own staleness digests rather than restating them:
+    if the native numbers or the shipped app have moved since the gate was
+    hand-run, this page says so instead of quietly presenting old evidence as
+    current.
+    """
+    path = Path(results_dir) / "webr-tier.json"
+    if not path.exists():
+        return ("<div class=\"warn-box\"><p>This gate has not been run for the "
+                "current release, so there is <b>no</b> published "
+                "wasm-vs-native-R evidence right now. It is deleted before "
+                "every run, so an empty section means \"not run\", never "
+                "\"last release's numbers still apply\".</p></div>")
+    try:
+        raw = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return ("<div class=\"warn-box\"><p>The webR tier's evidence file is "
+                "present but could not be read as JSON, so nothing is claimed "
+                "here.</p></div>")
+
+    cases = raw.get("cases") or []
+    registered = registered_cases(Path(results_dir))
+    covered = [c.get("id") for c in cases]
+    rows = []
+    for c in cases:
+        if c.get("aborted"):
+            rows.append(
+                f"<tr><td class='case-id'>{esc(c.get('id'))}</td>"
+                f"<td class='v-fail'>ABORTED</td><td class='num'>&mdash;</td>"
+                f"<td>The two runtimes disagreed on the shape of the output "
+                f"before any value was compared: {esc(c.get('reason'))}</td>"
+                f"</tr>")
+            continue
+        identical = bool(c.get("identical"))
+        differing = c.get("differing_cells") or []
+        if identical:
+            verdict = "<span class='v-pass'>identical</span>"
+            detail = ("every displayed string matched native R exactly")
+        else:
+            verdict = "<span class='v-fail'>DIFFERS</span>"
+            detail = "".join(
+                f"<li><b>{esc(d.get('term'))}</b> / {esc(d.get('column'))}: "
+                f"native R <code>{esc(d.get('native'))}</code>, webR "
+                f"<code>{esc(d.get('webr'))}</code></li>" for d in differing)
+            detail = (f"{len(differing)} of {esc(c.get('cells_compared'))} "
+                      f"strings differ<ul>{detail}</ul>")
+        rows.append(
+            f"<tr><td class='case-id'>{esc(c.get('id'))}</td><td>{verdict}</td>"
+            f"<td class='num'>{esc(c.get('cells_compared'))}</td>"
+            f"<td>{detail}</td></tr>")
+    if not rows:
+        rows.append("<tr><td colspan='4'>The evidence file lists no cases.</td>"
+                    "</tr>")
+
+    total = raw.get("cells_compared")
+    numeric = raw.get("cells_with_numbers")
+    totals = ""
+    if total is not None and numeric is not None:
+        note = raw.get("cells_note")
+        totals = (
+            f"<p>Every one of the <b>{esc(total)}</b> strings the app displays "
+            f"across these cases was compared &mdash; <b>{esc(numeric)}</b> of "
+            f"them carrying a number that could actually move between native R "
+            f"and WebAssembly. The rest are column headers, row labels and "
+            f"deliberately blank cells, which cannot drift.</p>"
+            + (f"<p class=\"aside\">{esc(note)}</p>" if note else ""))
+
+    coverage = ""
+    if registered:
+        uncovered = [c for c in registered if c not in covered]
+        coverage = (
+            f"<p><b>Coverage: {len(covered)} of {len(registered)} cases.</b> "
+            f"This gate drives the real browser interface, so it covers only "
+            f"the cases with a full native-R display artifact to compare a "
+            f"rendered table against &mdash; the two ratio-table analyses. The "
+            f"remaining cases are validated on native R above and are "
+            f"<i>not</i> covered by any wasm-vs-native claim."
+            + (f" Not gated here: <code>{esc(', '.join(uncovered))}</code>."
+               if uncovered else "") + "</p>")
+
+    stale = ""
+    stale_native = _stale_native_digest(
+        raw, Path(results_dir),
+        [c.get("id") for c in cases if not c.get("aborted")])
+    if stale_native:
+        stale += ("<p>The native-R numbers this evidence was compared against "
+                  "have changed since the gate ran, so it describes an older "
+                  "set of results. It needs re-running.</p>")
+    if _stale_web_digest(raw, Path(web_dir)):
+        stale += ("<p>The shipped app has changed since this evidence was "
+                  "measured, so it describes a browser run of an earlier "
+                  "version of the app. It needs re-running.</p>")
+    if stale:
+        stale = f"<div class=\"warn-box\">{stale}</div>"
+
+    commit = raw.get("commit")
+    provenance = (
+        f"<p class=\"aside\">Runtime <code>{esc(raw.get('runtime'))}</code>, "
+        f"run {esc(raw.get('date'))}"
+        + (f", against commit <code>{esc(str(commit)[:12])}</code>"
+           if commit else "")
+        + f". {esc(raw.get('runtime_source') or '')}</p>")
+
+    return (
+        f"{stale}{provenance}{coverage}{totals}"
+        "<div class=\"table-sheet\"><table class=\"val-table\"><thead><tr>"
+        "<th>Case</th><th>Result</th><th>Strings compared</th><th>Detail</th>"
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>")
+
+
+def _web_download_caveat(data: dict) -> str:
+    """The honest caveat on "run the exported script yourself".
+
+    Rendered ONLY while a case actually publishes export-path findings, and
+    written from those findings — so when the fix lands and the findings go
+    away, the caveat goes with them instead of warning about a defect that no
+    longer exists.
+    """
+    export_cases = [c for c in data["cases"]
+                    if c["findings"] and _export_path_only(c)]
+    if not export_cases:
+        return ""
+    ids = ", ".join(c["id"] for c in export_cases)
+    return (
+        "<div class=\"warn-box\">"
+        "<p><b>One honest caveat on that first step</b>, and it is the open "
+        "defect above. If your CSV contains cells R's <code>read.csv</code> "
+        "reads as missing &mdash; most commonly the two letters "
+        "<code>NA</code> typed as text &mdash; or values padded with spaces, "
+        "the downloaded script will analyse a different set of rows than the "
+        "app did, and the numbers will not match. That is Figura's defect, not "
+        "your data's, it is <a href=\"#differences\">measured on every run</a> "
+        f"(case <code>{esc(ids)}</code>), and a fix is planned. If your file "
+        "has none of those, the downloaded script reproduces the app exactly "
+        "&mdash; which is what the other cases measure.</p></div>")
+
+
+def build_web(findings_path: Path | str | None = None,
+              out_path: Path | str | None = None,
+              web_dir: Path | str | None = None,
+              cases_dir: Path | str | None = None) -> Path:
+    """Write web/validation.html — the page a user reads."""
+    findings_path = (Path(findings_path) if findings_path
+                     else RESULTS / "findings.json")
+    results_dir = findings_path.parent
+    out_path = Path(out_path) if out_path else WEB_PAGE
+    web_dir = Path(web_dir) if web_dir else WEB
+    cases_dir = Path(cases_dir) if cases_dir else CASES
+
+    if not findings_path.exists():
+        raise SystemExit(
+            f"validation page: no findings to publish ({findings_path} does "
+            "not exist). compare.py writes it before it returns, so its "
+            "absence means the comparator did not finish.")
+    data = json.loads(findings_path.read_text())
+    pending = _pending(data, results_dir)
+    findings_count = data["total_findings"]
+
+    lede_tail = (
+        f"This page is that comparison &mdash; including the "
+        f"{findings_count} difference{'s' if findings_count != 1 else ''} it "
+        f"currently finds." if findings_count else
+        "This page is that comparison, including every difference it finds.")
+
+    doc = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statistical validation &mdash; Figura</title>
+<meta name="description" content="How Figura's numbers are checked: every
+reported statistic re-derived from the same raw CSV by a second, independently
+written implementation, with every difference published.">
+<link rel="stylesheet" href="styles.css">
+<style>{WEB_CSS}</style>
+</head>
+<body>
+<header class="toolbar">
+  <a class="brand brand-link" href="index.html">
+    <svg class="mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <rect x="1" y="9" width="3" height="6" />
+      <rect x="6" y="5" width="3" height="10" />
+      <rect x="11" y="1" width="3" height="14" />
+    </svg>
+    <span class="wordmark">Figura</span>
+  </a>
+  <a class="back-link" href="index.html">&larr; Back to the app</a>
+</header>
+
+<main class="doc">
+<article class="card">
+
+<p class="eyebrow">Published evidence</p>
+<h1>Statistical validation</h1>
+<p class="lede">Every number Figura reports is re-derived from the same raw CSV
+by a second implementation, written separately from the one that ships.
+{lede_tail}</p>
+
+<div class="claim">
+<p><b>What was actually done, stated precisely.</b> One specification &mdash;
+prose, transcribed from Figura's R sources by an agent with full source access
+&mdash; was implemented a second time in Python by agents that never read the R,
+against an acceptance suite whose expected values were computed in R. It is a
+re-implementation from a written spec, not two blind implementations of a shared
+problem statement.</p>
+<p><b>That catches</b> implementation bugs, library-default mismatches and
+arithmetic errors: the failure modes where a second author, writing independent
+code from a written rule, lands somewhere different. Those are the numerous,
+ordinary, expensive mistakes.</p>
+<p><b>It cannot catch</b> a misreading baked into the specification itself. If
+the spec described R's behaviour wrongly, both implementations reproduce the
+same wrong thing and agree with each other. The specifications cite the R
+sources line by line, they are in the repository at
+<code>stats-validation/spec/</code>, and they are the thing to attack if you
+want to attack this.</p>
+<p>The full disclosure &mdash; everything the clean-room bundle contained, and
+two episodes where information leaked into it, named by commit hash &mdash; is
+in <code>stats-validation/README.md</code>. Nothing here is a claim of
+independent certification, accreditation or regulatory clearance: Figura is not
+a medical device, and this is a comparison you can re-run, not a validation
+report in the regulatory sense.</p>
+</div>
+
+{_web_tiles(data, pending)}
+{_web_verdict(data, pending)}
+
+<ul class="toc">
+<li><a href="#checked">What was checked, and what was not</a></li>
+<li><a href="#differences">The differences, in plain language</a></li>
+<li><a href="#webr">The browser runtime: webR against native R</a></li>
+<li><a href="#yourself">How to check this yourself</a></li>
+<li><a href="#howmade">How this page is produced</a></li>
+</ul>
+
+<h2 id="checked">What was checked, and what was not</h2>
+<p>Each case below is a real CSV run end to end through the shipped app &mdash;
+the same CSV parser, the same analysis, the same rendering &mdash; and then
+again through the independent implementation. Three comparisons run on each: the
+numbers <b>as displayed</b>, the underlying quantities <b>at full precision</b>,
+and the <code>.R</code> script the app offers <b>for download</b>, re-run in R.</p>
+{_web_coverage_table(data, cases_dir)}
+<p>Two boundaries this table does not draw on its own. <b>Explore</b>, the plot
+builder, has no case here: it reports no statistics of its own, only a figure.
+And the whole table above is <b>native R</b> &mdash; the runtime in your browser
+is checked separately and on fewer cases; see
+<a href="#webr">webR against native R</a>.</p>
+
+<h3>Case by case</h3>
+{_web_case_table(data, pending, cases_dir)}
+
+<h2 id="differences">The differences, in plain language</h2>
+{_web_differences_section(data)}
+
+<h2 id="webr">The browser runtime: webR against native R</h2>
+<p>Everything above ran native R on a developer machine. You do not run native
+R &mdash; you run R compiled to WebAssembly, in your own browser tab. wasm has
+no 80-bit extended precision, and webR ships reference linear-algebra libraries
+rather than the platform's tuned ones, so an iteratively fitted model &mdash;
+Cox's Newton-Raphson, logistic regression's IRLS &mdash; is where a difference
+would show up if there were one.</p>
+<p>A hand-run gate drives the real interface in a real browser (upload the file,
+map the columns, confirm the event value, set the reference levels, render) and
+compares every string the app displays against native R's output, cell by cell.
+It is run before a release rather than on every change, because it needs a
+browser and the network.</p>
+{_web_webr_section(results_dir, web_dir)}
+
+<h2 id="yourself">How to check this yourself</h2>
+<p>You do not have to take this page's word for any of it.</p>
+<ul>
+<li><b>Re-run your own analysis in R.</b> Run it in Figura, then press
+<code>.R</code> in the Console pane's toolbar. Figura downloads the exact script
+it just ran &mdash; the statistical calls are the expressions the app evaluated,
+not a rewrite of them. Run that script in your own R, or hand it to your
+statistician, and compare it against what the app showed you.</li>
+<li><b>Re-run this whole comparison.</b> From a checkout of the repository,
+<code>make -C stats-validation all</code> re-derives every number on this page
+from the raw CSVs and rewrites the evidence files. It needs R, Python and
+Node.</li>
+</ul>
+{_web_download_caveat(data)}
+
+<h2 id="howmade">How this page is produced</h2>
+<p>This page is generated from <code>stats-validation/results/findings.json</code>
+&mdash; the comparator's own output &mdash; by
+<code>stats-validation/build_scorecard.py --web</code>. It performs no
+computation of its own and reads nothing but files in the repository, so the
+same commit always renders the same page. Continuous integration regenerates it
+on every push and fails the build if the published page is not what the current
+evidence renders, which is what stops it from quietly ageing into a claim
+nobody re-checked.</p>
+<p>The evidence it is built from is in the repository beside it: the raw cases
+(<code>stats-validation/cases/</code>), the written specifications
+(<code>stats-validation/spec/</code>), the independent implementation
+(<code>stats-validation/python/</code>) with each module's record of the
+ambiguities its author hit, the comparator
+(<code>stats-validation/compare/</code>), and the results
+(<code>stats-validation/results/</code>).</p>
+
+<footer class="doc-foot">
+<p>Figura runs entirely in your browser: there is no backend that could receive
+your data, and this page adds none. It loads the app's own stylesheet and
+self-hosted fonts, and makes no other request &mdash; no analytics, no external
+resource of any kind.</p>
+<p><a href="index.html">Back to the app</a></p>
+</footer>
+
+</article>
+</main>
+</body>
+</html>
+"""
+    out_path.write_text(doc)
+    return out_path
+
+
 if __name__ == "__main__":
-    print(f"wrote {build()}")
+    # Bare invocation writes BOTH artifacts, deliberately: they are two
+    # renderings of one findings.json, and a run that refreshed the internal
+    # scorecard while leaving the published page a release behind is exactly
+    # the failure the freshness gate exists to make impossible.
+    args = sys.argv[1:]
+    if args and args != ["--web"]:
+        raise SystemExit("usage: build_scorecard.py [--web]")
+    if not args:
+        print(f"wrote {build()}")
+    print(f"wrote {build_web()}")

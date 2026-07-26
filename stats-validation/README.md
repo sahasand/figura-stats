@@ -29,11 +29,76 @@ Run everything:
 Read `results/scorecard.html` in a browser. It is self-contained and opens
 from `file://`.
 
+Two renderings come out of the same `findings.json`, and `make all` writes
+both: that internal scorecard, and **`web/validation.html`, the page shipped
+inside the app** — see [The published page](#the-published-page).
+
 **`all` exits non-zero whenever a case publishes findings, and that is the
 designed outcome, not a broken run.** `logistic-dirty` exists to publish the
 app-vs-exported-script divergence of `issues/02`, so it fails on purpose. The
 scorecard is written BEFORE the failure is reported — a non-zero `all` means
 "findings exist, go read them", never "nothing was published".
+
+## The published page
+
+`web/validation.html` is the user-facing half of this harness: the page a
+clinician opens from the app's rail ("Do these numbers match R?") when they are
+deciding whether to trust a number that is about to go into a manuscript. It is
+**generated**, never hand-edited:
+
+    .venv/bin/python build_scorecard.py          # scorecard + page
+    .venv/bin/python build_scorecard.py --web    # the page only
+
+`make all` runs the bare form, so the two renderings can never fall out of step
+with each other, and it deletes the page along with `findings.json` and
+`scorecard.html` before the comparator runs — the same stale-evidence rule: a
+run that dies before writing publishes nothing rather than last run's numbers.
+(The page is tracked, so `git checkout web/validation.html` restores it, and
+`git status` shows the deletion in the meantime.)
+
+Five properties are deliberate.
+
+- **It links `web/styles.css` rather than inlining CSS.** The page ships inside
+  the app and must age with the app's design tokens; a validation page that
+  looks like a different product is a validation page nobody believes. Its own
+  `<style>` block carries only what a stylesheet built for a fixed three-pane
+  workbench cannot provide: a document layout, and a dark-scheme remap of the
+  **same token names** (the app itself ships light-only, and `styles.css` was
+  out of scope for this task). Every colour on the page is a token.
+- **It makes no external request.** No analytics, no CDN font, no off-origin
+  link: the no-egress invariant covers this page like every other byte of
+  `web/`. `test_web_page_issues_no_external_request` asserts that every `href`
+  and `src` is relative and that the page carries no `<script>` at all. (The
+  webR runtime URL appears once as *text*, inside the tier's own provenance
+  sentence. It is not a reference and fetches nothing.)
+- **It is a pure function of its inputs**, exactly like the scorecard, because
+  CI byte-diffs it: `git diff --exit-code -- web/validation.html` runs beside
+  the scorecard's diff in the `validation` job. No clock, no environment, no
+  `git rev-parse`.
+- **Every honesty guard the scorecard grew is rendered here too**, in the
+  reader's language: registered-but-uncompared cases, deferred targets, the
+  webR tier's 2-of-8 coverage ratio, and both staleness digests.
+- **It publishes the findings before they are fixed.** The 30 export-path
+  findings of `issues/02` are explained on the page in clinical terms — which
+  patients the downloaded script analysed, which numbers moved — and named as a
+  known open defect with a fix planned. A validation page that only ever shows
+  green is not evidence.
+
+Two things in the generator are knowledge the artifacts do not contain, and
+both are keyed by case id so they cannot be inherited by a case they were never
+written for: `CASE_CAUSE` (*why* a case's exported script diverges) and
+`CASE_STATUS` (open/fixed, tracked where, affecting whom). Everything else on
+the page — every count, every value, every verdict — is read out of
+`results/findings.json` and `results/webr-tier.json`.
+
+The plain-language narrative is also **gated on the shape of the evidence**.
+"The displayed numbers were right" renders only while every finding on the case
+is Figura-vs-its-own-exported-script; a single `screen vs Python` finding
+switches the block to a generic one that says the export-path explanation does
+not cover it. The same rule governs the "run the exported script yourself"
+caveat: it is written from the export-path findings, so when the fix lands and
+they disappear, the caveat disappears with them instead of warning about a
+defect that no longer exists.
 
 ## How Path B was produced
 
@@ -231,8 +296,9 @@ The comparison itself runs on the full double; full precision stays in the
 gitignored `results/*.figura-exact.json` and `results/*.python.json`. The
 artifact says so inline (`_published_precision`) and so does the scorecard, so
 no reader can conclude the harness *compared* at 9 digits. `results/scorecard.html`
-is therefore still **byte**-diffed in CI: it renders only what `findings.json`
-publishes, and `build_scorecard.py` reads no live state.
+and `web/validation.html` are therefore still **byte**-diffed in CI: both render
+only what `findings.json` publishes, and `build_scorecard.py` reads no live
+state.
 
 **Why 9 and not 12.** An earlier round rounded to 12 significant digits
 (~1e-12 relative) on the theory that it was "a million times tighter than
@@ -301,7 +367,9 @@ CI (`.github/workflows/ci.yml`, job `validation`) runs, in order: `make test`;
 only be there if the pipeline really ran — without this, a failure *before*
 `make clean` deletes anything leaves the tracked evidence intact and both gates
 compare it against itself); `make gate`; `make freshness` plus a byte diff of
-`scorecard.html`; and three separate artifact uploads. `webr-tier.json` is
+`scorecard.html` and of the published `web/validation.html` (regenerated by the
+same `make clean all` step, so a stale published page fails the build); and
+three separate artifact uploads. `webr-tier.json` is
 excluded from both freshness checks — nothing in CI regenerates it, because the
 webR tier is hand-run — but it is still uploaded. The uploads are split one file
 per step because `if-no-files-found` is evaluated over the whole path list: three
@@ -495,8 +563,20 @@ real single point of failure. If you find the spec ambiguous, record the
 ambiguity in your `DECISIONS-<module>.md` and resolve it from the spec; do not
 resolve it by looking.
 
-Phase 1 never edits `R/` or `web/` — this harness is entirely new code and
-data living under `stats-validation/`. Harness JS tests are run via
-`stats-validation`'s own `Makefile` targets, not the repo's `npm run
-test:unit` chain; they are a separate test surface and must not be appended
-to that hand-maintained chain.
+Phase 1 never edited `R/` or `web/` — the harness itself is entirely new code
+and data living under `stats-validation/`. **Phase 2 item 1 (this page's
+publication) is the first change that touches the shipped app**, and it is
+deliberately narrow: `web/validation.html` (generated), one link in
+`web/index.html`, a `CACHE` bump plus a precache entry in `web/sw.js`, the
+`test:unit` chain, CI, and the docs. `R/` is still untouched.
+
+The Phase-1 rule that harness JS tests run only from this directory's
+`Makefile` is **retired with it**: `harness/build-spec.test.mjs`,
+`harness/parse-cells.test.mjs` and `e2e/compare-text.test.mjs` are now also
+appended to the repo's hand-maintained `npm run test:unit` chain, per the repo
+convention that a new `*.test.mjs` joins that chain in the commit that creates
+it. They still run from `make -C stats-validation test` as well — the two
+surfaces overlap on purpose, because CI's `validation` job runs the Makefile
+target and its `js-tests` job runs the chain. All three run correctly from the
+repo root, which is the cwd `npm run` provides and the cwd
+`build-spec.test.mjs` requires.

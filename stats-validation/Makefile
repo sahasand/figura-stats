@@ -38,17 +38,28 @@ COMPARE_CASES := $(CASES)
 # absolutely via $(CURDIR).
 #
 # TWO THINGS THE ORDERING BUYS, both learned the hard way:
-#   * the STALE-EVIDENCE DELETE. findings.json and scorecard.html are removed
-#     before compare runs. If compare then dies before writing (a missing
-#     artifact, a crash), there is NOTHING to publish rather than last run's
-#     numbers sitting under this run's timestamp; build_scorecard.py says so in
-#     one line instead of silently re-rendering the old file.
+#   * the STALE-EVIDENCE DELETE. findings.json, scorecard.html and the
+#     published page ../web/validation.html are removed before compare runs. If
+#     compare then dies before writing (a missing artifact, a crash), there is
+#     NOTHING to publish rather than last run's numbers sitting under this run's
+#     timestamp; build_scorecard.py says so in one line instead of silently
+#     re-rendering the old file. The published page is included deliberately:
+#     it is a rendering of findings.json like the scorecard, so a run that
+#     wiped the evidence and left the PUBLIC page standing would leave the app
+#     linking to numbers nothing in the tree can regenerate. It is tracked, so
+#     `git checkout web/validation.html` restores it and `git status` shows the
+#     deletion loudly in the meantime.
 #   * the STATUS PRECEDENCE. compare's status wins when it is non-zero (the
 #     findings are the news); otherwise the scorecard build's status is
 #     surfaced, so a scorecard that failed to build can never be reported as a
 #     clean run.
+#
+# build_scorecard.py with NO ARGUMENTS writes BOTH renderings — the internal
+# scorecard and web/validation.html — so `make all` cannot refresh one and
+# leave the other a release behind. `--web` writes only the page.
 all: $(CASES:%=results/%.done)
-	rm -f results/findings.json results/scorecard.html; \
+	rm -f results/findings.json results/scorecard.html \
+	  $(CURDIR)/../web/validation.html; \
 	  cd compare && $(PY) compare.py $(COMPARE_CASES); status=$$?; \
 	  $(PY) $(CURDIR)/build_scorecard.py; card=$$?; \
 	  [ $$status -eq 0 ] || exit $$status; exit $$card
@@ -180,8 +191,9 @@ freshness:
 # The spec DELETES results/webr-tier.json before it runs, the same
 # stale-evidence rule `all` applies to findings.json: a run that dies before
 # writing must publish nothing, not last release's numbers under this
-# release's date. Rebuild the scorecard afterwards (`make all`, or just
-# `.venv/bin/python build_scorecard.py`) to publish the result. `make clean`
+# release's date. Rebuild the scorecard AND the published page afterwards
+# (`make all`, or just `.venv/bin/python build_scorecard.py`, which writes
+# both) to publish the result. `make clean`
 # deliberately spares webr-tier.json for the same reason — see `clean` below.
 webr:
 	cd .. && rm -rf web/R && cp -R R web/R

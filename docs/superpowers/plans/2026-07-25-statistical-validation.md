@@ -2387,6 +2387,34 @@ git commit -m "validation: webR vs native R tier as a release gate"
 
 ### Task 13: CI wiring and the public validation page
 
+> **STATUS (appended 2026-07-26, not a rewrite of the plan below): DONE, as
+> Phase 2 item 1.** Shipped on branch `stats-validation-phase2-publish`:
+> `build_scorecard.py` gained a `--web` mode (bare invocation writes both
+> renderings, so the scorecard and the page cannot fall out of step);
+> `web/validation.html` is generated and tracked; `web/index.html` links it from
+> the nav-pane foot beside `.fb-copy`; `web/sw.js` bumped `CACHE` to
+> `figura-v11` and precaches the page (`web/sw.test.mjs` gained an install-time
+> precache test); the harness's three node suites joined the `test:unit` chain;
+> CI byte-diffs `web/validation.html` beside `scorecard.html`; and `CLAUDE.md`,
+> `stats-validation/README.md` and `issues/02` were updated. The CI `validation`
+> job itself had already landed in Phase 1 (Step 1 below is superseded by it —
+> it runs `test`, `clean all`, `gate`, `freshness` + byte diffs, and three
+> uploads, rather than obeying `make all`'s by-design non-zero exit).
+>
+> Step 3's draft lede is deliberately NOT what shipped: "written from a written
+> analysis spec" understates what the clean room actually was, so the page
+> carries the precise wording agreed in `stats-validation/README.md`'s lede
+> (one spec transcribed from `R/` by an agent with source access, implemented a
+> second time in Python by agents that never read `R/`, against an acceptance
+> suite whose expected values were computed in R) plus what that cannot catch.
+> Amendment A13's coverage table and webR runtime/date section shipped too.
+>
+> **Phase 2 items 2 and 3 remain PENDING:** the A16 Task 14 fix to
+> `R/script.R`'s `.script_data` (which will retire `logistic-dirty`'s 30
+> findings and needs `gate-update` in the same commit), and the A15
+> shared-webR-boot refactor that would widen the webR tier past 2 of 8 cases.
+> The page states both gaps rather than papering over them.
+
 **Files:**
 - Modify: `.github/workflows/ci.yml`
 - Create: `web/validation.html`

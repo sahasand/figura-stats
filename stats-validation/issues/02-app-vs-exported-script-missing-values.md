@@ -290,6 +290,37 @@ is expected to fail; its findings ARE the deliverable. The comparator exits 1 fo
 Makefile is structured so the scorecard is still built from the written `findings.json`
 before that status is propagated.
 
+## Disposition — publicly disclosed on the validation page (2026-07-26)
+
+Added during Phase 2 item 1. This defect is no longer only tracked internally: it is
+**explained to users on `web/validation.html`**, the page the app links from its nav rail,
+generated from `results/findings.json` by `build_scorecard.py --web` and regenerated on
+every run.
+
+The page states, in clinical language rather than in finding codes: that the app fitted 320
+patients and the downloaded script fitted 312; that all four adjusted odds ratios and the
+C-statistic move; that the `stage = NA` row the app displayed has no counterpart in the
+script's output; that **the displayed numbers were right** (the screen-vs-Path-B comparison
+passed, and the page renders that claim only while every finding on the case is
+export-path — a single `screen vs Python` finding switches it to a generic block); that the
+defect is **known, open, and tracked in this file**, with the `R/script.R` `.script_data`
+fix planned; and who it affects (only a downloaded script, only for a file containing
+`NA`-as-text or padded cells). The "how to check this yourself" section carries the same
+caveat against its own advice to re-run the exported `.R`.
+
+Two consequences for whoever lands the fix:
+
+- **The page's copy is generated, not written.** Every number in it comes from
+  `findings.json`, and the narrative block, the caveat and the `CASE_STATUS` box are all
+  keyed to this case's findings existing. When the fix lands and `logistic-dirty` goes
+  green, they disappear on their own — no prose to remember to delete. What DOES need a
+  human is `build_scorecard.py`'s `CASE_STATUS["logistic-dirty"]`, which says "it has not
+  landed as of the evidence on this page": that sentence is only reachable while findings
+  exist, but if the fix lands it should be removed with them rather than left dormant.
+- **CI byte-diffs `web/validation.html`.** The fix commit must regenerate it (`make -C
+  stats-validation all`) alongside `expected-findings.json` and the scorecard, in the same
+  commit, or the build fails on a stale published page.
+
 ## Comments
 
 None yet.
