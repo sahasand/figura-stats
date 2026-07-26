@@ -984,8 +984,15 @@ def _signif(value: float, digits: int = GC_SIGNIF_DIGITS) -> float:
 
 def format_num_gc(value: float) -> str:
     """R/summarize.R `.fmt_num`: 3 significant figures, plain notation, no
-    trailing zeros. 250000 -> "250000", 1.125 -> "1.13", 0.00123 -> "0.00123",
-    7.70 -> "7.7"."""
+    trailing zeros. 250000 -> "250000", 1.125 -> "1.12", 0.00123 -> "0.00123",
+    7.70 -> "7.7".
+
+    Note the 1.125 case: `.fmt_num`'s own source comment in R/summarize.R claims
+    "1.13", but R prints "1.12" — `signif` inherits IEEE round-half-to-even on an
+    exactly-representable tie. The comment is wrong; this restates what ships,
+    measured. See test_format_num_gc_is_three_significant_figures_not_decimal_
+    places for the probe set.
+    """
     x = _signif(float(value))
     if x == 0.0:
         return "0"
@@ -1055,11 +1062,33 @@ def effect_values(effect):
 
 
 # A trailing " (<second sorted group> vs <first sorted group>)" direction clause
-# is appended by BOTH two-group effect sizes (.gc_effect_t, .gc_effect_wilcox)
-# and by neither of the others — so its presence is a pure function of the group
-# count, not of the effect label.
-def gc_direction_suffix(group_levels) -> str:
+# is appended by EXACTLY TWO of the app's five effect sizes — `.gc_effect_t`
+# (Cohen's d) and `.gc_effect_wilcox` (rank-biserial r), R/groupcompare.R:51-52
+# and :63-64 — and by none of the other three.
+#
+# It is therefore a function of the EFFECT, not of the group count. Those two
+# effects are reachable only from the numeric branch at k == 2, so on that
+# branch "two groups" and "carries a direction clause" coincide; on the
+# CATEGORICAL branch they do not. `.gc_categorical` builds its effect phrase at
+# R/groupcompare.R:211 as a bare `"Cramér's V = <v>"` and never appends a
+# direction clause at any group count — a two-group categorical outcome with
+# three or more outcome levels displays no clause at all. Verified against the
+# real figure rather than reasoned about: a 2-group x 3-outcome-level table put
+# through `render_figure()` printed
+#   `resp by group (n = 90): Pearson chi-square test: p = 0.003,
+#    Cramér's V = 0.364.`
+# with no trailing clause. Gating this on `len(group_levels) == 2` would have
+# demanded one there and reported a DEFECT against correct output.
+GC_DIRECTION_EFFECT_LABELS = frozenset({"Cohen's d", "rank-biserial r"})
+
+
+def gc_direction_suffix(effect_label, group_levels) -> str:
+    if effect_label not in GC_DIRECTION_EFFECT_LABELS:
+        return ""
     levels = sorted(group_levels)
+    # Both producers run only at k == 2; anything else is an inconsistent pair
+    # of inputs, and inventing a clause from them would be worse than omitting
+    # it (the effect-value comparison below still runs either way).
     return f" ({levels[1]} vs {levels[0]})" if len(levels) == 2 else ""
 
 
@@ -1176,7 +1205,8 @@ def classify_gc_effect_display(shown: str, python_effect,
             "compare_groups' return shape does not report; the contract must "
             "be extended before this case can be judged")
 
-    rendered = format_effect_gc(eff) + gc_direction_suffix(group_levels)
+    suffix = gc_direction_suffix(eff["label"], group_levels)
+    rendered = format_effect_gc(eff) + suffix
     if rendered == shown:
         return finding("PASS", "-", "displayed effect", shown, rendered,
                        "Python's effect through Figura's display rule is the "
@@ -1188,7 +1218,7 @@ def classify_gc_effect_display(shown: str, python_effect,
             "DEFECT", "-", "displayed effect", shown, rendered,
             "Figura's effect phrase does not match the display rule for Path "
             "B's effect label and could not be read back")
-    if parsed["suffix"] != gc_direction_suffix(group_levels):
+    if parsed["suffix"] != suffix:
         return finding(
             "DEFECT", "-", "displayed effect", shown, rendered,
             "the effect phrase's trailing direction clause differs from the "

@@ -36,6 +36,7 @@ from compare import (
     format_p_gc,
     format_p_km,
     format_ratio_cell,
+    gc_direction_suffix,
     gc_display_half_ulp,
     main,
     parse_gc_posthoc,
@@ -878,6 +879,16 @@ GC_TEXT_CATEGORICAL = (
     "Cramér's V = 0.421."
 )
 
+# A TWO-group categorical comparison. Quoted verbatim from a real
+# `render_figure()` run on a 90-row, 2-group, 3-outcome-level table — the shape
+# that catches a comparator gating the direction clause on the group count
+# rather than on the effect: there are two groups here and NO direction clause,
+# because `.gc_categorical` never appends one.
+GC_TEXT_CATEGORICAL_TWO_GROUP = (
+    "resp by group (n = 90): Pearson chi-square test: p = 0.003, "
+    "Cramér's V = 0.364."
+)
+
 GC_TEXT_DIRTY = (
     "site_code across groups: High dose 3 (2" + EN2 + "3); Low dose 2 (1"
     + EN2 + "2); Placebo 2 (1" + EN2 + "2). Kruskal–Wallis test "
@@ -950,6 +961,50 @@ def _base_gc_categorical():
         "effect": {"label": "Cramér's V", "value": 0.42136501862202791,
                    "lo": None, "hi": None},
         "n": 150, "n_per_group": dict(per_group), "n_dropped": 0,
+        "posthoc": None,
+    }
+    return case, figura, exact, python
+
+
+def _base_gc_categorical_two_group():
+    """The categorical branch at k == 2 — a 3 x 2 table, so no odds ratio and
+    (crucially) no direction clause. Real numbers, R-precomputed:
+
+    Rscript -e 'options(digits=17)
+      tab <- matrix(c(25,10, 8,20, 12,15), nrow=3, byrow=TRUE,
+                    dimnames=list(outcome=c("Complete","None","Partial"),
+                                  group=c("Arm A","Arm B")))
+      ch <- suppressWarnings(chisq.test(tab, correct=FALSE))
+      print(min(ch$expected)); print(unname(ch$statistic)); print(ch$p.value)
+      print(sqrt(unname(ch$statistic)/(sum(tab)*(min(dim(tab))-1))))'
+    -> min expected 13.5 (>= 5, so chi-square) / X2 11.904761904761905
+    -> p 0.0025996435165325299 / Cramer's V 0.36369648372665397
+    """
+    case = {
+        "id": "g4",
+        "figure": "groupcompare",
+        "roles": {"outcome": "resp", "group": "arm"},
+        "options": {"plot": "box", "test": "auto"},
+        "display": {"kind": "gc_summary"},
+        "exact_targets": ["test_p", "test_statistic", "n", "n_dropped"],
+    }
+    figura = {"id": "g4", "text": GC_TEXT_CATEGORICAL_TWO_GROUP,
+              "code": "# script"}
+    per_group = {"Arm A": 45, "Arm B": 45}
+    exact = {
+        "id": "g4", "figure": "groupcompare",
+        "test_p": 0.0025996435165325299,
+        "test_statistic": 11.904761904761905,
+        "n": 90, "n_per_group": dict(per_group), "n_dropped": 0,
+    }
+    python = {
+        "id": "g4", "figure": "groupcompare",
+        "test_name": "Pearson chi-square test",
+        "p_value": 0.0025996435165325299,
+        "statistic": 11.904761904761905,
+        "effect": {"label": "Cramér's V", "value": 0.36369648372665397,
+                   "lo": None, "hi": None},
+        "n": 90, "n_per_group": dict(per_group), "n_dropped": 0,
         "posthoc": None,
     }
     return case, figura, exact, python
@@ -1143,6 +1198,48 @@ def test_classify_gc_effect_display_two_groups_require_the_direction_clause():
     assert reversed_clause["code"] == "DEFECT"
 
 
+def test_classify_gc_effect_display_two_group_categorical_has_no_direction_clause():
+    """Two groups, categorical branch: `Cramér's V = <v>` and nothing after it.
+
+    The direction clause belongs to the two EFFECTS that append it — Cohen's d
+    and rank-biserial r, R/groupcompare.R:51-52 and :63-64 — not to the group
+    count. `.gc_categorical` never appends one at any k. Verified against the
+    real figure: a 2-group x 3-outcome-level table put through
+    `render_figure()` printed exactly GC_TEXT_CATEGORICAL_TWO_GROUP below, with
+    no trailing clause.
+
+    Gating on `len(group_levels) == 2` made the comparator demand
+    ` (Arm B vs Arm A)` here and report a DEFECT against correct output — a
+    fabricated finding, the worst failure mode this harness has.
+    """
+    two = ["Arm A", "Arm B"]
+    eff = {"label": "Cramér's V", "value": 0.36369648372665397,
+           "lo": None, "hi": None}
+    ok = classify_gc_effect_display("Cramér's V = 0.364", eff, two)
+    assert ok["code"] == "PASS"
+    # And the clause is genuinely absent from the app's own sentence, not just
+    # from the fragment above.
+    assert "Cramér's V = 0.364." in GC_TEXT_CATEGORICAL_TWO_GROUP
+    assert "vs" not in GC_TEXT_CATEGORICAL_TWO_GROUP
+    # A clause that DID appear would still be a defect — the rule is "exactly
+    # what the effect implies", not "anything goes for Cramer's V".
+    spurious = classify_gc_effect_display(
+        "Cramér's V = 0.364 (Arm B vs Arm A)", eff, two)
+    assert spurious["code"] == "DEFECT"
+
+
+def test_gc_direction_suffix_is_a_function_of_the_effect_not_the_group_count():
+    two = ["Arm A", "Arm B"]
+    assert gc_direction_suffix("Cohen's d", two) == " (Arm B vs Arm A)"
+    assert gc_direction_suffix("rank-biserial r", two) == " (Arm B vs Arm A)"
+    # The other three effects never carry one, even at k == 2.
+    assert gc_direction_suffix("Cramér's V", two) == ""
+    assert gc_direction_suffix("eta-squared", two) == ""
+    assert gc_direction_suffix("epsilon-squared", two) == ""
+    # ...and the two that do carry one are unreachable above k == 2.
+    assert gc_direction_suffix("Cohen's d", ["A", "B", "C"]) == ""
+
+
 def test_classify_gc_effect_display_a_2x2_odds_ratio_clause_is_missing_quantity():
     # compare_groups' pinned return shape carries no odds ratio, so a 2x2
     # categorical case cannot be judged until the contract is extended. That
@@ -1184,6 +1281,21 @@ def test_gc_agreeing_categorical_fixture_passes_everything(tmp_path):
     # Same as above minus the two post-hoc comparisons that only happen when a
     # post-hoc sentence is present (test + pair set): 14 - 2 = 12.
     assert report["compared"] == 12
+
+
+def test_gc_agreeing_two_group_categorical_fixture_passes_everything(tmp_path):
+    # The whole-case form of the direction-clause regression above: two groups,
+    # categorical branch, correct artifacts on both sides. Before the fix this
+    # reported a DEFECT on the displayed effect for output that is right.
+    report = _run_gc(tmp_path, base=_base_gc_categorical_two_group)
+    assert report["findings"] == []
+    assert report["passed"] is True
+    assert report["targets_met"] is True
+    # The 3-group categorical fixture's 12, minus one per-group count: 2 counts
+    # + 2 per-group + test_p + test_statistic + displayed test name + displayed
+    # p + displayed effect + post-hoc PRESENCE (None on both sides, still a
+    # compared claim) + script-tier p = 11.
+    assert report["compared"] == 11
 
 
 def test_gc_agreeing_dirty_fixture_passes_everything(tmp_path):

@@ -1,4 +1,4 @@
-# 02 — The downloadable/exported `.R` script's missing-value handling disagrees with the live app (KM and Cox)
+# 02 — The downloadable/exported `.R` script's cell handling disagrees with the live app (KM, Cox, and Group comparison)
 
 Status: needs-triage
 Type: task
@@ -7,6 +7,12 @@ correcting `stats-validation/spec/km-twoarm.md`'s Population section against the
 behavior of the exported script `R/km.R`'s `.km_script` generates (Task 9's original pass
 had asserted the live app and the exported script "agree" on blank-cell handling; that
 claim was too broad — it holds only for a truly empty cell, not for the two cases below).
+
+Extended 2026-07-26, during Task 10's fix round, with a **third divergence of the same
+family — untrimmed text cells producing phantom group levels** (see "Divergence 3" below).
+It is not a missing-value divergence at all, which is why the title now says "cell
+handling"; it shares the root cause (the exported script re-reads the CSV with `read.csv`
+instead of reproducing the browser parser) and the same fix would address all three.
 
 ## Problem
 
@@ -111,6 +117,64 @@ KM-specific, because KM's live-app event recoding happens in JavaScript
 (`web/guided/km/spec.js`) with no numeric fallback at all, while its exported script's prep
 (regenerated in R) adds one.
 
+## Divergence 3 — untrimmed text cells become phantom group levels (Group comparison)
+
+Found 2026-07-26 during Task 10's fix round, on `stats-validation/spec/groupcompare-*.md`.
+Same root cause as the two above (the script re-reads the CSV with `read.csv` rather than
+reproducing the browser parser), different symptom, and **worse**: it can make the exported
+script fail outright, or silently analyse a study with one more arm than the app did.
+
+The live app's CSV parser applies `String(cell).trim()` to every cell as it builds the
+table (`web/lib/csv.js`'s `parseCsv`), so `"Placebo "` and `"Placebo"` are one value. R's
+`read.csv` does **not** trim character columns, so in the exported script they are two.
+Group comparison is where this bites hardest, because it is the only analysis whose GROUP
+role is free text with no reference level, no event value, and no recoding step in front of
+it — an extra level goes straight into `table(dat$group)` and changes the analysis.
+(`.gc_prep` drops groups with fewer than two values, so a *single* padded cell is absorbed;
+two or more identically-padded cells create a surviving phantom level.)
+
+### Verified repro 3a — the exported script does not run at all
+
+30 rows, `arm` = `Drug` x10, `Placebo` x14, `Placebo ` x6 (trailing space), one numeric
+`value` column. Built the live-app spec from the TRIMMED cells (what `parseCsv` hands R),
+ran `render_figure()`, wrote `res$code` to disk, and executed it against the CSV with the
+padding intact:
+
+```
+live app:   2 groups — Drug(10), Placebo(20)
+            "value across groups: Drug 12.2 ± 2.53; Placebo 11.1 ± 2.11.
+             Welch t-test (approximately normal (Shapiro–Wilk p = 0.244)):
+             p = 0.244, Cohen's d = -0.499 (95% CI -1.27 to 0.27) (Placebo vs Drug)."
+read.csv:   3 groups — 'Drug'(10), 'Placebo'(14), 'Placebo '(6)
+exported script: Error in t.test.formula(value ~ group, data = dat) :
+                   grouping factor must have exactly 2 levels
+```
+
+The app saw two levels, so it deparsed `t.test(value ~ group, data = dat)` into the script.
+The script's own `dat` has three. The download is a hard error in the user's face, with
+nothing in the app or the script explaining why.
+
+### Verified repro 3b — the exported script runs and quietly answers a different question
+
+60 rows, `arm` = `High` x20, `Low` x20, `Placebo` x14, `Placebo ` x6:
+
+```
+live app:   3 groups — High(20), Low(20), Placebo(20)
+            Welch F = 16.4548849843620, p = 7.3519740079422e-06 (displayed "p < 0.001")
+            eta-squared = 0.394 (95% CI 0.186 to 0.532)
+            Tukey HSD, significant pairs: Low-High, Placebo-High, Placebo-Low
+read.csv:   4 groups — 'High'(20), 'Low'(20), 'Placebo'(14), 'Placebo '(6)
+exported script (ran cleanly, nrow(dat) = 60):
+            one-way ANOVA (Welch), p = 0.00017732165567181   (24x the app's p)
+            eta-squared = 0.411 (95% CI 0.189 to 0.539)
+            Tukey HSD, significant pairs: Low-High, Placebo-High, Placebo -High,
+                                          Placebo-Low
+```
+
+Note the fourth post-hoc pair, `Placebo -High` — a comparison between two spellings of the
+same arm, printed to the user as a finding. **`nrow(dat)` is 60 on both paths**, so a
+row-count check catches nothing here either; only the level set differs.
+
 ## Impact
 
 A user who downloads and runs the exported `.R` script for either figure, on data containing
@@ -121,6 +185,13 @@ row-count mismatch to flag it. This directly undermines the app's own "the stati
 below are the exact calls the app ran" honesty line (`R/script.R:21`, `.script_header`'s
 default `honesty` text) for any CSV containing either kind of cell — the CALLS are exact, but
 the DATA the calls run over is not guaranteed to be the same data the app itself analysed.
+
+Divergence 3 raises that from "different rows" to "different study design": the exported
+Group-comparison script can compare four arms where the app compared three (repro 3b), or
+refuse to run because the app deparsed a two-group test into a script whose data has three
+groups (repro 3a). Both are reachable from an ordinary CSV with a stray trailing space —
+one of the most common defects in a real clinical data export, and one the live app is
+specifically built to absorb.
 
 ## Repro (reusable)
 
@@ -137,6 +208,17 @@ the DATA the calls run over is not guaranteed to be the same data the app itself
    script's; the whitespace-only row is present in the script's analysis and (KM only) absent
    from the app's.
 
+For divergence 3, Group comparison:
+
+1. Build a CSV whose GROUP column holds one arm spelled two ways — `Placebo` on most rows
+   and `Placebo ` (one trailing space) on at least two others — plus a numeric outcome.
+2. Run it through the guided Group comparison analyze form; note the arm count in the
+   displayed sentence and the test the app chose.
+3. Download the `.R` script for that run and execute it in the same folder as the CSV.
+4. Expect: with two app-visible arms the script errors with `grouping factor must have
+   exactly 2 levels`; with three or more it runs, reports one extra arm, a different
+   p-value and effect size, and a post-hoc pair naming the padded spelling.
+
 ## Scope note
 
 This is a genuine app-behavior finding surfaced while writing/correcting the independent
@@ -148,6 +230,16 @@ so only the script's own `df[df == ""] <- NA` line defines "missing," and/or tri
 whitespace there too) is out of scope for this task and left for a maintainer decision — it
 is a behavior change to a shipped, shared code path (`.script_assemble` backs every
 analysis's export, not just KM's and Cox's), not a validation-tooling fix.
+
+The same applies to divergence 3, surfaced while writing
+`stats-validation/spec/groupcompare-{numeric,categorical,dirty}.md`. All three gc specs
+already model the live app only and state the divergence explicitly. Note that the natural
+fix for divergences 1 and 2 (`na.strings = character(0)`) does **not** address 3 — that one
+needs the emitted preamble to trim character columns as well, e.g. a
+`df[] <- lapply(df, function(x) if (is.character(x)) trimws(x) else x)` line beside the
+existing `df[df == ""] <- NA`, applied before it so a whitespace-only cell also becomes
+blank. One shared preamble change would close all three at once; that is a maintainer
+decision, not a harness one.
 
 ## Comments
 

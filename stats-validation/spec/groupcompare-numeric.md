@@ -39,6 +39,14 @@ on any padded cell: a padded group value such as `"Placebo "` would become its
 own extra group level, and a whitespace-only cell would be a present value
 rather than a blank one.
 
+Note **where** that bites. Padding on a NUMERIC outcome cell is inert on both
+sides — every reasonable numeric conversion, in either language, ignores
+surrounding whitespace, so `" 01 "` and `"01"` agree without any trimming step.
+Padding on the GROUP column is not inert, because group values are compared as
+text. That is the only place an untrimmed implementation actually diverges, and
+it is where the acceptance test
+`test_padded_group_values_collapse_to_one_group_level` puts its fixture.
+
 ## Population
 
 Complete cases across the two mapped roles, outcome AND group:
@@ -53,7 +61,17 @@ Complete cases across the two mapped roles, outcome AND group:
    `n_na`.
 4. **Then, and only then**, any group left with fewer than two remaining values
    is dropped entirely, along with all of its rows. Call that count `n_small`.
-   The threshold is on the group's size AFTER step 3, not before.
+   The threshold is on the group's size AFTER step 3, not before. A group with
+   three rows of which two have a blank outcome is therefore dropped, even
+   though its raw size was three. The dropped group disappears from
+   `n_per_group` entirely — it is not reported with a count of 0 or 1. (Pinned
+   by the acceptance test
+   `test_groups_left_with_fewer_than_two_values_are_dropped`, which also pins
+   the ordering.)
+
+   This filter is specific to the numeric branch. The categorical branch has
+   **no** small-group rule and keeps a one-row group in its table; see
+   `spec/groupcompare-categorical.md`.
 5. `n_dropped` = `n_na + n_small` — the total number of input rows not analysed.
    `n` = the number of rows that survive both filters.
 
@@ -77,9 +95,17 @@ app's:
 - **Whitespace is not trimmed by the script for text columns.** The script's
   parser leaves a padded group cell as the literal padded string, so `"Placebo "`
   and `"Placebo"` become two separate groups there while the live app sees one.
-  (A padded *numeric* outcome cell does not diverge: R's numeric conversion
-  ignores surrounding whitespace, so `" 01 "` and `"01"` both become 1 on both
-  paths.)
+  Measured, on a 60-row file where six of twenty `Placebo` rows carried a
+  trailing space: the live app compared three arms (Welch F p = 7.35e-06,
+  eta-squared 0.394) and the script compared four (p = 0.000177, eta-squared
+  0.411) with an extra post-hoc pair comparing the two spellings of the same
+  arm — at an identical analysed row count of 60, so nothing about `n` reveals
+  it. On a file whose app-visible design has only TWO arms the script does not
+  even run: the app deparses a two-group `t.test` into it, and the script's own
+  three-level data makes that call fail with `grouping factor must have exactly
+  2 levels`. (A padded *numeric* outcome cell does not diverge: R's numeric
+  conversion ignores surrounding whitespace, so `" 01 "` and `"01"` both become
+  1 on both paths.)
 - **A literal `"NA"` text cell is treated as missing by the script**, because
   R's `read.csv` maps the two-character string `NA` to a real missing value at
   parse time. The live app keeps it as an ordinary value.
@@ -129,7 +155,7 @@ categorical branch. There is no per-cell fallback and no partial coercion.
   **Collation caveat, measured not assumed.** The app's sort is R's `sort()`,
   which orders by the process's LC_COLLATE locale rather than by code point.
   Under a UTF-8 locale R sorts `c("beta","Alpha","alpha","B","_z","Zed")` as
-  `_z, alpha, Alpha, B, beta, Zed`, while Python's `sorted()` gives
+  `_z, alpha, Alpha, B, beta, Zed`, while an ordinary code-point sort gives
   `Alpha, B, Zed, _z, alpha, beta` — a genuinely different order, verified by
   running both. The two agree whenever the levels differ at their first
   character within one case class, which is true of every level in every
@@ -203,7 +229,9 @@ Let `k` be the number of surviving groups.
   applied. The reported statistic is R's `W`, the count of pairs (i, j) with
   `x_i > y_j` where `x` is the FIRST group in string-sort order (equivalently
   `U` for that group), with tied pairs contributing one half each. Reported test
-  name: `Mann-Whitney U test` (with an EN DASH, U+2013, in "Mann–Whitney").
+  name: `Mann–Whitney U test` — the separator between "Mann" and
+  "Whitney" is an EN DASH (U+2013), not a hyphen; the string is compared
+  literally.
 - **k >= 3, parametric** — **Welch's heteroscedastic one-way F test (Welch
   1951)**, i.e. R's `oneway.test` with its default `var.equal = FALSE`. This is
   NOT the classical fixed-effects one-way ANOVA: it does not pool the within-
@@ -234,7 +262,9 @@ Let `k` be the number of surviving groups.
   H statistic corrected for ties by dividing by `1 - sum(t^3 - t) / (N^3 - N)`
   (summed over tie groups of size `t`), and the p-value from the upper tail of
   the chi-square distribution with `k - 1` degrees of freedom. Reported test
-  name: `Kruskal-Wallis test` (with an EN DASH, U+2013, in "Kruskal–Wallis").
+  name: `Kruskal–Wallis test` — the separator between "Kruskal" and
+  "Wallis" is an EN DASH (U+2013), not a hyphen; the string is compared
+  literally.
 
 The **reported `statistic`** is whatever the chosen test's own statistic is:
 `t` for the Welch t-test, `W` for Mann-Whitney, `F` for the Welch one-way test,
@@ -451,16 +481,22 @@ The numeric-branch sentence is:
   `=` and `<`.
 - Numbers inside the per-group summaries and the effect phrase are rendered by
   one shared rule: **3 significant figures, plain (never scientific) notation,
-  trailing zeros dropped** (250000 -> `250000`, 1.125 -> `1.13`,
-  0.00123 -> `0.00123`, 7.70 -> `7.7`).
+  trailing zeros dropped** (250000 -> `250000`, 1.125 -> `1.12`,
+  0.00123 -> `0.00123`, 7.70 -> `7.7`). Rounding at the significant-figure step
+  is **round-half-to-even on the binary value**, which is why 1.125 renders as
+  `1.12` while 1.135 renders as `1.14`; both were measured against R rather
+  than derived.
 - Per-group summary: `<group> <mean> ± <sd>` (sample SD, divisor n-1) under the
   parametric branch; `<group> <median> (<Q1>–<Q3>)` (quantile type 7, EN DASH
   between the quartiles) under the non-parametric branch. Groups appear in
   string-sort order.
 - Effect phrase: `<label> = <value> (95% CI <lo> to <hi>)`, or `<label> =
-  <value>` when there is no interval. When there are exactly two groups the
-  phrase carries a trailing ` (<second sorted group> vs <first sorted group>)`
-  direction clause.
+  <value>` when there is no interval. The two-group effects — and **only**
+  those two, `Cohen's d` and `rank-biserial r` — additionally carry a trailing
+  ` (<second sorted group> vs <first sorted group>)` direction clause. It is a
+  property of those effect sizes, not of the group count: `eta-squared`,
+  `epsilon-squared` and (in the categorical branch) `Cramér's V` never carry
+  one, at any group count.
 - Post-hoc sentence, when present: ` <label>, significant pairs: <pairs joined
   by ", ">.` or ` <label>: no pairwise differences at 0.05.`
 - Notes, appended in this order when non-zero: ` <n_small> row(s) in groups with

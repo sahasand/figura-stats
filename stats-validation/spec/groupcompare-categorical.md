@@ -67,7 +67,16 @@ equivalently the sum of the contingency table.
 groups.** There is no "fewer than two values" filter here at all: a group with a
 single row stays in the table and contributes to the test. `n_dropped` in this
 branch counts missing-value drops only. (This asymmetry between the two branches
-is the app's, verified in its code, not an oversight in this spec.)
+is the app's, verified in its code, not an oversight in this spec. It is
+deliberate on the app's part in the sense that the numeric branch's filter
+exists to stop a one-value group from having no variance to divide by, a problem
+a contingency table does not have — but nothing in the code reconciles the two.)
+
+That asymmetry is load-bearing rather than cosmetic: the one-row group is
+usually exactly the cell that pushes the smallest expected count below 5 and
+routes the case to Fisher's exact test, so applying the numeric branch's rule
+here changes the TEST, not just the counts. Pinned by the acceptance test
+`test_categorical_branch_keeps_a_single_row_group`.
 
 For this case, `responder` and `arm` both have zero blank cells, so
 `n_dropped = 0` and `n = 150`.
@@ -99,7 +108,7 @@ below, which is defined by cell position.
 **Collation caveat, measured not assumed.** The app's sort is R's `sort()`,
 which orders by the process's LC_COLLATE locale rather than by code point.
 Under a UTF-8 locale R sorts `c("beta","Alpha","alpha","B","_z","Zed")` as
-`_z, alpha, Alpha, B, beta, Zed`, while Python's `sorted()` gives
+`_z, alpha, Alpha, B, beta, Zed`, while an ordinary code-point sort gives
 `Alpha, B, Zed, _z, alpha, beta` — a genuinely different order, verified by
 running both. The two agree whenever the levels differ at their first
 character within one case class, which is true of every level in every
@@ -159,15 +168,16 @@ a table whose probability exceeds the observed one by no more than a relative
 1e-7, a tolerance that only affects exact ties). This is a deterministic,
 exhaustive calculation.
 
-> **Warning for the implementer, measured not assumed.** `scipy.stats.
-> fisher_exact` is exact for 2 x 2 tables (it reproduces R to floating-point
-> noise), but for **larger tables it is a Monte Carlo test**: it returns a
-> different answer on repeated calls with the identical input (measured: the
-> same 3 x 3 table gave 0.0125 and then 0.0142 against R's exact
-> 0.012396333824905242) and cannot meet this harness's 1e-6 agreement gate. Use
-> an exhaustive enumeration over the fixed-margin tables instead; a
-> straightforward one was verified to reproduce R to within 1e-14 relative on
-> four different tables.
+> **Warning for the implementer, measured not assumed.** Several widely-used
+> statistical libraries are exact only for 2 x 2 tables and silently switch to a
+> **Monte Carlo approximation** for anything larger — one measured here returned
+> 0.0125 on one call and 0.0142 on the next from the identical 3 x 3 input,
+> against a true value of 0.012396333824905242. Such a routine is not even
+> self-reproducible and cannot meet this harness's 1e-6 agreement gate. Before
+> using any library routine for an r x c table, call it twice on the same input
+> and check that the two answers are bit-identical. The exhaustive enumeration
+> described above is straightforward to write directly and was verified to
+> reproduce R to within 1e-14 relative on four different tables.
 
 The **reported `statistic`**:
 
@@ -254,6 +264,12 @@ inline as `(n = <n>)` instead.
   `=` and `<`.
 - Numbers are rendered at **3 significant figures, plain (never scientific)
   notation, trailing zeros dropped**.
+- `<effect>` carries **no direction clause, at any group count.** A two-group
+  categorical comparison displays `Cramér's V = <value>` and stops there; there
+  is no trailing ` (<second group> vs <first group>)` of the kind the numeric
+  branch's two-group effect sizes append. Measured on a real two-group,
+  three-outcome-level table: `resp by group (n = 90): Pearson chi-square test:
+  p = 0.003, Cramér's V = 0.364.` — nothing after the value.
 - `<effect>` is `Cramér's V = <value>`, followed — for a 2 x 2 table only — by
   `; odds ratio for <outcome column>=<first outcome level>, <first group> vs
   <second group> = <OR> (95% CI <lo> to <hi>)`, itself followed by

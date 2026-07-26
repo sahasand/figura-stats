@@ -69,7 +69,7 @@ column is CATEGORICAL and gets a contingency-table analysis instead.
 **Therefore `site_code` is NUMERIC.** `"01"`, `"02"`, and `"03"` all parse as
 the numbers 1, 2, and 3, so the app routes this case to the numeric branch and
 compares site codes across arms as if they were measurements — a
-`Kruskal-Wallis test` on the values 1/2/3, with an epsilon-squared effect size
+`Kruskal–Wallis test` on the values 1/2/3, with an epsilon-squared effect size
 and Dunn post-hoc pairs. That is what the app does, it is what this case
 records, and it is what `compare_groups` must reproduce.
 
@@ -117,7 +117,13 @@ R's numeric conversion ignores surrounding whitespace (`" 01 "` -> 1 on both
 paths). Had the same padding been injected into the `arm` column instead, the
 script would have produced extra group levels (`"Placebo "` distinct from
 `"Placebo"`) that the live app never sees, and the two paths would have analysed
-different studies. Two further script-only divergences apply generally: a
+different studies — measured on a purpose-built 60-row file: three arms and
+Welch F p = 7.35e-06 in the app against four arms and p = 0.000177 in the
+script, at an identical analysed row count, with a post-hoc pair comparing the
+two spellings of the same arm. That is why this case's padding is deliberately
+confined to the numeric outcome column: putting it on `arm` would have planted
+a permanent, unrelated app-vs-script mismatch in a case whose purpose is type
+detection. Two further script-only divergences apply generally: a
 literal `"NA"` text cell is treated as missing by the script but as an ordinary
 value by the live app, and a whitespace-only cell survives the script's
 blank-to-missing step (which matches the exact empty string only) while the live
@@ -134,7 +140,7 @@ app trims it to blank and drops the row.
   **Collation caveat, measured not assumed.** The app's sort is R's `sort()`,
   which orders by the process's LC_COLLATE locale rather than by code point.
   Under a UTF-8 locale R sorts `c("beta","Alpha","alpha","B","_z","Zed")` as
-  `_z, alpha, Alpha, B, beta, Zed`, while Python's `sorted()` gives
+  `_z, alpha, Alpha, B, beta, Zed`, while an ordinary code-point sort gives
   `Alpha, B, Zed, _z, alpha, beta` — a genuinely different order, verified by
   running both. The two agree whenever the levels differ at their first
   character within one case class, which is true of every level in every
@@ -186,8 +192,9 @@ two-sided, as R's `kruskal.test` computes it: mid-ranks for ties over the pooled
 sample; the H statistic corrected for ties by dividing by
 `1 - sum(t^3 - t) / (N^3 - N)` summed over groups of tied VALUES of size `t`;
 p-value from the upper tail of the chi-square distribution with `k - 1` degrees
-of freedom. Reported test name: `Kruskal-Wallis test` (with an EN DASH, U+2013,
-in "Kruskal–Wallis").
+of freedom. Reported test name: `Kruskal–Wallis test` — the separator between
+"Kruskal" and "Wallis" is an EN DASH (U+2013), not a hyphen; the string is
+compared literally.
 
 The tie correction is not optional here — with only three distinct outcome
 values and 146 rows, essentially every observation is tied with dozens of
@@ -272,7 +279,8 @@ real non-significant comparison rather than a degenerate tie.
 
 `compare_groups(df, outcome, group, nonparametric=None) -> dict`:
 
-- `test_name` — `Kruskal-Wallis test` for this case.
+- `test_name` — `Kruskal–Wallis test` for this case (EN DASH, U+2013,
+  between "Kruskal" and "Wallis" — the string is compared literally).
 - `p_value` — the omnibus two-sided p-value, full precision.
 - `statistic` — the tie-corrected `H`, full precision.
 - `effect` — `{label: "epsilon-squared", value, lo: None, hi: None}`.

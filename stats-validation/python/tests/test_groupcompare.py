@@ -536,7 +536,7 @@ def test_numeric_looking_codes_route_to_the_numeric_branch():
     assert out["statistic"] is not None  # a chi-square/Fisher route would differ
 
 
-def test_dirty_case_trims_whitespace_handles_crlf_and_counts_blanks():
+def test_dirty_case_counts_blanks_in_mapped_columns_only():
     """The dirty file has CRLF line endings, twelve leading/trailing-padded
     `site_code` cells, four blank `site_code` cells, and six blank cells in the
     UNMAPPED `los_skewed` column.
@@ -548,17 +548,246 @@ def test_dirty_case_trims_whitespace_handles_crlf_and_counts_blanks():
       print(nrow(dat)); print(table(dat$group))'
     -> n 146; High dose 48, Low dose 49, Placebo 49
 
-    Three separate claims ride on those numbers: padded cells must be TRIMMED
-    (untrimmed, " 01" would be a distinct value and, with a stray CR from
-    unhandled CRLF, would not parse at all); blanks in the MAPPED outcome drop
-    their rows (150 - 4 = 146); and the six blanks in the unmapped
-    `los_skewed` column must drop NOTHING.
+    WHAT THIS TEST ACTUALLY PINS, stated narrowly on purpose (an earlier version
+    of this docstring claimed three things and only really pinned one):
+
+    1. Blanks in the MAPPED outcome drop their rows: 150 - 4 = 146.
+    2. The six blanks in the UNMAPPED `los_skewed` column drop NOTHING — the
+       `n_dropped == 4` assertion is the whole point, and 10 is the number a
+       naive `dropna()` over the full frame would produce.
+
+    WHAT IT DOES **NOT** PIN, and why:
+
+    - **Trimming.** The padding in this file sits on `site_code`, a NUMERIC
+      outcome. Python's `float(" 01 ")` strips surrounding whitespace by itself,
+      exactly as R's `as.numeric` does, so an implementation that never trims
+      anything produces identical numbers here. The padding is inert on this
+      path. A fixture where trimming IS load-bearing — padding on the GROUP
+      column, which is compared as text — is
+      `test_padded_group_values_collapse_to_one_group_level` below.
+    - **CRLF.** `pandas.read_csv` absorbs `\\r\\n` line endings unconditionally,
+      so no plausible implementation built on it can fail this. The claim is
+      still worth making somewhere; it is made where it can actually fail, in
+      the harness's own parser test (`harness/build-spec.test.mjs` asserts no
+      CR/LF survives into a cell of this file).
     """
     df, outcome, group = _case("groupcompare-dirty")
     out = compare_groups(df, outcome, group)
     assert out["n"] == 146
     assert out["n_dropped"] == 4  # NOT 10 — los_skewed's blanks are unmapped
     assert out["n_per_group"] == {"High dose": 48, "Low dose": 49, "Placebo": 49}
-    # Trimming actually happened: only three distinct codes survive, so the
-    # three group medians are drawn from {1, 2, 3} and nothing else.
     assert math.isfinite(out["statistic"])
+
+
+# Fixture P — one arm spelled FOUR ways, differing only in padding. The group
+# column is compared as TEXT, so this is where trimming is load-bearing: it is
+# the difference between a two-group and a five-group analysis.
+_P_DRUG = [12.1, 12.4, 11.8, 12.2, 12.0, 11.9, 12.3, 12.1, 12.5, 11.7]
+_P_PLACEBO = [10.2, 10.5, 9.8, 10.1, 10.4, 9.9, 10.3, 10.0, 10.6, 9.7]
+_P_SPELLINGS = (["Placebo"] * 3 + ["Placebo "] * 3
+                + [" Placebo"] * 2 + [" Placebo "] * 2)
+
+
+def _fixture_p():
+    return pd.DataFrame({
+        "y": [str(v) for v in _P_DRUG + _P_PLACEBO],
+        "g": ["Drug"] * 10 + _P_SPELLINGS,
+    })
+
+
+def test_padded_group_values_collapse_to_one_group_level():
+    """Trimming, on the column where it changes the answer.
+
+    Every cell is trimmed before anything looks at it, so the four spellings
+    `"Placebo"`, `"Placebo "`, `" Placebo"`, `" Placebo "` are ONE group. Each
+    padded spelling appears at least twice, so none of them would be swept up by
+    the "<2 values" rule — an implementation that does not trim gets five real
+    groups, not two, and answers a different question.
+
+    Both sides of that fork were run through the app itself rather than
+    reasoned about. Trimmed (what the live app's parser hands R):
+
+      `value across groups: Drug 12.1 ± 0.258; Placebo 10.2 ± 0.303.
+       Welch t-test (approximately normal (Shapiro–Wilk p = 0.697)):
+       p < 0.001, Cohen's d = -6.93 (95% CI -9.25 to -4.61) (Placebo vs Drug).`
+
+    Untrimmed, the same 20 rows:
+
+      `value across groups:  Placebo 10.2 ± 0.212;  Placebo  10.1 ± 0.636;
+       Drug 12.1 ± 0.258; Placebo 10.2 ± 0.351; Placebo  10.1 ± 0.252.
+       one-way ANOVA (Welch) ...: p = 0.004, eta-squared = 0.93 ...
+       Tukey HSD, significant pairs: Drug- Placebo, Drug- Placebo ,
+       Placebo-Drug, Placebo -Drug.`
+
+    A different test, a different effect size, a p-value an order of magnitude
+    away, and post-hoc pairs comparing an arm with itself.
+
+    Rscript -e 'options(digits=17)
+      xa <- c(12.1,12.4,11.8,12.2,12.0,11.9,12.3,12.1,12.5,11.7)
+      xb <- c(10.2,10.5,9.8,10.1,10.4,9.9,10.3,10.0,10.6,9.7)
+      d <- data.frame(value=c(xa,xb), group=rep(c("Drug","Placebo"), each=10))
+      tt <- t.test(value ~ group, data=d)
+      print(unname(tt$statistic)); print(tt$p.value)
+      n1 <- 10; n2 <- 10
+      sp <- sqrt(((n1-1)*var(xa)+(n2-1)*var(xb))/(n1+n2-2))
+      dd <- (mean(xb)-mean(xa))/sp
+      se <- sqrt((n1+n2)/(n1*n2) + dd^2/(2*(n1+n2)))
+      print(dd); print(c(dd-1.96*se, dd+1.96*se))'
+    -> Welch t   15.497028577661004
+    -> p          1.1051972612827705e-11
+    -> Cohen's d -6.9304818697813779
+    -> CI        -9.2502389351020682  -4.6107248044606886
+    """
+    r_t, r_p = 15.497028577661004, 1.1051972612827705e-11
+    r_d, r_lo, r_hi = (-6.9304818697813779,
+                       -9.2502389351020682, -4.6107248044606886)
+
+    out = compare_groups(_fixture_p(), "y", "g", nonparametric=False)
+
+    # The load-bearing assertion: two levels, and the keys are the TRIMMED
+    # strings. An untrimmed implementation fails here first.
+    assert out["n_per_group"] == {"Drug": 10, "Placebo": 10}
+    assert out["n"] == 20 and out["n_dropped"] == 0
+    # ...and again structurally, in the test the group count selects.
+    assert out["test_name"] == "Welch t-test"
+    assert out["posthoc"] is None  # only 3+ groups get one
+    assert abs(out["statistic"] - r_t) <= 1e-9 * abs(r_t)
+    assert abs(out["p_value"] - r_p) <= 1e-9 * r_p
+
+    eff = out["effect"]
+    assert eff["label"] == "Cohen's d"
+    assert abs(eff["value"] - r_d) <= 1e-9 * abs(r_d)
+    assert abs(eff["lo"] - r_lo) <= 1e-9 * abs(r_lo)
+    assert abs(eff["hi"] - r_hi) <= 1e-9 * abs(r_hi)
+
+
+# ---------------------------------------------------------------------------
+# The "<2 values" rule, and the categorical branch's deliberate lack of one
+# ---------------------------------------------------------------------------
+
+# Fixture D — three ordinary groups of six, plus a fourth group whose three rows
+# are two blanks and one extreme value. After the missing-value drop it holds a
+# single value, so the whole group goes.
+_D_A = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
+_D_B = [20.0, 21.0, 22.0, 23.0, 24.0, 25.0]
+_D_C = [30.0, 31.0, 32.0, 33.0, 34.0, 35.0]
+
+
+def _fixture_d():
+    return pd.DataFrame({
+        "y": [str(v) for v in _D_A + _D_B + _D_C] + ["100", "", ""],
+        "g": ["A"] * 6 + ["B"] * 6 + ["C"] * 6 + ["D"] * 3,
+    })
+
+
+def test_groups_left_with_fewer_than_two_values_are_dropped():
+    """The numeric branch's second population filter, and its ORDERING.
+
+    Group D arrives with three rows, two of which have a blank outcome. The
+    missing-value filter runs FIRST and takes those two; D is then left with one
+    value, so the "<2 values" rule takes the third. Had the size rule been
+    applied to the raw counts instead, D would have had three rows and survived.
+
+    So: n_na = 2, n_small = 1, n_dropped = 3, n = 18, and D is absent from
+    n_per_group entirely — not present with a count of 0 or 1.
+
+    Verified against the app itself, which reports both drops separately:
+
+      `value across groups: A 12.5 ± 1.87; B 22.5 ± 1.87; C 32.5 ± 1.87.
+       one-way ANOVA (Welch) (approximately normal (Shapiro–Wilk p = 0.114)):
+       p < 0.001, eta-squared = 0.958 (95% CI 0.882 to 0.973).
+       Tukey HSD, significant pairs: B-A, C-A, C-B.
+       1 row(s) in groups with <2 values were dropped.
+       2 row(s) with missing values were excluded.`
+
+    D's surviving value is deliberately 100, far outside every other group, so
+    an implementation that keeps it cannot pass by coincidence — and a
+    single-value group has no variance at all, which is what the rule exists to
+    prevent the Welch statistic from dividing by.
+
+    (`nonparametric=False` is passed only to take routing out of the picture;
+    the app's own auto routing chooses the same branch here, Shapiro-Wilk
+    p = 0.114 as quoted above.)
+
+    Rscript -e 'options(digits=17)
+      A <- c(10,11,12,13,14,15); B <- c(20,21,22,23,24,25)
+      C <- c(30,31,32,33,34,35)
+      d <- data.frame(value=c(A,B,C), group=rep(c("A","B","C"), each=6))
+      w <- oneway.test(value ~ group, data=d)
+      print(unname(w$statistic)); print(w$p.value)
+      s <- summary(aov(value ~ group, data=d))[[1]]
+      print(unname(s[,"Sum Sq"][1]/sum(s[,"Sum Sq"])))
+      tk <- TukeyHSD(aov(value ~ group, data=d))$group
+      dput(rownames(tk)); print(unname(tk[,"p adj"]))'
+    -> Welch F  160.71428571428569
+    -> p        2.5006348281457743e-08
+    -> eta^2    0.95808383233532934
+    -> Tukey    c("B-A", "C-A", "C-B"), all adjusted p < 4e-07
+    """
+    r_f, r_p, r_eta = (160.71428571428569, 2.5006348281457743e-08,
+                       0.95808383233532934)
+
+    out = compare_groups(_fixture_d(), "y", "g", nonparametric=False)
+
+    assert out["n_per_group"] == {"A": 6, "B": 6, "C": 6}
+    assert "D" not in out["n_per_group"]
+    assert out["n"] == 18
+    # 2 missing-value drops + 1 small-group drop, reported as one total.
+    assert out["n_dropped"] == 3
+    assert out["test_name"] == "one-way ANOVA (Welch)"
+    assert abs(out["statistic"] - r_f) <= 1e-9 * r_f
+    assert abs(out["p_value"] - r_p) <= 1e-9 * r_p
+    assert abs(out["effect"]["value"] - r_eta) <= 1e-9 * r_eta
+    # Three groups survive, so exactly three pairs, none naming D.
+    assert set(out["posthoc"]["significant_pairs"]) == {"B-A", "C-A", "C-B"}
+
+
+def test_categorical_branch_keeps_a_single_row_group():
+    """The mirror image, and the asymmetry is DELIBERATE: the categorical branch
+    has no "<2 values" rule at all. A group with one row stays in the
+    contingency table and contributes to the test.
+
+    Group C has exactly one row. If the numeric branch's rule were applied here
+    too, C would vanish, n would be 20 instead of 21, and the table would lose
+    the very cell that drags the smallest expected count below 5 and routes the
+    case to Fisher — so this fixture discriminates the two branches' rules on
+    the test NAME as well as on the counts.
+
+    Verified against the app:
+
+      `responder by group (n = 21): Fisher's exact test: p = 0.048,
+       Cramér's V = 0.53.`
+
+    Rscript -e 'options(digits=17)
+      tab <- matrix(c(2,7,0, 8,3,1), nrow=2, byrow=TRUE,
+                    dimnames=list(outcome=c("No","Yes"), group=c("A","B","C")))
+      ch <- suppressWarnings(chisq.test(tab, correct=FALSE))
+      print(min(ch$expected)); print(unname(ch$statistic))
+      print(fisher.test(tab)$p.value)
+      print(sqrt(unname(ch$statistic)/(sum(tab)*(min(dim(tab))-1))))'
+    -> min expected  0.42857142857142855   (< 5 -> Fisher)
+    -> X2            5.8916666666666666    (uncorrected, feeds Cramer's V only)
+    -> Fisher p      0.048344844010478359
+    -> Cramer's V    0.5296749527356901
+    """
+    r_p, r_v = 0.048344844010478359, 0.5296749527356901
+
+    df = pd.DataFrame({
+        "y": ["Yes"] * 8 + ["No"] * 2 + ["Yes"] * 3 + ["No"] * 7 + ["Yes"],
+        "g": ["A"] * 10 + ["B"] * 10 + ["C"],
+    })
+    out = compare_groups(df, "y", "g")
+
+    assert out["n_per_group"] == {"A": 10, "B": 10, "C": 1}
+    assert out["n"] == 21 and out["n_dropped"] == 0
+    assert out["test_name"] == "Fisher's exact test"
+    assert out["statistic"] is None
+    assert abs(out["p_value"] - r_p) <= 1e-6 * r_p
+    assert out["posthoc"] is None
+
+    eff = out["effect"]
+    assert eff["label"] == "Cramér's V"
+    # Cramer's V still comes from the UNCORRECTED chi-square statistic, computed
+    # on the same table even though its p-value was discarded for Fisher's.
+    assert abs(eff["value"] - r_v) <= 1e-9 * r_v
+    assert eff["lo"] is None and eff["hi"] is None
