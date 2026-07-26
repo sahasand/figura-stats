@@ -2,6 +2,13 @@
 
 Status: needs-triage
 Type: task
+Location: **`stats-validation/issues/`, not `.scratch/<slug>/issues/`.** This is a
+deliberate deviation from `docs/agents/issue-tracker.md` and the repo `CLAUDE.md`.
+`.scratch/` is gitignored, and this issue is *published evidence* the scorecard and
+`expected-findings.json` depend on, so it has to be tracked. Phase 1 must not edit
+anything outside `stats-validation/`, so the convention docs were left unamended
+rather than updated to mention this directory. See `stats-validation/README.md`
+§"Where the issue files live".
 Found: 2026-07-25, during Task 8's fix round (statistical-validation phase 1), while
 reconciling `stats-validation/spec/cox-adjusted.md`'s Population/Status-coding sections
 against the real behavior of `R/cox.R`.

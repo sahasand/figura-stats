@@ -590,8 +590,32 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
             f"and webR.{note_html}</p>"
         )
 
+    # COVERAGE, ON THE PAGE AND NOT ONLY IN THE README. This tier runs on a
+    # SUBSET of the roster — the ratio-table cases with a full native-R display
+    # artifact — and a section that lists two green rows without saying "two of
+    # eight" reads as whole-roster parity. Both numbers are read off files on
+    # disk (the tier's own case list, and results/ for the registered roster),
+    # so this stays a pure function of its inputs like everything else here.
+    registered = registered_cases(results_dir)
+    covered = [c.get("id") for c in cases]
+    coverage_html = ""
+    if registered:
+        uncovered = [c for c in registered if c not in covered]
+        uncovered_html = (
+            f" Not gated in this tier: <code>"
+            f"{esc(', '.join(uncovered))}</code>." if uncovered else "")
+        coverage_html = (
+            f"<p class=\"webr-totals\"><b>Coverage: {len(covered)} of "
+            f"{len(registered)} cases.</b> This tier drives the shipped browser "
+            f"UI, so it covers only the cases with a full native-R display "
+            f"artifact to compare a rendered table against &mdash; the two "
+            f"ratio-table analyses. The remaining cases are validated on the "
+            f"native-R tiers above and are <i>not</i> covered by any "
+            f"wasm-vs-native claim.{uncovered_html} Extending the roster needs "
+            f"the shared-webR-boot refactor of the other suites (Phase 2).</p>")
+
     return (
-        f"{header_html}{staleness_html}{totals_html}"
+        f"{header_html}{staleness_html}{coverage_html}{totals_html}"
         "<div class=\"scroll\"><table><thead><tr><th>Case</th>"
         "<th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>")
@@ -624,8 +648,16 @@ def build(findings_path: Path | str | None = None,
 <title>Figura statistical validation scorecard</title><style>{CSS}</style></head>
 <body><main>
 <h1>Statistical validation scorecard</h1>
-<p class="sub">Every number Figura reports, re-derived by an independently
-programmed Python implementation from the same raw CSV.</p>
+<p class="sub">Every number Figura reports, re-derived from the same raw CSV by a
+second implementation. Stated precisely: <b>one specification, transcribed from
+the R sources by an agent with source access, was implemented a second time in
+Python by agents that never read the R, against an acceptance suite whose
+expected values were computed in R.</b> That catches implementation bugs,
+library-default mismatches and arithmetic errors. It cannot catch a misreading
+baked into the specification itself &mdash; both paths would reproduce it and
+agree. See &ldquo;How the clean room actually worked, and its limits&rdquo; in
+<code>stats-validation/README.md</code>, which discloses what the clean-room
+bundle contained and two leak/retune episodes by commit hash.</p>
 {_tiles(data, pending)}
 <div class="scroll"><table>
 <thead><tr><th>Case</th><th>Result</th><th>Coverage</th><th>Compared</th>
@@ -649,6 +681,18 @@ carries no guarantee at all, and it is counted in the cases tile's denominator
 so the tile can never read complete while such a case exists. <b>DEFERRED</b>
 names declared coverage this run did not enforce because its comparison block
 has not landed yet &mdash; not checked, so neither met nor failed.
+<b>&ldquo;Targets met&rdquo; and MISSING QUANTITY measure two different
+coverages, which is why a case can show both at once.</b> &ldquo;Targets
+met&rdquo; &mdash; and the cases tile that counts it &mdash; is about the
+quantities a case <i>declares</i> in its <code>exact_targets</code>: every
+declared one was credited by a comparison that really ran. <b>Missing
+quantity</b> is about a quantity that was <i>expected somewhere in the case and
+never compared at all</i>, declared or not &mdash; the term the app displayed
+that the exported script never produced, say. A case can therefore meet every
+target it declared (green) while still publishing a MISSING QUANTITY row (red)
+for something outside that declared set. Both statements are true; read them as
+declared-target coverage and quantity coverage, not as one verdict contradicting
+itself.
 <b>Display artifact</b> means both paths
 computed the same number and only the rendered string differs, within half a
 display step. <b>Defect</b> means the values themselves disagree beyond a

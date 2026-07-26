@@ -66,8 +66,16 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 </style></head>
 <body><main>
 <h1>Statistical validation scorecard</h1>
-<p class="sub">Every number Figura reports, re-derived by an independently
-programmed Python implementation from the same raw CSV.</p>
+<p class="sub">Every number Figura reports, re-derived from the same raw CSV by a
+second implementation. Stated precisely: <b>one specification, transcribed from
+the R sources by an agent with source access, was implemented a second time in
+Python by agents that never read the R, against an acceptance suite whose
+expected values were computed in R.</b> That catches implementation bugs,
+library-default mismatches and arithmetic errors. It cannot catch a misreading
+baked into the specification itself &mdash; both paths would reproduce it and
+agree. See &ldquo;How the clean room actually worked, and its limits&rdquo; in
+<code>stats-validation/README.md</code>, which discloses what the clean-room
+bundle contained and two leak/retune episodes by commit hash.</p>
 <div class="tiles">
   <div class="tile"><b>325</b><span>values compared</span></div>
   <div class="tile"><b>30</b><span>differences</span></div>
@@ -96,6 +104,18 @@ carries no guarantee at all, and it is counted in the cases tile's denominator
 so the tile can never read complete while such a case exists. <b>DEFERRED</b>
 names declared coverage this run did not enforce because its comparison block
 has not landed yet &mdash; not checked, so neither met nor failed.
+<b>&ldquo;Targets met&rdquo; and MISSING QUANTITY measure two different
+coverages, which is why a case can show both at once.</b> &ldquo;Targets
+met&rdquo; &mdash; and the cases tile that counts it &mdash; is about the
+quantities a case <i>declares</i> in its <code>exact_targets</code>: every
+declared one was credited by a comparison that really ran. <b>Missing
+quantity</b> is about a quantity that was <i>expected somewhere in the case and
+never compared at all</i>, declared or not &mdash; the term the app displayed
+that the exported script never produced, say. A case can therefore meet every
+target it declared (green) while still publishing a MISSING QUANTITY row (red)
+for something outside that declared set. Both statements are true; read them as
+declared-target coverage and quantity coverage, not as one verdict contradicting
+itself.
 <b>Display artifact</b> means both paths
 computed the same number and only the rendered string differs, within half a
 display step. <b>Defect</b> means the values themselves disagree beyond a
@@ -129,5 +149,5 @@ no 80-bit extended precision and webR ships reference BLAS/LAPACK, so an
 iterative fit is where a difference would appear. Cells are the strings the
 user is shown, so a difference here is a difference a reader of the manuscript
 would see.</p>
-<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26 &middot; commit <code>815fa79d40d5</code><br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><p class="webr-totals">Compared every one of the <b>36</b> strings the app displays across these cases &mdash; <b>17</b> of them carrying a number that could actually drift between native R and webR.<br>36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate&#x27;s own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
+<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26 &middot; commit <code>e311a07bb1e7</code><br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><p class="webr-totals"><b>Coverage: 2 of 8 cases.</b> This tier drives the shipped browser UI, so it covers only the cases with a full native-R display artifact to compare a rendered table against &mdash; the two ratio-table analyses. The remaining cases are validated on the native-R tiers above and are <i>not</i> covered by any wasm-vs-native claim. Not gated in this tier: <code>groupcompare-categorical, groupcompare-dirty, groupcompare-numeric, km-twoarm, logistic-dirty, summary-table1</code>. Extending the roster needs the shared-webR-boot refactor of the other suites (Phase 2).</p><p class="webr-totals">Compared every one of the <b>36</b> strings the app displays across these cases &mdash; <b>17</b> of them carrying a number that could actually drift between native R and webR.<br>36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate&#x27;s own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
 </main></body></html>

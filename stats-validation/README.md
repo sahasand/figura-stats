@@ -1,12 +1,26 @@
 # Statistical validation
 
-Two independent implementations compute the same statistics from the same raw
-CSV, and the comparison is published.
+Two implementations compute the same statistics from the same raw CSV, and the
+comparison is published.
 
 - **Path A** is Figura exactly as shipped: the real CSV parser, the real spec
   builders, and `render_figure()`.
-- **Path B** is a Python implementation written from the prose spec in
-  `spec/`, by an implementer who has not read `R/`.
+- **Path B** is a second, Python implementation of the same analyses.
+
+**What was actually done, stated precisely.** One specification — the prose in
+`spec/` — was **transcribed from the R sources by an agent with full source
+access**. That specification was then **implemented a second time in Python by
+agents that never read `R/`**, against an acceptance suite whose expected values
+were **computed in R**. It is a re-implementation from a written spec, not two
+blind implementations from a shared problem statement.
+
+That catches implementation bugs, library-default mismatches, and arithmetic
+errors — the failure modes where a second author writing independent code from
+a written rule lands somewhere different. It **cannot** catch a misreading baked
+into the spec itself: if the spec transcribed R's behaviour wrongly, both paths
+reproduce the same wrong thing and agree. Read
+[How the clean room actually worked, and its limits](#how-the-clean-room-actually-worked-and-its-limits)
+before quoting the agreement as evidence of anything wider.
 
 Run everything:
 
@@ -20,6 +34,120 @@ designed outcome, not a broken run.** `logistic-dirty` exists to publish the
 app-vs-exported-script divergence of `issues/02`, so it fails on purpose. The
 scorecard is written BEFORE the failure is reported — a non-zero `all` means
 "findings exist, go read them", never "nothing was published".
+
+## How Path B was produced
+
+The protocol, concretely enough to audit. Every Path B module was written by a
+**separate agent dispatched with `claude -p` (never the in-session Agent tool,
+which would have inherited this session's context) into a scratch directory
+outside this repository** — not a branch, not a worktree, not a subdirectory
+with a "do not look" instruction.
+
+- **The scratch directory sat outside the repo tree**, so `R/`, `web/`,
+  `cases/`, `results/`, this README, the repo's `CLAUDE.md`, the plan document
+  and every other module's Python were not reachable by any path, glob, or
+  `git` command available to that agent.
+- **The bundle it received was:** `spec/<case>.md` (the prose specification for
+  that case), `python/INTERFACES.md` (call signatures and return shapes),
+  `requirements.txt`, an empty Python skeleton, and the acceptance suite
+  `tests/test_<module>.py`. Nothing else. No repo context file, no
+  project instructions, no sibling module.
+- **No `R/` in any form** — not the sources, not a diff, not a quoted excerpt
+  beyond what the spec itself states in prose.
+- **The finished module was copied back** into `python/validate/` and committed
+  here, together with the agent's own **`DECISIONS-<module>.md`** — one per
+  module (`DECISIONS-{cox,km,logistic,groupcompare,summary,diagnostics}.md`),
+  written in the scratch directory, recording every ambiguity the agent hit and
+  how it resolved it. Those files are the audit trail: they are what an
+  implementer with source access could not have written, and they are why the
+  two leak episodes below are visible at all.
+- The specs themselves were transcribed **into** `spec/` by a different agent
+  that did have `R/` open. That direction of information flow is the whole
+  design, and it is also the limit — see the next section.
+
+The dispatch protocol is amendment A1 of
+`docs/superpowers/plans/2026-07-25-statistical-validation.md`, which is tracked
+in this repository. The per-task briefs and reports lived in
+`stats-validation/.sdd/`, which is gitignored scratch and does not merge; the
+protocol is recorded here so it survives without them.
+
+## How the clean room actually worked, and its limits
+
+This section exists because the shorter claim — "written from the prose spec by
+an implementer who has not read `R/`" — was true about `R/` and misleading about
+everything else. What follows is the whole of it.
+
+**The no-`R/` half is real and verified.** No Path B agent read the R sources.
+
+**But the bundle carried more than prose.** Two of its contents are not neutral:
+
+- **`python/INTERFACES.md` names Path A internals and pre-resolves several
+  points an independent implementer would plausibly have diverged on.** It
+  pins the app's continuous-vs-categorical classification rule ("more than five
+  distinct non-missing values"); it names R's "minmin" median rule for
+  Kaplan-Meier by name and warns off the naive reading of the same formula; it
+  states that Tukey and Dunn pair names run in *opposite* orders and says not to
+  normalise them; it states that Fisher's exact test has no `statistic` at all
+  because R's htest carries none; and it restates `fmt_num` as R's `signif`
+  algorithm — scale, round half-to-even, unscale — **with the worked outputs**
+  (`2.225 -> "2.22"`, `1.315 -> "1.32"`). Each of those is a real place a
+  second implementation could have landed somewhere else, and each was handed
+  over pre-decided.
+- **The acceptance suites carry expected values computed in R, at 17
+  significant digits.** An agent that could not derive a quantity could, in
+  principle, fit the constant rather than the rule. (The suites are in the
+  repository and readable; nothing about this is hidden.)
+
+**Two episodes are disclosed by commit hash rather than argued away.**
+
+- **`6d3ac38` relocated a leak instead of removing it.** Its stated purpose
+  included "INTERFACES.md's precision note stripped of library names/kwargs" —
+  and it did strip lifelines' name and the literal
+  `fit_options={"precision": 1e-11, "r_precision": 1e-13}` from
+  `INTERFACES.md`. In **the same commit** it added those same values, plus
+  `"max_steps": 1000`, to `python/tests/test_cox.py`'s comment block, which the
+  clean-room bundle also contained. The sanitization moved the information from
+  one bundled file to another. `python/DECISIONS-cox.md` then cites
+  `INTERFACES.md`'s numerical-precision note as the source of values that file
+  no longer contained.
+- **`e8405fc` retuned `_FIT_OPTIONS` against a residual measured relative to
+  R.** It moved `validate/cox.py`'s solver settings from
+  `precision=1e-11, r_precision=1e-13, max_steps=1000` to
+  `precision=1e-15, r_precision=1e-17, max_steps=5000`, and the justification
+  recorded in the code and in `DECISIONS-diagnostics.md` is the
+  proportional-hazards global-p residual **"4.0e-8 -> 2.9e-13 relative to R"**.
+  Tightening a convergence tolerance does not change which statistic is
+  computed — but the target was R's answer, so this is a tuning step against the
+  reference, and it belongs in the disclosure.
+
+**The conclusion.** What this harness is: **one specification, transcribed from
+the R sources by an agent with source access, implemented a second time in
+Python by agents that never read the R, against an acceptance suite whose
+expected values were computed in R.** Agreement between the two paths is strong
+evidence against implementation bugs, library-default mismatches, and arithmetic
+errors — the numerous, ordinary, expensive failures. It is **not** evidence
+against a misreading baked into the specification: a spec that describes R
+wrongly produces two implementations that agree with each other and with the
+spec, and the comparison stays green. The specs are in `spec/`, they cite `R/`
+line by line, and they are the artifact to attack if you want to attack this.
+
+## Where the issue files live
+
+The two real app-bug issues found by this work are at
+**`stats-validation/issues/`** — `01-cox-blank-status-censored.md` and
+`02-app-vs-exported-script-missing-values.md`.
+
+That is a **deliberate deviation** from the convention in
+`docs/agents/issue-tracker.md` and the repo `CLAUDE.md`, which put issues at
+`.scratch/<slug>/issues/`. The reason is the Phase-1 constraint: `.scratch/` is
+gitignored, and these two issues are *published evidence* — the scorecard and
+`expected-findings.json` both depend on `issues/02`, and CI uploads the
+artifacts that cite it. Untracked issue files could not carry that weight.
+Phase 1 also must not edit anything outside `stats-validation/`, so the
+app-side convention docs were left exactly as they are rather than amended.
+Each issue file repeats this note in its own header, so a maintainer who
+follows the documented convention, finds nothing under `.scratch/`, and then
+finds these, knows immediately why they are here.
 
 ## The findings baseline, and how CI uses it
 
@@ -329,9 +457,13 @@ state whatsoever: it is a function of files in the checked-out tree (`results/`
 and `web/`), never of the clock, the environment, or `HEAD`.
 `test_scorecard_is_a_pure_function_of_its_inputs` pins that.
 
-Coverage is the two ratio-table cases with a full native-R display artifact,
-`logistic-confounding` and `cox-adjusted`. The rest of the roster is Phase 2 —
-it needs the shared-boot refactor of the existing suites.
+Coverage is **2 of the 8 cases** — the two ratio-table analyses with a full
+native-R display artifact to compare a rendered table against,
+`logistic-confounding` and `cox-adjusted`. The other six are validated on the
+native-R tiers above and are covered by **no** wasm-vs-native claim at all. The
+scorecard states the same ratio in the rendered WebR tier section, so the page
+cannot be read as whole-roster parity. The rest of the roster is Phase 2 — it
+needs the shared-boot refactor of the existing suites.
 
 **The scorecard's headline tiles (values compared / differences / defects /
 cases meeting targets) come from `findings.json` only.** A webR drift or
@@ -355,9 +487,13 @@ from re-running the exported `.R` on the exact tier, and on the script tier the
 `logistic-dirty`'s findings is an *exported script* row: the numbers on screen
 were right.
 
-**If you are implementing Path B: do not read `R/*.R`.** Independence is the
-only thing this exercise measures. A port that reproduces the same misreading
-of the spec proves nothing.
+**If you are implementing Path B: do not read `R/*.R`.** A port that reproduces
+the same misreading of the spec proves nothing — which is exactly the limit
+named in "How the clean room actually worked, and its limits" above, and the
+reason the rule is worth keeping even though the spec, not the sources, is the
+real single point of failure. If you find the spec ambiguous, record the
+ambiguity in your `DECISIONS-<module>.md` and resolve it from the spec; do not
+resolve it by looking.
 
 Phase 1 never edits `R/` or `web/` — this harness is entirely new code and
 data living under `stats-validation/`. Harness JS tests are run via

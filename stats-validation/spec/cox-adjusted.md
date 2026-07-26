@@ -2,6 +2,39 @@
 
 Input: `stats-validation/cases/cox-adjusted/data.csv`.
 
+**This spec, and `fit_cox`, model the LIVE APP ONLY** (`web/guided/cox/spec.js`'s
+`buildCoxSpec` feeding `R/cox.R`'s `fig_cox` — what a user's browser session
+actually runs) — never the downloadable/exported `.R` script. The two are NOT
+interchangeable: they diverge on non-parseable time values (see Population
+below) and on `read.csv`'s missing-value and whitespace handling
+(`stats-validation/issues/02`). Where this spec describes the export tier at all
+it says so explicitly and in its own section — see "Divergence from the exported
+script" at the end of Population, and the Diagnostics section's export notes.
+
+## Cell reading
+
+Every cell is read as text and **trimmed of leading and trailing whitespace
+before anything else looks at it**. This happens in the app's shared CSV parser
+(`web/lib/csv.js`'s `parseCsv`, which does `row[c] = (cells[j] ?? "").trim()`
+for every cell of every row), so the analysis code downstream never sees
+untrimmed text. Two consequences, both normative:
+
+- **A whitespace-only cell is an empty cell.** There is no separate "whitespace"
+  case to handle anywhere below: `" "` behaves exactly as `""` does, and then
+  whatever rule governs an empty cell in that column role applies. So a
+  whitespace-only **time** or **covariate** cell is missing and its row is
+  dropped, while a whitespace-only **status** cell is *not* dropped — it is
+  coded censored, because that is what Status coding below does with an empty
+  status cell.
+- **A padded value is its unpadded self.** `" Standard care "` and
+  `"Standard care"` are the same covariate level, match the same declared
+  reference level, and never produce two levels.
+
+This is the same rule `spec/groupcompare-numeric.md`, `spec/groupcompare-dirty.md`
+and `spec/summary-table1.md` state, for the same reason: one parser feeds all of
+them. The exported script does NOT trim (it re-reads the raw CSV with
+`read.csv`), which is divergence 3 of `stats-validation/issues/02`.
+
 ## Population
 Complete cases on the time column and the covariates only. Drop any row
 where the time or either of the two covariates is missing or an empty
@@ -12,10 +45,50 @@ as NA.
 The status column is deliberately excluded from this completeness check —
 see Status coding below for why a blank status cell is never dropped.
 
-A time value that is blank is missing, per the rule above. A time value that
-is present but does not parse as a number, or parses to a negative number,
-cannot be used as a survival time; treat that row as missing too — drop it
-and count it in the same dropped total.
+**Time values split into three cases, and only two of them are per-row drops.**
+
+1. **Blank (or whitespace-only) time** — missing, per the rule above: the row
+   is dropped and counted in `n_dropped`.
+2. **Present, parses as a number, but negative or non-finite** — the row is
+   dropped and counted in the same total. `R/cox.R` filters with
+   `complete.cases(df) & is.finite(df$time) & df$time >= 0`, so this really is
+   a per-row drop.
+3. **Present and does NOT parse as a number** — **the live app fails the
+   entire analysis.** `fig_cox` builds the time column with
+   `.numeric_col(rows, tcol)` (`R/summarize.R`), which raises
+   `Column '<time>' must be numeric.` the moment any non-blank cell fails to
+   coerce. No figure renders, no row is dropped, and there is no partial
+   result. This spec therefore does not define `fit_cox`'s behaviour on such
+   an input; it is out of scope, exactly as it is for the app.
+
+**This is a correction.** An earlier revision of this spec said a
+non-parseable time value was "treated as missing — drop it and count it in the
+same dropped total". That describes the **exported script**, not the live app:
+the script builds `time = as.numeric(df[["<time>"]])`, where a non-parseable
+cell coerces to `NA` with a warning and is then removed by the script's own
+`complete.cases` line. Silent per-row drop in the script; hard whole-analysis
+error in the app.
+
+**Cross-reference: `spec/km-twoarm.md` states the same class of rule for the
+same column role, and the two analyses are NOT identical.** Kaplan-Meier's
+whole-figure precondition (`if (any(!is.finite(df$time)) || any(df$time < 0))
+stop(...)` in `R/km.R`'s `fig_km`, quoted in `spec/km-twoarm.md`'s Population
+section) covers **both** non-parseable **and** negative times — a single
+negative value fails the whole KM figure. Cox splits them: non-parseable fails
+the whole analysis (case 3 above), negative is a per-row drop (case 2 above).
+Neither is a mistake; they are two different code paths, and the difference is
+recorded here so no implementer assumes the KM rule transfers.
+
+### Divergence from the exported script (informational)
+
+Not part of `fit_cox`'s contract — recorded so the split above is not read as
+arbitrary. The exported `.R` differs from the live app on: non-parseable times
+(silent row drop vs whole-analysis error, above); untrimmed cells (`read.csv`
+does not trim, so a padded level becomes a phantom second level); and
+`read.csv`'s default `na.strings = "NA"`, which turns the literal text `NA`
+into a missing value where the live app keeps it as an ordinary string. All
+three are `stats-validation/issues/02`, and the third is measured on every run
+by the shipped `logistic-dirty` case.
 
 ## Status coding
 The status column is `status`. A row is an event when its value equals the
@@ -42,8 +115,33 @@ above — do not port logistic's blank-is-missing outcome handling here.
 If a declared reference level is absent from the data after complete-case
 filtering, the reference level is instead the most frequent remaining level.
 
-Categorical covariates use treatment contrasts: the reference level first,
-remaining levels in alphabetical order.
+**The tie-break for that fallback, stated because "most frequent" is not a
+total order.** `R/cox.R`'s `.cox_most_frequent` is
+`names(sort(table(x), decreasing = TRUE))[1]` on the non-blank values. `table()`
+emits its names already in ascending sorted order, and R's `sort()` on a named
+integer vector is **stable**, so a decreasing sort leaves tied counts in that
+ascending order. **On a tie, the level that sorts FIRST wins.** Measured in R:
+`c("zebra","zebra","apple","apple")` -> `apple`; `c("c","c","a","a","b","b")`
+-> `a`. Never "first seen in the file", never "last".
+
+**The sort is R's locale-aware collation, not a code-point sort**, because it is
+`sort()`/`factor()`, not a byte comparison. Under the `en_CA.UTF-8` locale this
+build runs in, `c("B","B","a","a")` resolves to **`a`**, where a code-point sort
+would give `B` (`"B"` is 0x42, `"a"` is 0x61). This case's levels
+(`Standard care`, `New treatment`) are ASCII and same-case, so the two orders
+coincide here and nothing in the shipped comparison depends on the difference —
+but implement the locale rule, and treat a future case whose levels mix case or
+leading punctuation as needing a re-verification against R rather than an
+assumption.
+
+Categorical covariates use treatment contrasts: **the reference level first,
+then the remaining levels in R's `factor()` order — the same locale-aware
+`sort(unique(...))` just described**, with the reference lifted out of it by
+`stats::relevel`. (The other specs in this directory differ deliberately on this
+point: `spec/groupcompare-*.md` pin a plain **code-point** sort and explain why
+in their own Group-level ordering sections; `spec/summary-table1.md` pins the
+locale-aware sort, as here. They differ because they are describing different R
+call sites, not because one of them is loose.)
 
 ## Models
 Cox proportional-hazards regression, partial likelihood, **Efron** handling

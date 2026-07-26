@@ -164,6 +164,20 @@ categorical branch. There is no per-cell fallback and no partial coercion.
   whose group levels differ only by letter case or by leading punctuation as
   needing this pinned before it can be compared.
 
+  **Why these three specs pin code-point where the other three pin locale.** The
+  group-comparison specs deliberately require a code-point sort: reproducibility
+  beats fidelity here, because the app's real order depends on the LC_COLLATE of
+  whatever process runs R, and for webR in a browser that is not the developer's
+  locale and is not stated anywhere the user can see. Every shipped group level
+  makes the two orders identical, so pinning the deterministic one costs nothing
+  and removes an environment dependency from the comparison.
+  `spec/summary-table1.md`, `spec/cox-adjusted.md` and
+  `spec/logistic-confounding.md` instead state the locale-aware rule, because
+  their sorts feed R's own `factor()` level order and reference-level fallback,
+  where restating the rule as code-point would misdescribe the call site. No
+  shipped case reaches a level set where the two rules disagree; all six specs say
+  so explicitly rather than leaving it to inference.
+
 ## Parametric vs non-parametric routing
 
 The choice is made **once, globally**, before any test is selected, and the same
@@ -473,19 +487,43 @@ The numeric-branch sentence is:
   `approximately symmetric (skewness 0.1, n = 400)`,
   `right-skewed (skewness 1.5), n = 400`, or
   `too few distinct values to assess normality; using median (IQR)`; for a
-  user override it is the literal ` (user-selected)`. (Those five are the
+  user override it is the literal ` (user-selected)`. (Those **six** are the
   complete set the routing rule can produce — one per branch of the decision
   above, with the skewness/Shapiro variants split by which signal is more
-  legible.)
+  legible. Count them: the two Shapiro forms, the two skewness forms, the
+  large-n symmetric form, and the too-few-distinct-values form.)
 - `<p>` is `p < 0.001` when p < 0.001, else `p = %.3f` — **with spaces** around
   `=` and `<`.
 - Numbers inside the per-group summaries and the effect phrase are rendered by
   one shared rule: **3 significant figures, plain (never scientific) notation,
-  trailing zeros dropped** (250000 -> `250000`, 1.125 -> `1.12`,
-  0.00123 -> `0.00123`, 7.70 -> `7.7`). Rounding at the significant-figure step
-  is **round-half-to-even on the binary value**, which is why 1.125 renders as
-  `1.12` while 1.135 renders as `1.14`; both were measured against R rather
-  than derived.
+  trailing zeros dropped** (250000 -> `250000`, 0.00123 -> `0.00123`,
+  7.70 -> `7.7`). This is R's `.fmt_num` — literally the same function this
+  case's branch calls, defined once in `R/summarize.R` and reused by
+  `R/groupcompare.R` — so the tie rule below is identical to the one
+  `spec/summary-table1.md` states, and neither spec is stating a variant.
+
+  **The tie rule is R's `signif`, which is NOT "round the decimal value
+  half-to-even".** `signif(x, 3)` (`src/nmath/fprec.c`) computes
+  `e = 3 - 1 - floor(log10(|x|))` and then `nearbyint(x * 10^e) / 10^e` — it
+  **scales, rounds the SCALED value half-to-even, and scales back**. The
+  scaling multiply is itself a floating-point operation and can land *exactly*
+  on a `.5` tie even when the original double is nowhere near one, which is
+  where a decimal-exact rule diverges. Implement the algorithm, not an
+  approximation of it: scale, apply Python's one-argument `round()` to the
+  scaled float (that is exactly round-half-to-even), scale back. Never a
+  two-argument `round(v, k)`, never `Decimal(ROUND_HALF_UP)`, never
+  `printf("%.2f")`.
+
+  R-verified probes, chosen because they **discriminate between the two rules**:
+
+  | v | rendered | a decimal-exact rule would say |
+  |---|---|---|
+  | `2.225` | `2.22` | `2.23` (the double is `2.22500000000000008…`, above the tie, but `2.225 * 100` is exactly `222.5` and half-to-even gives `222`) |
+  | `1.315` | `1.32` | `1.31` (the double is `1.31499999999999994…`, below the tie, but `1.315 * 100` is exactly `131.5` and half-to-even gives `132`) |
+
+  Probes that do **not** discriminate, kept only as sanity checks: `1.125` ->
+  `1.12` and `1.135` -> `1.14` render the same under both rules, so an
+  implementation can pass both while still being wrong. Do not use them alone.
 - Per-group summary: `<group> <mean> ± <sd>` (sample SD, divisor n-1) under the
   parametric branch; `<group> <median> (<Q1>–<Q3>)` (quantile type 7, EN DASH
   between the quartiles) under the non-parametric branch. Groups appear in

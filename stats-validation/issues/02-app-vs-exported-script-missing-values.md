@@ -2,6 +2,13 @@
 
 Status: needs-triage
 Type: task
+Location: **`stats-validation/issues/`, not `.scratch/<slug>/issues/`.** This is a
+deliberate deviation from `docs/agents/issue-tracker.md` and the repo `CLAUDE.md`.
+`.scratch/` is gitignored, and this issue is *published evidence* — the scorecard,
+`expected-findings.json` and the shipped `logistic-dirty` case all cite it — so it
+has to be tracked. Phase 1 must not edit anything outside `stats-validation/`, so
+the convention docs were left unamended rather than updated to mention this
+directory. See `stats-validation/README.md` §"Where the issue files live".
 Found: 2026-07-25, during Task 9's fix round (statistical-validation phase 1), while
 correcting `stats-validation/spec/km-twoarm.md`'s Population section against the real
 behavior of the exported script `R/km.R`'s `.km_script` generates (Task 9's original pass
@@ -252,16 +259,21 @@ which is in the Makefile's `CASES` and runs on every `make -C stats-validation a
 The case is `logistic-confounding`'s data with eight `stage` cells changed to the literal
 text `NA` (plus two trailing-space `age` cells, on a NUMERIC column only — padding a factor
 level is divergence 3, already verified above, and would only produce a permanently-broken
-export rather than new information). Running the full pipeline publishes 28 findings:
+export rather than new information). Running the full pipeline publishes **30 findings**
+(this read 28 before amendment A14 added the C-statistic pair below; the shipped evidence
+in `results/findings.json` and `expected-findings.json` is 30 — 3/1/5/21):
 
 - **3 x `COUNT_MISMATCH`** — `n` 312 vs 320, `n_event` 87 vs 91, `n_dropped` 8 vs 0. The
   exported script analysed 8 fewer patients than the app displayed.
 - **1 x `MISSING_QUANTITY`** — `stage:NA`: the app fitted and displayed a `stageNA`
   coefficient (OR 4.02, 95% CI 0.90-17.91, p = 0.068); the exported script has no such term
   at all, because it never saw the level.
-- **4 x `SCRIPT_DIVERGENCE`** — one per displayed adjusted cell; the downloaded `.R` does not
-  reproduce a single one of them.
-- **20 x `DEFECT`** — est/se/lo/hi/p for all four shared terms, all beyond rel 1e-6.
+- **5 x `SCRIPT_DIVERGENCE`** — one per displayed adjusted cell (4), plus the exported
+  script's C-statistic sentence (screen: `apparent (in-sample) C-statistic = 0.69`;
+  script: `C-statistic = 0.68`). The downloaded `.R` does not reproduce a single one of
+  them.
+- **21 x `DEFECT`** — est/se/lo/hi/p for all four shared terms (20), plus the
+  `c_statistic` itself (0.68265645 vs 0.686645232), all beyond rel 1e-6.
 - **display tier: PASS.** The app and the independent Python re-implementation agree
   completely about what the screen showed. The disagreement is entirely between the app and
   its own exported script — which is precisely this issue.

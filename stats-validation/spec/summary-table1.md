@@ -285,8 +285,22 @@ level:
   rows. (In the HTML table the header row also carries a `n (%) of <N> with
   data` note; that note is NOT part of the copy-pasteable text output.)
 - Levels are the distinct non-blank values, **sorted** (`sort(unique(...))` — R's
-  locale-aware string sort; for this file's ASCII levels that is plain
+  locale-aware string sort, ordered by the process's LC_COLLATE rather than by
+  code point; for this file's ASCII, same-case levels that is plain
   lexicographic: `Female` before `Male`, `No` before `Yes`).
+
+  **Locale-aware here, code-point in the group-comparison specs — deliberately,
+  and here is why.** `spec/groupcompare-{numeric,categorical,dirty}.md` require a
+  plain code-point sort: their orders are only ever a display and pair-naming
+  convention, so they trade fidelity for an order that does not depend on the
+  locale of whatever process runs R (webR in a browser is not the developer's
+  locale). This spec, `spec/cox-adjusted.md` and `spec/logistic-confounding.md`
+  state the locale rule instead, because their sorts are R's own
+  `sort()`/`factor()` level order feeding the rendered table and the
+  reference-level fallback, where "code point" would simply misdescribe the call
+  site. Under `en_CA.UTF-8` the two rules disagree on, e.g., `c("B","a")`
+  (locale: `a, B`; code point: `B, a`); no shipped case has such a level set, and
+  all six specs say so rather than leaving it to inference.
 - A level row's cell for group `g` is:
 
   ```r

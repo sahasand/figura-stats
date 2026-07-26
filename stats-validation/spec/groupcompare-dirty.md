@@ -149,6 +149,20 @@ app trims it to blank and drops the row.
   whose group levels differ only by letter case or by leading punctuation as
   needing this pinned before it can be compared.
 
+  **Why these three specs pin code-point where the other three pin locale.** The
+  group-comparison specs deliberately require a code-point sort: reproducibility
+  beats fidelity here, because the app's real order depends on the LC_COLLATE of
+  whatever process runs R, and for webR in a browser that is not the developer's
+  locale and is not stated anywhere the user can see. Every shipped group level
+  makes the two orders identical, so pinning the deterministic one costs nothing
+  and removes an environment dependency from the comparison.
+  `spec/summary-table1.md`, `spec/cox-adjusted.md` and
+  `spec/logistic-confounding.md` instead state the locale-aware rule, because
+  their sorts feed R's own `factor()` level order and reference-level fallback,
+  where restating the rule as code-point would misdescribe the call site. No
+  shipped case reaches a level set where the two rules disagree; all six specs say
+  so explicitly rather than leaving it to inference.
+
 ## Parametric vs non-parametric routing
 
 Decided **once, globally**, before any test is selected; the same decision drives
@@ -309,7 +323,19 @@ output:
 - `<p>` is `p < 0.001` when p < 0.001, else `p = %.3f` — **with spaces** around
   `=` and `<`.
 - Numbers are rendered at **3 significant figures, plain (never scientific)
-  notation, trailing zeros dropped**.
+  notation, trailing zeros dropped** — R's `.fmt_num`, defined once in
+  `R/summarize.R` and reused by `R/groupcompare.R`, so this is the identical
+  function the other branches and Table 1 use.
+
+  **The tie rule is R's `signif`, not a decimal-exact round.** `signif(x, 3)`
+  computes `e = 3 - 1 - floor(log10(|x|))` then `nearbyint(x * 10^e) / 10^e`:
+  it **scales, rounds the SCALED value half-to-even, and scales back**. The
+  scaling multiply can land exactly on a `.5` tie even when the original double
+  is not one. Discriminating R-verified probes: **`2.225` renders `2.22`**
+  (a decimal-exact rule says `2.23`) and **`1.315` renders `1.32`** (a
+  decimal-exact rule says `1.31`). `1.125` -> `1.12` and `1.135` -> `1.14`
+  agree under both rules and therefore prove nothing on their own. Full
+  argument and probe table: `spec/summary-table1.md`, "Number formatting".
 - Per-group summary under the non-parametric branch is
   `<group> <median> (<Q1>–<Q3>)` (quantile type 7 — linear interpolation
   between order statistics — and an EN DASH between the quartiles). Groups

@@ -2,6 +2,38 @@
 
 Input: `stats-validation/cases/logistic-confounding/data.csv`.
 
+**This spec, and `fit_logistic`, model the LIVE APP ONLY**
+(`web/guided/logistic/spec.js`'s `buildLogisticSpec` feeding `R/logistic.R`'s
+`fig_logistic` — what a user's browser session actually runs) — never the
+downloadable/exported `.R` script. The two are NOT interchangeable for
+missing-value and whitespace handling: `stats-validation/issues/02` is that
+divergence, and the shipped `logistic-dirty` case measures it on every run.
+Where this spec describes the export tier at all it says so explicitly and in
+its own section — see the Diagnostics section's export notes.
+
+## Cell reading
+
+Every cell is read as text and **trimmed of leading and trailing whitespace
+before anything else looks at it**. This happens in the app's shared CSV parser
+(`web/lib/csv.js`'s `parseCsv`, which does `row[c] = (cells[j] ?? "").trim()`
+for every cell of every row), so the analysis code downstream never sees
+untrimmed text. Two consequences, both normative:
+
+- **A whitespace-only cell is an empty cell**, and therefore missing under every
+  rule below — there is no separate "whitespace" case to handle. `" "` in the
+  outcome column or in a covariate behaves exactly as `""` does, so a
+  whitespace-only outcome cell is missing and its row is dropped.
+- **A padded value is its unpadded self.** `" Standard care "` and
+  `"Standard care"` are the same covariate level, match the same declared
+  reference level, and never produce two levels. A padded numeric cell
+  (`" 42 "`) is the number 42.
+
+This is the same rule `spec/groupcompare-numeric.md`, `spec/groupcompare-dirty.md`,
+`spec/summary-table1.md` and `spec/cox-adjusted.md` state, for the same reason:
+one parser feeds all of them. The exported script does NOT trim (it re-reads the
+raw CSV with `read.csv`), which is divergence 3 of
+`stats-validation/issues/02`.
+
 ## Population
 Complete cases only. Drop any row where the outcome or any of the three
 covariates is missing or an empty string. Report the number dropped. A blank
@@ -23,8 +55,35 @@ cell is missing, not a non-event.
 If a declared reference level is absent from the data after complete-case
 filtering, the reference level is instead the most frequent remaining level.
 
-Categorical covariates use treatment contrasts: the reference level first,
-remaining levels in alphabetical order.
+**The tie-break for that fallback, stated because "most frequent" is not a
+total order.** `R/logistic.R`'s `.logistic_most_frequent` is
+`names(sort(table(x), decreasing = TRUE))[1]` on the non-blank values —
+character-for-character the same expression as Cox's `.cox_most_frequent`.
+`table()` emits its names already in ascending sorted order, and R's `sort()` on
+a named integer vector is **stable**, so a decreasing sort leaves tied counts in
+that ascending order. **On a tie, the level that sorts FIRST wins.** Measured in
+R: `c("zebra","zebra","apple","apple")` -> `apple`;
+`c("c","c","a","a","b","b")` -> `a`. Never "first seen in the file", never
+"last".
+
+**The sort is R's locale-aware collation, not a code-point sort**, because it is
+`sort()`/`factor()`, not a byte comparison. Under the `en_CA.UTF-8` locale this
+build runs in, `c("B","B","a","a")` resolves to **`a`**, where a code-point sort
+would give `B` (`"B"` is 0x42, `"a"` is 0x61). This case's levels (`Standard
+care`/`New treatment`, and `I`/`II`/`III`) are ASCII and same-case, so the two
+orders coincide here and nothing in the shipped comparison depends on the
+difference — but implement the locale rule, and treat a future case whose levels
+mix case or leading punctuation as needing a re-verification against R rather
+than an assumption.
+
+Categorical covariates use treatment contrasts: **the reference level first,
+then the remaining levels in R's `factor()` order — the same locale-aware
+`sort(unique(...))` just described**, with the reference lifted out of it by
+`stats::relevel`. (The other specs in this directory differ deliberately on this
+point: `spec/groupcompare-*.md` pin a plain **code-point** sort and explain why
+in their own Group-level ordering sections; `spec/summary-table1.md` and
+`spec/cox-adjusted.md` pin the locale-aware sort, as here. They differ because
+they are describing different R call sites, not because one of them is loose.)
 
 ## Models
 1. For each covariate, a univariable logistic regression of y on that
