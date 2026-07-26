@@ -15,8 +15,24 @@
         "n_dropped": 1
       },
       "findings": []
+    },
+    {
+      "id": "cox-adjusted",
+      "kind": "ratio_table",
+      "compared": 19,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_hr": 2,
+        "adjusted_ci": 6,
+        "adjusted_p": 2,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1
+      },
+      "findings": []
     }
   ],
-  "total_compared": 35,
+  "total_compared": 54,
   "total_findings": 0
 }

@@ -25,36 +25,19 @@ import json
 import sys
 from pathlib import Path
 
+from .cox import fit_cox
 from .io import load_case
 from .logistic import fit_logistic
 
 RESULTS = Path(__file__).resolve().parents[2] / "results"
 
-# TODO(cox clean-room integration): once validate/cox.py lands (written from
-# stats-validation/spec/cox-adjusted.md), wire it as an EXPLICIT branch in
-# run() below — do NOT just add it to FITTERS. The generic call site further
-# down assumes fit_logistic's shape: a single `roles["outcome"]` column, and
-# the positional order `(df, outcome, event_value, covariates, ref_levels,
-# increments)`. cox has no `outcome` role at all — it has `roles["time"]`
-# and `roles["status"]`, both required — and fit_cox's positional order is
+# cox has no `outcome` role at all — it has `roles["time"]` and
+# `roles["status"]`, both required — and fit_cox's positional order is
 # `(df, time, status, event_value, covariates, ref_levels, increments)`
-# (INTERFACES.md). Registering FITTERS["cox"] = fit_cox unchanged would
-# KeyError on `roles["outcome"]` before fit_cox's arguments could ever line
-# up. The dispatch needs, roughly:
-#
-#   if figure == "cox":
-#       from .cox import fit_cox
-#       out = fit_cox(df, case["roles"]["time"], case["roles"]["status"],
-#                     options["event_value"], covariates,
-#                     options.get("ref_levels", {}))
-#       ... (skip the generic FITTERS.get(figure) call below for this figure)
-#
-# INTEGRATION STEP: delete the 'Path B cox not yet present' guard below
-# (the `if figure == "cox" and figure not in FITTERS:` block) as part of
-# wiring the explicit branch above.
-#
-# Kept lazy/absent until then so this module keeps importing cleanly with no
-# cox.py on disk.
+# (INTERFACES.md), which does not line up with fit_logistic's shape (a single
+# `roles["outcome"]` column, positional order `(df, outcome, event_value,
+# covariates, ref_levels, increments)`). So cox is dispatched as an EXPLICIT
+# branch in run() below rather than through the generic FITTERS lookup.
 FITTERS = {"logistic": fit_logistic}
 
 
@@ -80,30 +63,33 @@ def display_label(term: str, covariates) -> str:
 def run(case_dir: str) -> dict:
     df, case = load_case(case_dir)
     figure = case["figure"]
-    if figure == "cox" and figure not in FITTERS:
-        # Explicit, self-documenting stop rather than falling through to the
-        # generic message below: cox is a REGISTERED figure (case.json,
-        # build-spec.mjs, this dispatch site) whose Path B implementation is
-        # simply not written yet — see the TODO above FITTERS.
-        raise SystemExit(
-            "Path B cox not yet present — validate/cox.py is written by the "
-            "clean-room agent from stats-validation/spec/cox-adjusted.md")
-    fitter = FITTERS.get(figure)
-    if fitter is None:
-        raise SystemExit(
-            f"no Path B implementation for figure {figure!r} "
-            f"(implemented: {sorted(FITTERS)})")
-
     covariates = list(case["roles"]["covariates"])
     options = case.get("options", {})
-    out = fitter(
-        df,
-        case["roles"]["outcome"],
-        options["event_value"],
-        covariates,
-        options.get("ref_levels", {}),
-        options.get("increments", {}),
-    )
+
+    if figure == "cox":
+        out = fit_cox(
+            df,
+            case["roles"]["time"],
+            case["roles"]["status"],
+            options["event_value"],
+            covariates,
+            options.get("ref_levels", {}),
+            options.get("increments", {}),
+        )
+    else:
+        fitter = FITTERS.get(figure)
+        if fitter is None:
+            raise SystemExit(
+                f"no Path B implementation for figure {figure!r} "
+                f"(implemented: {sorted(FITTERS)} + cox)")
+        out = fitter(
+            df,
+            case["roles"]["outcome"],
+            options["event_value"],
+            covariates,
+            options.get("ref_levels", {}),
+            options.get("increments", {}),
+        )
     out["id"] = case["id"]
     out["figure"] = figure
     out["display_terms"] = {
