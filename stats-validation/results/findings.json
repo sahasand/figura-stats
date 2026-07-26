@@ -47,8 +47,50 @@
         "n_dropped": 1
       },
       "findings": []
+    },
+    {
+      "id": "groupcompare-numeric",
+      "kind": "gc_summary",
+      "compared": 14,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "test_p": 1,
+        "test_statistic": 1,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "findings": []
+    },
+    {
+      "id": "groupcompare-categorical",
+      "kind": "gc_summary",
+      "compared": 12,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "test_p": 1,
+        "test_statistic": 1,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "findings": []
+    },
+    {
+      "id": "groupcompare-dirty",
+      "kind": "gc_summary",
+      "compared": 14,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "test_p": 1,
+        "test_statistic": 1,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "findings": []
     }
   ],
-  "total_compared": 160,
+  "total_compared": 200,
   "total_findings": 0
 }
