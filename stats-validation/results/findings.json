@@ -1,4 +1,5 @@
 {
+  "_published_precision": "Measured values (`figura`, `python`) are published rounded to 12 significant digits. The COMPARISON ran at full double precision (rel 1e-06 / abs 1e-09); the unrounded numbers live in the gitignored results/*.figura-exact.json and results/*.python.json. Rounding exists because this file is tracked evidence a CI rebuild must reproduce, and digits past the ~12th are BLAS/toolchain noise rather than statistics.",
   "cases": [
     {
       "id": "logistic-confounding",
@@ -221,8 +222,8 @@
           "disposition": "defect",
           "term": "age",
           "quantity": "est",
-          "figura": 1.68264486127139,
-          "python": 1.6648751058762834,
+          "figura": 1.68264486127,
+          "python": 1.66487510588,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -231,8 +232,8 @@
           "disposition": "defect",
           "term": "age",
           "quantity": "se",
-          "figura": 0.150437214602083,
-          "python": 0.14852847617610576,
+          "figura": 0.150437214602,
+          "python": 0.148528476176,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -241,8 +242,8 @@
           "disposition": "defect",
           "term": "age",
           "quantity": "lo",
-          "figura": 1.25296148477588,
-          "python": 1.2443761199276735,
+          "figura": 1.25296148478,
+          "python": 1.24437611993,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -251,8 +252,8 @@
           "disposition": "defect",
           "term": "age",
           "quantity": "hi",
-          "figura": 2.25968137374107,
-          "python": 2.2274689089402253,
+          "figura": 2.25968137374,
+          "python": 2.22746890894,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -261,8 +262,8 @@
           "disposition": "defect",
           "term": "age",
           "quantity": "p",
-          "figura": 0.000542123993077906,
-          "python": 0.0005991419225210207,
+          "figura": 0.000542123993078,
+          "python": 0.000599141922521,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -271,8 +272,8 @@
           "disposition": "defect",
           "term": "arm:New treatment",
           "quantity": "est",
-          "figura": 0.51473208231846,
-          "python": 0.5311684969022287,
+          "figura": 0.514732082318,
+          "python": 0.531168496902,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -281,8 +282,8 @@
           "disposition": "defect",
           "term": "arm:New treatment",
           "quantity": "se",
-          "figura": 0.303585335225232,
-          "python": 0.2962213331511752,
+          "figura": 0.303585335225,
+          "python": 0.296221333151,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -291,8 +292,8 @@
           "disposition": "defect",
           "term": "arm:New treatment",
           "quantity": "lo",
-          "figura": 0.283899209700071,
-          "python": 0.2972238260088141,
+          "figura": 0.2838992097,
+          "python": 0.297223826009,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -301,8 +302,8 @@
           "disposition": "defect",
           "term": "arm:New treatment",
           "quantity": "hi",
-          "figura": 0.933250630911606,
-          "python": 0.949250858822489,
+          "figura": 0.933250630912,
+          "python": 0.949250858822,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -311,8 +312,8 @@
           "disposition": "defect",
           "term": "arm:New treatment",
           "quantity": "p",
-          "figura": 0.0287022431126639,
-          "python": 0.032693939558156665,
+          "figura": 0.0287022431127,
+          "python": 0.0326939395582,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -321,8 +322,8 @@
           "disposition": "defect",
           "term": "stage:II",
           "quantity": "est",
-          "figura": 1.95342670915745,
-          "python": 1.941750527582527,
+          "figura": 1.95342670916,
+          "python": 1.94175052758,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -331,8 +332,8 @@
           "disposition": "defect",
           "term": "stage:II",
           "quantity": "se",
-          "figura": 0.325988208533696,
-          "python": 0.32529079346556977,
+          "figura": 0.325988208534,
+          "python": 0.325290793466,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -341,8 +342,8 @@
           "disposition": "defect",
           "term": "stage:II",
           "quantity": "lo",
-          "figura": 1.03112272036703,
-          "python": 1.0263614188730408,
+          "figura": 1.03112272037,
+          "python": 1.02636141887,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -351,8 +352,8 @@
           "disposition": "defect",
           "term": "stage:II",
           "quantity": "hi",
-          "figura": 3.70070005507341,
-          "python": 3.673554989534748,
+          "figura": 3.70070005507,
+          "python": 3.67355498953,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -361,8 +362,8 @@
           "disposition": "defect",
           "term": "stage:II",
           "quantity": "p",
-          "figura": 0.0399741072415156,
-          "python": 0.04135134187314797,
+          "figura": 0.0399741072415,
+          "python": 0.0413513418731,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -371,8 +372,8 @@
           "disposition": "defect",
           "term": "stage:III",
           "quantity": "est",
-          "figura": 3.34363401201513,
-          "python": 3.2952132461297032,
+          "figura": 3.34363401202,
+          "python": 3.29521324613,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -381,8 +382,8 @@
           "disposition": "defect",
           "term": "stage:III",
           "quantity": "se",
-          "figura": 0.352261429855152,
-          "python": 0.35024539512450226,
+          "figura": 0.352261429855,
+          "python": 0.350245395125,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -391,8 +392,8 @@
           "disposition": "defect",
           "term": "stage:III",
           "quantity": "lo",
-          "figura": 1.67636178434977,
-          "python": 1.6586265983163135,
+          "figura": 1.67636178435,
+          "python": 1.65862659832,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -401,8 +402,8 @@
           "disposition": "defect",
           "term": "stage:III",
           "quantity": "hi",
-          "figura": 6.6691381959896,
-          "python": 6.546639459713925,
+          "figura": 6.66913819599,
+          "python": 6.54663945971,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -411,8 +412,8 @@
           "disposition": "defect",
           "term": "stage:III",
           "quantity": "p",
-          "figura": 0.000611193604503687,
-          "python": 0.0006624343383404345,
+          "figura": 0.000611193604504,
+          "python": 0.00066243433834,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         },
@@ -421,8 +422,8 @@
           "disposition": "defect",
           "term": "-",
           "quantity": "c_statistic",
-          "figura": 0.682656449553001,
-          "python": 0.6866452324967609,
+          "figura": 0.682656449553,
+          "python": 0.686645232497,
           "note": "beyond rel 1e-06 / abs 1e-09",
           "source": "exported script vs Python"
         }

@@ -79,6 +79,70 @@ KM_DISPLAY_HALF_ULP = 0.5 * 10.0 ** -KM_DISPLAY_DP
 # the value's magnitude. See `gc_display_half_ulp`.
 GC_SIGNIF_DIGITS = 3
 
+# PUBLICATION PRECISION — how many significant digits a measured value keeps on
+# its way INTO findings.json (and therefore into scorecard.html). Nothing about
+# the comparison uses this: every tolerance decision above is made on the full
+# double, and only the already-decided finding is rounded on the way out.
+#
+# WHY ROUND AT ALL. findings.json and scorecard.html are TRACKED evidence, and
+# CI checks that a rebuild reproduces them. Published at repr() precision, a
+# value like 1.6648751058762834 carries 17 significant digits — far past where
+# two honest environments agree. Local (Homebrew R + Accelerate BLAS, a
+# source-built numpy) and CI (Ubuntu R + OpenBLAS, manylinux wheels) reproduce
+# an iteratively fitted estimate to roughly 1e-10, not 1e-16, so committing all
+# 17 digits makes the tracked artifact a claim about one machine's last digits
+# rather than about the statistics. 12 significant digits is ~1e-12 relative —
+# a million times tighter than REL_TOL, so NOTHING the comparator judges is
+# lost — while dropping the digits that are pure environment noise.
+#
+# FULL PRECISION IS NOT DESTROYED, only not published: results/*.figura-exact.json
+# and results/*.python.json (both gitignored) keep every digit, and they are the
+# artifacts the comparison actually reads.
+#
+# It is a `%.<n>g` round-trip, not `round(v, n)`: these are SIGNIFICANT digits,
+# so a p-value of 5.4e-8 keeps 12 of its own digits rather than being flattened
+# to zero.
+PUBLISHED_SIGNIFICANT_DIGITS = 12
+
+# Stamped into findings.json so no reader of the artifact — or of the scorecard
+# built from it — can mistake the published precision for the compared one.
+PRECISION_NOTE = (
+    f"Measured values (`figura`, `python`) are published rounded to "
+    f"{PUBLISHED_SIGNIFICANT_DIGITS} significant digits. The COMPARISON ran at "
+    f"full double precision (rel {REL_TOL} / abs {ABS_TOL}); the unrounded "
+    f"numbers live in the gitignored results/*.figura-exact.json and "
+    f"results/*.python.json. Rounding exists because this file is tracked "
+    f"evidence a CI rebuild must reproduce, and digits past the ~12th are "
+    f"BLAS/toolchain noise rather than statistics."
+)
+
+
+def round_published(value):
+    """A finding's value, rounded for PUBLICATION only. Structure-preserving.
+
+    Applied to `figura`/`python` after every comparison has been decided, so it
+    can never change a verdict. Walks dicts and lists because a finding's value
+    column is not always a scalar — a MISSING_QUANTITY finding publishes Path
+    B's whole malformed cell dict, and that dict's floats deserve the same
+    treatment as a bare one.
+
+    Non-finite floats are returned untouched: `main()` refuses to publish them
+    at all, and quietly turning a NaN into something else here would defeat
+    that check.
+    """
+    if isinstance(value, bool):
+        return value  # bool is an int subclass; never a measurement
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return value
+        return float(f"{value:.{PUBLISHED_SIGNIFICANT_DIGITS}g}")
+    if isinstance(value, dict):
+        return {k: round_published(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [round_published(v) for v in value]
+    return value
+
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 CASES = ROOT / "cases"
@@ -2941,7 +3005,20 @@ def main(case_ids, results: Path = RESULTS, cases: Path = CASES) -> int:
         raise SystemExit("usage: compare.py <case-id> [<case-id> ...]")
     results = Path(results)
     reports = [compare_case(c, results=results, cases=cases) for c in case_ids]
+    # PUBLICATION ROUNDING, here and nowhere earlier: every comparison above ran
+    # on the full double, so this cannot move a verdict — it only decides how
+    # many digits of an already-decided finding reach the tracked artifact. In
+    # place, so the console lines below print exactly what the file holds.
+    for report in reports:
+        for f in report["findings"]:
+            f["figura"] = round_published(f["figura"])
+            f["python"] = round_published(f["python"])
     out = {
+        # Documentation, inert to every consumer: gate.normalize() reads only
+        # `cases`/`total_*`, and build_scorecard.py the same. It is here so the
+        # artifact explains its own precision without a reader having to find
+        # this module.
+        "_published_precision": PRECISION_NOTE,
         "cases": reports,
         "total_compared": sum(c["compared"] for c in reports),
         "total_findings": sum(len(c["findings"]) for c in reports),

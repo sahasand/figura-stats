@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
-import { compareText, classifyColumn, runCase, nativeDigest } from "./compare-text.mjs";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  compareText,
+  classifyColumn,
+  runCase,
+  nativeDigest,
+  webDigest,
+  isWebSource,
+} from "./compare-text.mjs";
 
 // Regression pin for the review finding this file exists to close:
 // `compareText` was previously unexported with no test anywhere, and the
@@ -169,6 +180,122 @@ const NATIVE =
     nativeDigest(changed),
     "a changed native text must change the digest (this is the staleness signal)",
   );
+}
+
+// ---------------------------------------------------------------------------
+// nativeDigest sorts by CODE POINT, not by ICU collation — the property that
+// keeps it byte-compatible with build_scorecard.py's `_native_digest`, which
+// sorts with Python's `sorted()`. This was a real latent bug: the sort used
+// `localeCompare`, and the two orderings disagree on ids that differ only in
+// punctuation or case. A disagreement means the scorecard recomputes a
+// DIFFERENT digest from the same inputs and renders a permanent false staleness
+// note for evidence that is perfectly current.
+//
+// The pairs below are adversarial by construction, verified against both
+// engines: `"summary-table1".localeCompare("summary_table1")` is +1 while `<`
+// says -1 ('-' is U+002D, '_' is U+005F), and `"Logistic-dirty"` vs
+// `"logistic-dirty"` likewise (ICU ranks lowercase first at the tertiary level;
+// code points rank 'L' U+004C before 'l' U+006C).
+{
+  const ADVERSARIAL = [
+    ["summary-table1", "summary_table1"],
+    ["Logistic-dirty", "logistic-dirty"],
+  ];
+  for (const [x, y] of ADVERSARIAL) {
+    // First: assert these really are pairs the two orderings disagree on, so
+    // this test cannot quietly stop testing anything if ICU data changes.
+    assert.notEqual(
+      Math.sign(x.localeCompare(y)),
+      x < y ? -1 : 1,
+      `${x} vs ${y} is no longer an adversarial pair; pick another`,
+    );
+
+    // The digest must be computed in code-point order. Recomputed here by hand
+    // rather than by calling the same helper, so this pins the ORDER and not
+    // just self-consistency.
+    const cases = [{ id: x, text: "AAA" }, { id: y, text: "BBB" }];
+    const expected = createHash("sha256");
+    for (const id of [x, y].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+      expected.update(id, "utf8");
+      expected.update(" ", "utf8");
+      expected.update(cases.find((c) => c.id === id).text, "utf8");
+      expected.update(" ", "utf8");
+    }
+    assert.equal(
+      nativeDigest(cases),
+      expected.digest("hex"),
+      `${x} vs ${y}: nativeDigest must sort by code point, not by locale`,
+    );
+    // And still order-independent for its input array.
+    assert.equal(nativeDigest(cases), nativeDigest([...cases].reverse()));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// webDigest: the web/-staleness half. The rule is a glob, so what matters is
+// (a) which files it takes, (b) that content changes move the digest, and
+// (c) that it is path-order independent.
+{
+  assert.equal(isWebSource("app.js"), true);
+  assert.equal(isWebSource("index.html"), true);
+  assert.equal(isWebSource("styles.css"), true);
+  assert.equal(isWebSource("guided/logistic/spec.js"), true);
+  // Tests never ship (index.html loads no .mjs), so a test edit must not flag
+  // the webR evidence stale.
+  assert.equal(isWebSource("lib/csv.test.mjs"), false);
+  // Build copies: R sources are already covered by nativeDigest, which digests
+  // the native OUTPUT those same sources produce.
+  assert.equal(isWebSource("R/logistic.R"), false);
+  assert.equal(isWebSource("webr/webr.mjs"), false);
+  // Bytes that cannot change the DOM text this tier reads out of #stats.
+  assert.equal(isWebSource("fonts/ibm-plex-sans-latin-400-normal.woff2"), false);
+  assert.equal(isWebSource("preview.png"), false);
+  assert.equal(isWebSource("CNAME"), false);
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "webdigest-"));
+  fs.mkdirSync(path.join(root, "lib"), { recursive: true });
+  fs.mkdirSync(path.join(root, "R"), { recursive: true });
+  fs.mkdirSync(path.join(root, "fonts"), { recursive: true });
+  fs.writeFileSync(path.join(root, "index.html"), "<main></main>");
+  fs.writeFileSync(path.join(root, "styles.css"), ":root{}");
+  fs.writeFileSync(path.join(root, "app.js"), "export const a = 1;");
+  fs.writeFileSync(path.join(root, "lib", "csv.js"), "export const b = 2;");
+  fs.writeFileSync(path.join(root, "lib", "csv.test.mjs"), "// test");
+  fs.writeFileSync(path.join(root, "R", "logistic.R"), "fig_logistic <- 1");
+  fs.writeFileSync(path.join(root, "fonts", "x.woff2"), "binary");
+
+  const first = webDigest(root);
+  assert.deepEqual(
+    first.files,
+    ["app.js", "index.html", "lib/csv.js", "styles.css"],
+    "webDigest must take exactly the shipped app sources, in code-point order",
+  );
+  assert.equal(webDigest(root).digest, first.digest, "digest must be stable");
+
+  // A shipped source changing must move the digest — that is the whole signal.
+  fs.writeFileSync(path.join(root, "lib", "csv.js"), "export const b = 3;");
+  assert.notEqual(webDigest(root).digest, first.digest,
+    "a change to a shipped web/ source must move the digest");
+  fs.writeFileSync(path.join(root, "lib", "csv.js"), "export const b = 2;");
+  assert.equal(webDigest(root).digest, first.digest, "and move back");
+
+  // An excluded file changing must NOT: a test edit or an R build copy is not
+  // a change to the app the browser was driven through.
+  fs.writeFileSync(path.join(root, "lib", "csv.test.mjs"), "// CHANGED test");
+  fs.writeFileSync(path.join(root, "R", "logistic.R"), "fig_logistic <- 999");
+  assert.equal(
+    webDigest(root).digest,
+    first.digest,
+    "excluded files must not move the digest",
+  );
+
+  // A NEW module appearing must move it — the reason the rule is a glob rather
+  // than a hand-maintained list: a list would silently keep claiming parity.
+  fs.writeFileSync(path.join(root, "lib", "newthing.js"), "export const c = 3;");
+  assert.notEqual(webDigest(root).digest, first.digest,
+    "a newly added web/ module must move the digest");
+
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log("compare-text.test.mjs ok");

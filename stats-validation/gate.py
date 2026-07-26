@@ -29,6 +29,22 @@ DISAPPEARING, or changing tier is exactly what must. The baseline is a set, not
 an ordering: cases are sorted by id and findings by their identity, so a
 reordering inside findings.json is not a difference either.
 
+THE DIVISION OF LABOUR — READ THIS BEFORE TRUSTING A GREEN GATE. This gate
+checks IDENTITY, KIND and COVERAGE. It does NOT check values, and the omission
+is total, not approximate: rewrite a finding's `figura` to 99999 and this gate
+still exits 0 (verified by test_a_wildly_wrong_value_still_passes_this_gate).
+That is deliberate, and it is only safe because a SECOND step owns values —
+`make -C stats-validation freshness` (freshness.py), which compares the
+regenerated findings against the committed artifact and judges the numbers at
+the comparator's own REL_TOL/ABS_TOL. Two steps, two questions:
+
+    gate       "is the SET of findings still the set we dispositioned?"
+    freshness  "is the committed EVIDENCE what this code regenerates,
+                numbers included, to the tolerance the comparator uses?"
+
+Neither is a substitute for the other, and CI runs both. Removing `freshness`
+from CI would leave the measured numbers checked by nothing at all.
+
 COVERAGE IS COMPARED TOO, and for a reason that is easy to miss: a regression
 that silently stopped comparing a clean case would remove no findings and add
 none, so a findings-only gate would wave it through. Each case's `compared`
@@ -47,6 +63,7 @@ USAGE
 
     make -C stats-validation gate           # check (exit 0 / 1)
     make -C stats-validation gate-update    # rewrite the baseline from results/
+    make -C stats-validation freshness      # the OTHER half — values (see above)
 
     .venv/bin/python gate.py [--update] [--findings PATH] [--baseline PATH]
 
@@ -236,7 +253,10 @@ The baseline records the IDENTITY (case + code + term + quantity) and the KIND
 (disposition, source, note) of every accepted finding, plus each case's coverage
 counts. It deliberately does NOT record the measured values, so a last-digit
 float move can never cause this failure — what you are seeing is a finding that
-was added, removed, or changed in kind, or a change in what was compared.
+was added, removed, or changed in kind, or a change in what was compared. (The
+values are not unchecked, they are checked ELSEWHERE: `make -C stats-validation
+freshness` compares them against the committed artifact at the comparator's own
+tolerance.)
 
 If this change is INTENDED (a fix landed, a case was added, a disposition
 changed), update the baseline in the SAME commit as the change that caused it,
@@ -254,9 +274,17 @@ def check(findings_path: Path, baseline_path: Path, out=sys.stdout) -> int:
     lines = diff(expected, actual)
     if not lines:
         n = actual.get("total_findings")
+        # The success line names what was NOT checked, because a reader who sees
+        # only "OK" will assume this step vouched for the numbers. It did not,
+        # and the step that does is named here rather than left to the docs.
         print(f"{BANNER}: OK — {n} finding(s) across "
               f"{len(actual['cases'])} case(s), all matching "
-              f"{baseline_path.name}.", file=out)
+              f"{baseline_path.name}.\n"
+              f"{BANNER}: checked IDENTITY (case + "
+              f"{' + '.join(IDENTITY_FIELDS)}), KIND "
+              f"({', '.join(KIND_FIELDS)}) and COVERAGE. The measured VALUES "
+              f"were NOT checked here — `make -C stats-validation freshness` "
+              f"owns those, at the comparator's own tolerance.", file=out)
         return 0
     print(f"{BANNER}: FAILED — the evidence in {findings_path} no longer "
           f"matches {baseline_path}.", file=out)

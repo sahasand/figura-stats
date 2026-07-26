@@ -76,43 +76,92 @@ jobs:
       # the Phase-2 app fix lands, so a red `all` means "findings exist, go read
       # them", never "the pipeline broke". A job that failed here would be
       # permanently red and therefore ignored; a job that discarded the outcome
-      # could not catch a regression. The baseline gate below is what decides.
+      # could not catch a regression. The two gates below are what decide.
       # `clean` first, so the tracked evidence is genuinely REGENERATED rather
       # than left in place and re-checked against itself.
       - name: Rebuild all evidence
         run: |
           make -C stats-validation clean all \
-            || echo "::notice::make all exited $? — published findings are expected; the baseline gate adjudicates"
-      # THE ACTUAL VERDICT. Passes when the findings set equals the accepted
+            || echo "::notice::make all exited $? — published findings are expected; the gates below adjudicate"
+      # THE FINDINGS SET. Passes when the findings set equals the accepted
       # baseline in stats-validation/expected-findings.json; fails on anything
-      # added, removed, or changed in kind, or on a change in coverage. Measured
-      # values are excluded from the comparison, so a last-digit float move
-      # cannot turn this red. A missing findings.json is a hard failure here,
-      # which is what catches a pipeline that died before the comparator wrote
-      # anything — the one real risk of not obeying the step above.
-      - name: Findings baseline gate
-        run: make -C stats-validation gate
-      # A4's freshness gate. The evidence committed to the repo must be exactly
-      # what this commit's code regenerates, or the published scorecard is a
-      # stale claim about a tree that no longer exists.
+      # added, removed, or changed in kind, or on a change in coverage.
       #
-      # webr-tier.json is EXCLUDED, and honestly so: it is written ONLY by the
-      # hand-run webR tier, `make clean` deliberately spares it, and nothing in
-      # this job regenerates it — so CI must not expect it to have been rebuilt.
-      # It is still uploaded below, because publishing it is the point.
+      # DIVISION OF LABOUR — this step does NOT check the measured values (a
+      # `figura` of 99999 passes it; gate.py's docstring and success message both
+      # say so). The freshness step below owns those. Both are required; dropping
+      # either leaves half the evidence checked by nothing.
+      #
+      # THE `test -f` IS NOT DECORATION. The step above tolerates ANY non-zero
+      # status, including one from a failure that happens BEFORE `make clean`
+      # deletes anything — a Makefile parse error, a wrong -C, a missing rule.
+      # In that case every tracked artifact is still sitting in the checkout
+      # untouched, both gates below compare it against itself, and the job goes
+      # green having regenerated precisely nothing. `logistic-dirty.figura.json`
+      # is GITIGNORED (see stats-validation/.gitignore), so it cannot come from
+      # the checkout: its existence is proof the pipeline actually ran.
+      - name: Findings baseline gate
+        run: |
+          test -f stats-validation/results/logistic-dirty.figura.json \
+            || { echo "::error::no regenerated artifacts — the rebuild step above did not run the pipeline (its non-zero exit was not the by-design findings failure). Nothing below would be checking anything."; exit 1; }
+          make -C stats-validation gate
+      # A4's freshness gate, in two halves because the two artifacts deserve
+      # different comparisons.
+      #
+      # findings.json: TOLERANCE-AWARE, not a byte diff. The file carries
+      # measured floats, and local (Homebrew R + Accelerate, source-built numpy)
+      # vs this runner (Ubuntu R + OpenBLAS, manylinux wheels) reproduce an
+      # iterative fit to about 1e-10, not to the last bit. A byte diff would fail
+      # the first run here for a NON-regression, under a message accusing the
+      # developer of committing a stale scorecard — the same false red the
+      # baseline gate was designed to avoid. `make freshness` compares the
+      # committed artifact (`git show HEAD:...`) against the regenerated one:
+      # structure exactly, numbers at compare.py's own REL_TOL/ABS_TOL.
+      #
+      # scorecard.html: a plain BYTE diff, deliberately. It renders only what
+      # findings.json publishes, and compare.py rounds published values to 12
+      # significant digits on the way out, so the noise a byte diff used to trip
+      # over is gone. build_scorecard.py reads no live state
+      # (test_scorecard_is_a_pure_function_of_its_inputs pins that), so this is a
+      # real determinism check: the committed page must be the page this commit
+      # renders.
+      #
+      # webr-tier.json is EXCLUDED from both, and honestly so: it is written ONLY
+      # by the hand-run webR tier, `make clean` deliberately spares it, and
+      # nothing in this job regenerates it. It is still uploaded below.
       - name: Committed evidence is freshly generated
         run: |
-          git diff --exit-code -- \
-            stats-validation/results/findings.json \
-            stats-validation/results/scorecard.html
-      # `always()`, because the scorecard is most useful on the runs that failed.
+          make -C stats-validation freshness
+          git diff --exit-code -- stats-validation/results/scorecard.html
+      # THREE SEPARATE UPLOADS, one file each, and that is the point.
+      # `if-no-files-found` is evaluated over the whole `path:` list, so three
+      # paths in one step means a MISSING webr-tier.json alongside two present
+      # files warns about nothing at all — the step succeeds silently and the
+      # artifact quietly ships with two files. Split, each file's absence is
+      # reported on its own. `always()`, because these are most useful on the
+      # runs that failed.
       - name: Upload the scorecard
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: validation-scorecard
-          path: |
-            stats-validation/results/scorecard.html
-            stats-validation/results/findings.json
-            stats-validation/results/webr-tier.json
+          path: stats-validation/results/scorecard.html
+          if-no-files-found: warn
+      - name: Upload the findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-findings
+          path: stats-validation/results/findings.json
+          if-no-files-found: warn
+      # This one is EXPECTED to be missing on a checkout where the hand-run webR
+      # tier was never committed, and `warn` (not `error`) is deliberate: the
+      # upload is publication, not a gate. The split above is what makes the
+      # warning actually appear when it applies.
+      - name: Upload the webR tier evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-webr-tier
+          path: stats-validation/results/webr-tier.json
           if-no-files-found: warn

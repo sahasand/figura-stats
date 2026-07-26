@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -58,6 +59,7 @@ from compare import (
     main,
     methods_text,
     parse_gc_posthoc,
+    round_published,
     parse_gc_test_clause,
     parse_km_group_median,
     parse_km_logrank,
@@ -946,6 +948,88 @@ def test_the_published_vocabulary_declares_only_codes_that_are_emitted():
     # tier counts an agreement in `compared` and stays silent, exactly as the
     # display tier does for PASS.
     assert "EXACT_PASS" not in DISPOSITIONS
+
+
+# --------------------------------------------------------------------------
+# PUBLICATION PRECISION. findings.json is TRACKED evidence a CI rebuild must
+# reproduce, and repr()-precision floats make it a claim about one machine's
+# last digits: local (Accelerate BLAS) and CI (OpenBLAS) reproduce an iterative
+# fit to ~1e-10, not ~1e-16. Values are therefore rounded to 12 significant
+# digits ON THE WAY OUT — a million times tighter than REL_TOL, so no comparison
+# this file makes can be affected.
+# --------------------------------------------------------------------------
+
+def test_round_published_keeps_significant_digits_not_decimal_places():
+    # A p-value is the case that a `round(v, 12)` would destroy.
+    assert round_published(5.432109876543210e-8) == 5.43210987654e-8
+    assert round_published(1.6648751058762834) == 1.66487510588
+    # Integers, strings, None, bools: published exactly as they are.
+    assert round_published(312) == 312
+    assert round_published("1.66 (1.24–2.23, p<0.001)") == \
+        "1.66 (1.24–2.23, p<0.001)"
+    assert round_published(None) is None
+    assert round_published(True) is True
+    # Nested: a MISSING_QUANTITY finding publishes Path B's whole cell dict.
+    assert round_published({"est": 1.6648751058762834, "lo": None}) == \
+        {"est": 1.66487510588, "lo": None}
+    assert round_published([1.6648751058762834]) == [1.66487510588]
+
+
+def test_rounding_is_orders_of_magnitude_tighter_than_the_tolerance():
+    """The claim that justifies rounding at all: nothing the comparator judges
+    is lost. A value and its published form must agree by REL_TOL's own rule,
+    with room to spare."""
+    for value in (1.6648751058762834, 0.0005991419225210207, 6.546639459713925):
+        published = round_published(value)
+        assert close_enough(value, published)
+        assert abs(published - value) <= 1e-11 * abs(value)
+
+
+def test_published_values_are_rounded_and_the_file_says_so(tmp_path):
+    """End to end: the artifact carries 12-digit values and an inline note, so a
+    reader of findings.json cannot conclude the COMPARISON ran at 12 digits."""
+    case, figura, exact, python = _base()
+    # Break the exact tier so a real DEFECT finding carries real floats.
+    python["terms"]["age"]["est"] = 1.6648751058762834
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    main([case["id"]], results=results, cases=cases)
+    published = json.loads((results / "findings.json").read_text())
+    values = [f["python"] for c in published["cases"] for f in c["findings"]
+              if isinstance(f["python"], float)]
+    assert 1.66487510588 in values
+    assert 1.6648751058762834 not in values
+    note = published["_published_precision"]
+    assert "12 significant digits" in note
+    assert "full double precision" in note
+    # And the note must be inert to every consumer of the file.
+    assert set(published) == {"_published_precision", "cases", "total_compared",
+                              "total_findings"}
+
+
+def test_rounding_cannot_change_a_verdict(tmp_path):
+    """Rounding happens in main(), AFTER every comparison. A pair that differs
+    only in digits past the 12th must still be judged identical (no finding),
+    which it would be even at full precision — the point is that the rounding
+    step is not in the decision path at all."""
+    case, figura, exact, python = _base()
+    # The fixture's own adjusted `age` estimate, perturbed only past the 12th
+    # significant digit on the Path B side — so the two rounded forms are equal
+    # and the two unrounded ones are not.
+    exact["terms"]["age"]["est"] = 1.68843291380710
+    python["terms"]["age"]["est"] = 1.68843291380712
+    assert exact["terms"]["age"]["est"] != python["terms"]["age"]["est"]
+    assert (round_published(exact["terms"]["age"]["est"])
+            == round_published(python["terms"]["age"]["est"]))
+    results, cases = _tree(tmp_path, case, figura, exact, python)
+    assert main([case["id"]], results=results, cases=cases) == 0
+
+
+def test_a_nan_survives_rounding_so_it_is_still_refused(tmp_path):
+    """round_published must not launder a non-finite value into something
+    publishable — the refusal above it is the only thing keeping invalid JSON
+    out of the artifact."""
+    assert math.isnan(round_published(float("nan")))
+    assert math.isinf(round_published(float("inf")))
 
 
 def test_the_agreeing_fixture_still_writes_parseable_findings(tmp_path):

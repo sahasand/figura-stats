@@ -45,7 +45,10 @@ Three properties are deliberate:
 - **Measured values are not in the baseline.** `figura` and `python` are floats
   and float-derived display strings; a last-digit move in an odds ratio is not a
   regression and must never turn the build red. A finding *appearing* or
-  *disappearing* is.
+  *disappearing* is. The omission is total, not approximate — rewrite a
+  `figura` to 99999 and `gate` still exits 0. That is only safe because a
+  second gate owns the values; see **The freshness gate** below, and read
+  `gate`'s own success message, which says what it did not check.
 - **Order is not in the baseline.** Cases sort by id, findings by identity, so
   reshuffling `findings.json` is not a difference.
 - **Coverage is in the baseline.** A case that silently stopped comparing
@@ -60,15 +63,63 @@ is where the baseline gets updated — **in the same commit as the change that
 moved the evidence, reviewed alongside it, never as a drive-by.** The remedy is
 printed by the failure itself, and repeated in a `_note` inside the file.
 
+## The freshness gate, and why it is not `git diff`
+
+    make -C stats-validation freshness
+
+`gate` asks *"is the set of findings still the set we dispositioned?"*.
+`freshness` asks the other half: *"is the evidence **committed** to the repo what
+this commit's code regenerates — numbers included?"* It reads the artifact as
+committed (`git show HEAD:stats-validation/results/findings.json`) and compares
+it against the freshly built one:
+
+- **structure exactly** — case ids, kinds, coverage counts, targets, run totals,
+  and every finding's identity and kind. This reuses `gate.py`'s own
+  `normalize()` and `diff()`, so the two gates cannot drift into disagreeing
+  about what a finding *is*;
+- **values to tolerance** — `figura` and `python` at `compare.py`'s own
+  `REL_TOL` / `ABS_TOL`, through its own `close_enough()`. Non-numeric values
+  (rendered cells, notes) are compared exactly: a string has no tolerance.
+
+**A byte diff over `findings.json` would be wrong, not merely strict.** Local
+(Homebrew R + Accelerate BLAS, a source-built numpy on Python 3.14) and CI
+(Ubuntu R + OpenBLAS, manylinux wheels on 3.11) reproduce an iteratively fitted
+estimate to roughly 1e-10, not to the last bit. A byte comparison of those digits
+compares *environments*, and would fail the first CI run for a non-regression
+while accusing the developer of committing a stale scorecard — the same false red
+the baseline gate exists to avoid. So a 1e-15 wobble passes; a 1e-4 move fails; a
+changed identity, kind or coverage count fails whatever the numbers do.
+
+An **absent** committed baseline (the commit that first publishes the artifact,
+or a checkout where it was never tracked) is reported and passes. A missing
+regenerated `findings.json`, an unresolvable `--ref`, or no git at all is exit 2
+— a gate that cannot answer its question must never render as "fresh".
+
+**Published values are rounded to 12 significant digits.** `compare.py` rounds
+`figura`/`python` on the way *into* `findings.json` (`PUBLISHED_SIGNIFICANT_DIGITS`)
+— a million times tighter than `REL_TOL`, so nothing the comparator judges is
+affected, while the digits that are pure BLAS noise stop being committed. The
+comparison itself runs on the full double; full precision stays in the gitignored
+`results/*.figura-exact.json` and `results/*.python.json`. The artifact says so
+inline (`_published_precision`) and so does the scorecard, so no reader can
+conclude the harness *compared* at 12 digits. `results/scorecard.html` is
+therefore still **byte**-diffed in CI: it renders only what `findings.json`
+publishes, and `build_scorecard.py` reads no live state.
+
 CI (`.github/workflows/ci.yml`, job `validation`) runs, in order: `make test`;
-`make clean all` with its status recorded but not obeyed; `make gate` (the
-actual verdict); a **freshness gate** — `git diff --exit-code` over
-`results/findings.json` and `results/scorecard.html`, so a stale committed
-artifact fails the build; and an upload of the scorecard. `webr-tier.json` is
-excluded from the freshness diff — nothing in CI regenerates it, because the
-webR tier is hand-run — but it is still uploaded. A missing `findings.json` is
-a hard gate failure (exit 2), which is what catches a pipeline that died before
-the comparator wrote anything: the one real risk of not obeying `all`'s status.
+`make clean all` with its status recorded but not obeyed; a check that
+`results/logistic-dirty.figura.json` exists at all (it is gitignored, so it can
+only be there if the pipeline really ran — without this, a failure *before*
+`make clean` deletes anything leaves the tracked evidence intact and both gates
+compare it against itself); `make gate`; `make freshness` plus a byte diff of
+`scorecard.html`; and three separate artifact uploads. `webr-tier.json` is
+excluded from both freshness checks — nothing in CI regenerates it, because the
+webR tier is hand-run — but it is still uploaded. The uploads are split one file
+per step because `if-no-files-found` is evaluated over the whole path list: three
+paths in one step means a missing `webr-tier.json` warns about nothing. A missing
+`findings.json` is a hard failure (exit 2) in both gates, which is what catches a
+pipeline that died before the comparator wrote anything: the one real risk of not
+obeying `all`'s status.
 
 **`test` is green.** It was red by design for a while: Task A14's in-repo half
 published the advisory-diagnostics contract — the specs, `INTERFACES.md`, the
@@ -160,18 +211,45 @@ The spec deletes `results/webr-tier.json` before it runs: a run that dies
 starts) publishes nothing rather than last release's numbers under this
 release's date, and the scorecard's empty state says so.
 
-**The evidence is bound to the code it measured.** `webr-tier.json` also
-records `commit` (the repo `HEAD` at run time, written ONLY by a real run of
-`e2e/webr-parity.spec.js` — see that file's `repoCommit()` for the invariant
-and the regression that once broke it) and `native_digest` (a sha256 of the
-native `text` strings — from `results/<id>.figura.json` — that were actually
-compared against). A later `make all` that changes native output changes the
-digest, so previously-published webR evidence becomes visibly stale instead of
-silently continuing to claim parity with numbers that no longer exist. The
-scorecard shows the commit (short form) next to the runtime line, and — since
+**The evidence is bound to the code it measured, in both directions.**
+`webr-tier.json` records `commit` (the repo `HEAD` at run time, written ONLY by a
+real run of `e2e/webr-parity.spec.js` — see that file's `repoCommit()` for the
+invariant and the regression that once broke it) plus two digests, because there
+are two independent ways this evidence can go stale:
+
+- **`native_digest`** — a sha256 of the native `text` strings (from
+  `results/<id>.figura.json`) that were actually compared against. A later
+  `make all` that changes native output changes it.
+- **`web_digest`** — a sha256 of the shipped app sources the tier drove:
+  `web/index.html`, `web/styles.css`, and every `*.js` under `web/`, excluding
+  `*.test.mjs` (never shipped — `index.html` loads no `.mjs`), the gitignored
+  `web/R/` and `web/webr/` build copies, and the fonts/PNG/CNAME, whose bytes
+  cannot change the DOM text the tier reads out of `#stats`. This closes the gap
+  the digest-based note used to leave open: a change under `web/` can move what
+  the *browser* computes while every native artifact stays byte-identical, and
+  `native_digest` cannot see that.
+
+The rule is a **glob, not a hand-written list**, and deliberately so. The app is
+a single-page shell whose form registry statically imports every guided analysis,
+so the true import closure from `index.html` is very nearly "every `.js` under
+`web/`" anyway — a hand list would buy no precision and would silently go stale
+the first time somebody adds a module, producing a *false parity* claim, the worst
+direction to fail in. The cost, stated plainly: it over-triggers. A pure styling
+change flags webR staleness even though no number moved. That is the safe
+direction — the note says "re-run the gate", the gate is hand-run before a release
+anyway, and it clears itself on the next run.
+
+The scorecard shows the commit (short form) next to the runtime line, and — since
 binding is only useful if staleness is actually visible, not just theoretically
-detectable — it recomputes the digest from the artifacts on disk and says so on
-the page when the two disagree, rather than requiring a reader to check by hand.
+detectable — it recomputes **both** digests from the files on disk and says so on
+the page when either disagrees, in two separate sentences: "the native numbers
+moved" and "the app moved" are different facts with different remedies. Each
+digest is implemented twice, once in JS (the spec records it) and once in Python
+(the scorecard recomputes it); a drift between the two would produce a *permanent
+false staleness note*, so `test_scorecard.py` runs both implementations and
+compares them — including on ids and filenames whose code-point and ICU
+collation orders disagree, which is a bug that was really there (`localeCompare`
+on the JS side against Python's `sorted()`).
 
 **That note is derived from the artifacts, never from live `git`, and the
 distinction is load-bearing.** It used to compare `commit` against
@@ -183,9 +261,12 @@ one regression it was written for: a patch script that clobbers `commit` with
 the current `HEAD` makes the two agree, so no note renders. `native_digest`
 has neither problem — clobbering `commit` does not touch it, and the same
 inputs always render the same HTML. What was given up is "`HEAD` has moved at
-all", which fired on literally every commit and was noise. `build_scorecard.py`
-now reads no live state whatsoever; `test_scorecard_is_a_pure_function_of_its_inputs`
-pins that.
+all", which fired on literally every commit and was noise; the *useful* half of
+what it covered — a `web/`-only change — is now carried by `web_digest` above,
+as measurement rather than as a docstring. `build_scorecard.py` reads no live
+state whatsoever: it is a function of files in the checked-out tree (`results/`
+and `web/`), never of the clock, the environment, or `HEAD`.
+`test_scorecard_is_a_pure_function_of_its_inputs` pins that.
 
 Coverage is the two ratio-table cases with a full native-R display artifact,
 `logistic-confounding` and `cox-adjusted`. The rest of the roster is Phase 2 —

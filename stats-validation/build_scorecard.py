@@ -47,13 +47,22 @@ import sys
 from pathlib import Path
 
 RESULTS = Path(__file__).resolve().parent / "results"
+# The shipped app tree the webR tier drives, digested for the `web/`-staleness
+# note. Phase 1 never EDITS web/; this only reads it.
+WEB = Path(__file__).resolve().parent.parent / "web"
 
-# THIS MODULE READS NO LIVE STATE. Every byte it writes is a function of the
-# files in results/ and of the code here — no clock, no environment, no `git
-# rev-parse`. That is not tidiness, it is the precondition for the freshness
-# gate to exist at all: CI rebuilds scorecard.html and runs
-# `git diff --exit-code` over it, so any live input would make the tracked
-# artifact differ from its own regeneration and the gate would flap forever.
+# THIS MODULE READS NO LIVE STATE. Every byte it writes is a function of FILES
+# ON DISK and of the code here — no clock, no environment, no `git rev-parse`.
+# That is not tidiness, it is the precondition for the freshness gate to exist at
+# all: CI rebuilds scorecard.html and runs `git diff --exit-code` over it, so any
+# live input would make the tracked artifact differ from its own regeneration and
+# the gate would flap forever.
+#
+# "Files on disk" is deliberately wider than "results/": the webR staleness notes
+# also digest results/<id>.figura.json and the tracked sources under web/. Both
+# are checked-out repo content, identical in CI and locally at the same commit,
+# so the determinism property holds — what it excludes is state that is NOT a
+# function of the tree (the clock, the environment, HEAD).
 #
 # It used to read live HEAD, for the webR staleness note, and that was exactly
 # the bug: committing the scorecard advances HEAD, so the note in the committed
@@ -73,7 +82,7 @@ RESULTS = Path(__file__).resolve().parent / "results"
 COMPARE_DIR = Path(__file__).resolve().parent / "compare"
 sys.path.insert(0, str(COMPARE_DIR))
 
-from compare import DISPOSITIONS  # noqa: E402
+from compare import DISPOSITIONS, PUBLISHED_SIGNIFICANT_DIGITS  # noqa: E402
 
 CSS = """
 :root { --ink:#1a1a1a; --muted:#5b5b5b; --rule:#d8d4cc; --paper:#faf8f5;
@@ -323,6 +332,71 @@ def _native_digest(results_dir: Path, case_ids: list[str]) -> str | None:
     return f"sha256:{digest.hexdigest()}"
 
 
+def _is_web_source(rel_path: str) -> bool:
+    """A byte-for-byte mirror of `isWebSource` in e2e/compare-text.mjs.
+
+    Kept as a restatement rather than a shared file because the two live in
+    different languages; `test_web_digest_matches_the_javascript_implementation`
+    runs both and compares the digests, so a drift between them fails a test
+    instead of silently producing a permanent false staleness note.
+    """
+    if rel_path.startswith("R/") or rel_path.startswith("webr/"):
+        return False
+    if rel_path.endswith(".test.mjs"):
+        return False
+    return (rel_path.endswith(".js") or rel_path == "index.html"
+            or rel_path == "styles.css")
+
+
+def _web_digest(web_dir: Path) -> str | None:
+    """Recompute webr-tier.json's `web_digest` from the shipped app sources.
+
+    Mirror of `webDigest` in e2e/compare-text.mjs: sha256 over
+    `relpath + NUL + bytes + NUL` for every included file, paths sorted by CODE
+    POINT (Python's `sorted()`; the JS side deliberately uses `<` rather than
+    `localeCompare` for exactly this reason — see that function's comment).
+
+    Returns None when web/ is not there at all, so a checkout without it says
+    nothing rather than claiming staleness it cannot demonstrate.
+    """
+    web_dir = Path(web_dir)
+    if not web_dir.is_dir():
+        return None
+    paths = sorted(
+        p.relative_to(web_dir).as_posix() for p in web_dir.rglob("*")
+        if p.is_file() and _is_web_source(p.relative_to(web_dir).as_posix()))
+    if not paths:
+        return None
+    digest = hashlib.sha256()
+    for rel in paths:
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update((web_dir / rel).read_bytes())
+        digest.update(b"\0")
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _stale_web_digest(raw: dict, web_dir: Path) -> str | None:
+    """The recomputed `web/` digest when it DISAGREES with the recorded one.
+
+    THE STALENESS DIRECTION `native_digest` CANNOT SEE. A change under `web/`
+    can move what the browser computes or displays while every native-R artifact
+    stays byte-identical — so the native digest still agrees and the page would
+    keep claiming parity for an app the browser was never driven against. This
+    was a knowingly-open gap, documented in prose; it is now measured.
+
+    Absent field (any webr-tier.json written before the field existed) renders
+    nothing, exactly as it used to. Never fabricates a digest.
+    """
+    recorded = raw.get("web_digest")
+    if not recorded:
+        return None
+    recomputed = _web_digest(web_dir)
+    if recomputed is None or recomputed == recorded:
+        return None
+    return recomputed
+
+
 def _stale_native_digest(raw: dict, results_dir: Path,
                          case_ids: list[str]) -> str | None:
     """The recomputed digest when it DISAGREES with the recorded one, else None.
@@ -347,11 +421,11 @@ def _stale_native_digest(raw: dict, results_dir: Path,
         `native_digest`, so moved native output still says so on the page.
 
     What it gives up: "HEAD has moved at all" — which fired on every commit
-    including the one publishing the scorecard, so it was noise, not signal.
-    A change to web/ that moves webR behaviour without moving native R output
-    is therefore no longer flagged here; the commit line still names the tree
-    the gate ran against, and the tier is a hand-run release gate whose whole
-    protocol is "run it before a release".
+    including the one publishing the scorecard, so it was noise, not signal. The
+    one USEFUL thing that crude check covered and this does not — a change under
+    web/ that moves webR behaviour while native R output stays put — is covered
+    by `_stale_web_digest` below. It used to be a documented gap; it is now a
+    measurement.
     """
     recorded = raw.get("native_digest")
     if not recorded:
@@ -362,7 +436,7 @@ def _stale_native_digest(raw: dict, results_dir: Path,
     return recomputed
 
 
-def _webr_section(results_dir: Path) -> str:
+def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
     """The webR-vs-native-R release gate, read from results/webr-tier.json.
 
     That file is written ONLY by a real browser run of
@@ -480,6 +554,21 @@ def _webr_section(results_dir: Path) -> str:
             f"numbers this evidence was compared against have changed since it "
             f"ran. Re-run <code>make -C stats-validation webr</code>.</p>"
         )
+    # The other direction, and a SEPARATE note rather than a shared one: "the
+    # native numbers moved" and "the app moved" are different facts with
+    # different remedies, and collapsing them into one sentence would leave a
+    # reader unable to tell which happened.
+    stale_web = _stale_web_digest(raw, web_dir if web_dir is not None else WEB)
+    if stale_web:
+        staleness_html += (
+            f"<p class=\"webr-stale\">Gate last run against app sources "
+            f"digesting to <code>{esc(str(raw.get('web_digest'))[:19])}"
+            f"&hellip;</code>; <code>web/</code> now digests to "
+            f"<code>{esc(stale_web[:19])}&hellip;</code> &mdash; the shipped "
+            f"app has changed since this evidence was measured, so it describes "
+            f"a browser run of an older tree. Re-run "
+            f"<code>make -C stats-validation webr</code>.</p>"
+        )
 
     # The honest "36 cells" fix: not every compared cell is a number that
     # could drift (most are static labels, headers, and intentionally-blank
@@ -509,10 +598,15 @@ def _webr_section(results_dir: Path) -> str:
 
 
 def build(findings_path: Path | str | None = None,
-          out_path: Path | str | None = None) -> Path:
+          out_path: Path | str | None = None,
+          web_dir: Path | str | None = None) -> Path:
     findings_path = Path(findings_path) if findings_path else RESULTS / "findings.json"
     results_dir = findings_path.parent
     out_path = Path(out_path) if out_path else results_dir / "scorecard.html"
+    # The shipped app sources the webR staleness check digests. A parameter only
+    # so tests can point it at a fixture tree; in every real run it is the repo's
+    # own web/.
+    web_dir = Path(web_dir) if web_dir else WEB
 
     # An absent findings.json means compare.py never got as far as writing one.
     # Say that in one line instead of a traceback — and never fall back to
@@ -571,6 +665,15 @@ means the two paths disagree about whether one of the app's ADVISORY sentences
 proportional-hazards note &mdash; fires at all. Those sentences never change a
 reported estimate, but they are printed for the user and pasted into a
 manuscript, so a disagreement about one is published like any other.</p>
+<p class="sub"><b>Published precision.</b> The Figura and Python columns above
+are rounded to {PUBLISHED_SIGNIFICANT_DIGITS} significant digits <i>for
+publication</i>. The comparison itself ran at full double precision &mdash; the
+tolerances quoted above (relative 1e-6, absolute 1e-9) were applied to the
+unrounded values, which stay in the pipeline's own intermediate artifacts. So
+nothing here was judged at {PUBLISHED_SIGNIFICANT_DIGITS} digits; this page is
+simply not in the business of publishing the last four digits of a double,
+which differ between BLAS implementations and say nothing about the
+statistics.</p>
 <h2>WebR tier</h2>
 <p class="sub">Everything above ran native R. This tier checks the claim only
 this product has to make: that the same analyses, driven through the shipped
@@ -579,7 +682,7 @@ no 80-bit extended precision and webR ships reference BLAS/LAPACK, so an
 iterative fit is where a difference would appear. Cells are the strings the
 user is shown, so a difference here is a difference a reader of the manuscript
 would see.</p>
-{_webr_section(results_dir)}
+{_webr_section(results_dir, web_dir)}
 </main></body></html>"""
 
     out_path.write_text(doc)

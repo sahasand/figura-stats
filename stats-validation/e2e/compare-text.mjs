@@ -18,6 +18,7 @@
 // header comment), and a second parser in this module could disagree with the
 // real one and call that disagreement drift.
 import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { parseRatioTable } from "../harness/parse-cells.mjs";
 
 // Column labels the evidence file uses for the two value columns and the
@@ -141,6 +142,23 @@ export async function runCase(id, fn) {
   }
 }
 
+// CODE-POINT ORDER, NOT LOCALE ORDER, and the choice is load-bearing.
+// build_scorecard.py recomputes these digests with Python's `sorted()`, which
+// orders by code point. `String.prototype.localeCompare` orders by ICU collation
+// instead: punctuation is weighted below letters, case is a tertiary weight, and
+// the two disagree on real strings — `"summary-table1".localeCompare(
+// "summary_table1")` is +1 where the code-point comparison is -1, and the same
+// for `"Logistic-dirty"` vs `"logistic-dirty"`. A disagreement means the two
+// implementations hash the same inputs in different orders, so the scorecard
+// would render a PERMANENT false staleness note for evidence that is perfectly
+// current — and the note's only value is that it is believed. `<` on the raw
+// string is the same ordering Python's `sorted()` uses (both compare unsigned
+// code units; every id here is ASCII, so UTF-16-vs-code-point is moot), and
+// compare-text.test.mjs pins the agreement on an adversarial pair.
+function byCodePoint(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 // sha256 over the native `text` strings a run compared against, so a later
 // `make all` that changes native output (a different display artifact under
 // results/<id>.figura.json) makes previously-published webR evidence visibly
@@ -149,11 +167,82 @@ export async function runCase(id, fn) {
 // digest does not depend on iteration order.
 export function nativeDigest(cases) {
   const hash = createHash("sha256");
-  for (const { id, text } of [...cases].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const { id, text } of [...cases].sort((a, b) => byCodePoint(a.id, b.id))) {
     hash.update(id, "utf8");
     hash.update(" ", "utf8");
     hash.update(text, "utf8");
     hash.update(" ", "utf8");
   }
   return hash.digest("hex");
+}
+
+// THE OTHER HALF OF STALENESS. `nativeDigest` catches the native R numbers
+// moving underneath published webR evidence. It cannot catch the opposite and
+// equally real case: a change to `web/` that moves what the BROWSER computes or
+// displays while native R output stays put. That gap was previously carried only
+// by a docstring; this digest closes it.
+//
+// WHAT IS DIGESTED, and why it is a GLOB rather than a hand-written list. The
+// tier drives the shipped single-page app: `web/index.html` loads `web/app.js`,
+// whose form registry statically imports every guided analysis, which in turn
+// import the shared `web/lib/` and `web/guided/` modules. The static import
+// closure from index.html is therefore very nearly "every .js file under web/",
+// so enumerating it by hand would buy no precision and would silently go stale
+// the first time someone adds a module — a false PARITY claim, the worst
+// direction to fail in. So the rule is mechanical and needs no maintenance:
+//
+//   include  web/index.html, web/styles.css, and every *.js under web/
+//   exclude  *.test.mjs        (never shipped; index.html loads no .mjs)
+//            web/R/, web/webr/ (gitignored build copies — R sources are already
+//                               covered by nativeDigest, which digests the
+//                               native output those same sources produce)
+//            fonts, preview.png, CNAME (bytes that cannot change the DOM text
+//                               this tier reads out of #stats)
+//
+// styles.css IS included: CSS can alter textContent through generated content,
+// so "obviously cosmetic" is not a judgement this digest is entitled to make.
+//
+// The cost, stated plainly: this over-triggers. A pure styling change flags webR
+// staleness even though no number moved. That is the safe direction — the note
+// says "re-run the gate", the gate is hand-run before a release anyway, and it
+// clears itself on the next run — and it is strictly better than the previous
+// live-HEAD note, which fired on EVERY commit including the one that published
+// the scorecard, and so could never be cleared at all.
+export function webDigest(webDir) {
+  const files = [];
+  const walk = (rel) => {
+    const entries = readdirSync(webDir + (rel ? "/" + rel : ""), {
+      withFileTypes: true,
+    });
+    for (const entry of entries) {
+      const path = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (path === "R" || path === "webr") continue;
+        walk(path);
+      } else if (isWebSource(path)) {
+        files.push(path);
+      }
+    }
+  };
+  walk("");
+  files.sort(byCodePoint);
+  const hash = createHash("sha256");
+  for (const path of files) {
+    hash.update(path, "utf8");
+    hash.update("\0", "utf8");
+    // Bytes, not text: a source file's encoding is not this digest's business,
+    // and hashing a decoded string would silently normalise it.
+    hash.update(readFileSync(webDir + "/" + path));
+    hash.update("\0", "utf8");
+  }
+  return { digest: hash.digest("hex"), files };
+}
+
+// One rule, exported so the Python recomputation in build_scorecard.py can be
+// checked against it rather than reimplemented on trust.
+export function isWebSource(relPath) {
+  if (relPath.startsWith("R/") || relPath.startsWith("webr/")) return false;
+  if (relPath.endsWith(".test.mjs")) return false;
+  return relPath.endsWith(".js") || relPath === "index.html"
+    || relPath === "styles.css";
 }

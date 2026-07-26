@@ -11,11 +11,15 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 STATS_VALIDATION = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(STATS_VALIDATION))
 
 import build_scorecard  # noqa: E402
-from compare import SRC_DISPLAY, SRC_EXACT, SRC_SCRIPT  # noqa: E402
+from compare import (  # noqa: E402
+    PUBLISHED_SIGNIFICANT_DIGITS, SRC_DISPLAY, SRC_EXACT, SRC_SCRIPT,
+)
 
 FIXTURE = {
     "cases": [
@@ -113,11 +117,12 @@ FIXTURE = {
 }
 
 
-def _build(tmp_path: Path) -> str:
+def _build(tmp_path: Path, web_dir: Path | None = None) -> str:
     findings_path = tmp_path / "findings.json"
     findings_path.write_text(json.dumps(FIXTURE))
     out_path = build_scorecard.build(findings_path=findings_path,
-                                     out_path=tmp_path / "scorecard.html")
+                                     out_path=tmp_path / "scorecard.html",
+                                     web_dir=web_dir)
     return out_path.read_text()
 
 
@@ -218,10 +223,10 @@ WEBR_TIER = {
 }
 
 
-def _build_with_webr(tmp_path, payload=None):
+def _build_with_webr(tmp_path, payload=None, web_dir=None):
     (tmp_path / "webr-tier.json").write_text(
         json.dumps(WEBR_TIER if payload is None else payload))
-    return _build(tmp_path)
+    return _build(tmp_path, web_dir=web_dir)
 
 
 def test_webr_section_renders_the_real_file(tmp_path):
@@ -443,6 +448,223 @@ def test_webr_absent_native_artifacts_fabricate_no_staleness_claim(tmp_path):
     payload["native_digest"] = "sha256:" + "0" * 64
     html = _build_with_webr(tmp_path, payload)
     assert 'class="webr-stale"' not in html
+
+
+# --------------------------------------------------------------------------
+# build_scorecard._stale_web_digest — the staleness direction `native_digest`
+# CANNOT see.
+#
+# A change under web/ can move what the browser computes or displays while every
+# native-R artifact stays byte-identical. `native_digest` then still agrees, and
+# the page keeps claiming parity for an app the browser was never driven
+# against. That gap was previously carried by a docstring; these tests are the
+# evidence that it is now measured.
+# --------------------------------------------------------------------------
+
+def _write_web(root: Path, files: dict[str, str]) -> Path:
+    """A miniature web/ tree. Keys are relative POSIX paths."""
+    for rel, content in files.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    return root
+
+
+WEB_FILES = {
+    "index.html": "<main></main>",
+    "styles.css": ":root{--accent:#0d6b63}",
+    "app.js": "export const forms = {};",
+    "lib/csv.js": "export function parseCsv() {}",
+    "guided/logistic/spec.js": "export function buildSpec() {}",
+    # Excluded by the rule: a test file, a gitignored R build copy, a font.
+    "lib/csv.test.mjs": "// unit test",
+    "R/logistic.R": "fig_logistic <- function(spec) NULL",
+    "fonts/ibm-plex.woff2": "not-really-a-font",
+}
+
+
+def _webr_payload_with_web(tmp_path, web_dir):
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["cases"] = [{"id": cid, "identical": True, "cells_compared": 1,
+                         "differing_cells": []} for cid in NATIVE_TEXTS]
+    payload["native_digest"] = build_scorecard._native_digest(
+        tmp_path, list(NATIVE_TEXTS))
+    payload["web_digest"] = build_scorecard._web_digest(web_dir)
+    return payload
+
+
+def test_web_digest_agreeing_shows_no_staleness_note(tmp_path):
+    """The app on disk is the app the gate was driven through: nothing to say."""
+    _write_native(tmp_path, NATIVE_TEXTS)
+    web = _write_web(tmp_path / "web", WEB_FILES)
+    html = _build_with_webr(tmp_path, _webr_payload_with_web(tmp_path, web),
+                            web_dir=web)
+    assert 'class="webr-stale"' not in html
+
+
+def test_a_web_only_change_shows_a_staleness_note(tmp_path):
+    """THE GAP THIS CLOSES. Native output is untouched — `native_digest` still
+    agrees — but `web/app.js` moved, so the published webR evidence describes a
+    browser run of a tree that is no longer shipped."""
+    _write_native(tmp_path, NATIVE_TEXTS)
+    web = _write_web(tmp_path / "web", WEB_FILES)
+    payload = _webr_payload_with_web(tmp_path, web)
+    (web / "app.js").write_text("export const forms = {logistic: 1};")
+    html = _build_with_webr(tmp_path, payload, web_dir=web)
+    assert 'class="webr-stale"' in html
+    assert "the shipped app has changed" in html
+    assert payload["web_digest"][:19] in html
+    # And it must be its own sentence, not folded into the native-digest note:
+    # the two facts have different remedies.
+    assert "have changed since it ran" not in html
+
+
+def test_a_test_file_or_build_copy_change_is_not_web_staleness(tmp_path):
+    """The rule must not cry wolf on things the browser never loads: a unit test
+    (index.html loads no .mjs) or the gitignored web/R build copy, whose R
+    sources are already covered by `native_digest`."""
+    _write_native(tmp_path, NATIVE_TEXTS)
+    web = _write_web(tmp_path / "web", WEB_FILES)
+    payload = _webr_payload_with_web(tmp_path, web)
+    (web / "lib" / "csv.test.mjs").write_text("// CHANGED unit test")
+    (web / "R" / "logistic.R").write_text("fig_logistic <- function(spec) 999")
+    (web / "fonts" / "ibm-plex.woff2").write_text("different-bytes")
+    html = _build_with_webr(tmp_path, payload, web_dir=web)
+    assert 'class="webr-stale"' not in html
+
+
+def test_a_new_web_module_moves_the_digest(tmp_path):
+    """Why the rule is a glob and not a hand-written list: a list would keep
+    claiming parity the first time somebody adds a module."""
+    web = _write_web(tmp_path / "web", WEB_FILES)
+    before = build_scorecard._web_digest(web)
+    (web / "lib" / "newthing.js").write_text("export const c = 3;")
+    assert build_scorecard._web_digest(web) != before
+
+
+def test_a_webr_file_without_web_digest_renders_exactly_as_before(tmp_path):
+    """Every webr-tier.json written before this field existed — including the one
+    currently committed — must render with no note and no crash."""
+    _write_native(tmp_path, NATIVE_TEXTS)
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["cases"] = [{"id": cid, "identical": True, "cells_compared": 1,
+                         "differing_cells": []} for cid in NATIVE_TEXTS]
+    payload["native_digest"] = build_scorecard._native_digest(
+        tmp_path, list(NATIVE_TEXTS))
+    assert "web_digest" not in payload
+    html = _build_with_webr(tmp_path, payload, web_dir=tmp_path / "nonexistent")
+    assert 'class="webr-stale"' not in html
+
+
+def test_an_absent_web_tree_fabricates_no_staleness_claim(tmp_path):
+    """A checkout without web/ (or an empty one) must say nothing, not declare
+    staleness it cannot demonstrate."""
+    assert build_scorecard._web_digest(tmp_path / "nope") is None
+    (tmp_path / "empty-web").mkdir()
+    assert build_scorecard._web_digest(tmp_path / "empty-web") is None
+    _write_native(tmp_path, NATIVE_TEXTS)
+    payload = dict(WEBR_TIER_ABORTED)
+    payload["web_digest"] = "sha256:" + "0" * 64
+    html = _build_with_webr(tmp_path, payload, web_dir=tmp_path / "nope")
+    assert 'class="webr-stale"' not in html
+
+
+# --------------------------------------------------------------------------
+# The two digests are implemented TWICE — once in JavaScript (the spec records
+# them) and once in Python (the scorecard recomputes them). A drift between the
+# two produces a PERMANENT false staleness note on evidence that is perfectly
+# current, and nothing else would ever fail. So the agreement is pinned by
+# running both.
+#
+# The sort order is the real hazard, and it bit once already: the JS side used
+# `localeCompare` (ICU collation) against Python's `sorted()` (code point). The
+# two disagree on ids differing only in punctuation or case.
+# --------------------------------------------------------------------------
+
+E2E = STATS_VALIDATION / "e2e" / "compare-text.mjs"
+
+# Verified adversarial for the two orderings: ICU weights punctuation below
+# letters and orders '_' before '-' and '-' before '+', where code points do the
+# opposite ('+' U+002B < '-' U+002D < '_' U+005F). Sorting these four ids with
+# `localeCompare` and with `<` produces two DIFFERENT orders, so a digest built
+# over them catches the bug; a plain `logistic-*` / `cox-*` roster would not.
+#
+# Deliberately no case-only pair (`Logistic-dirty` vs `logistic-dirty`), even
+# though ICU and code points disagree there too: `_native_digest` reads
+# results/<id>.figura.json, and on a case-insensitive filesystem (macOS APFS,
+# where this suite also runs) the two ids would collide onto ONE file and the
+# test would fail for a reason that has nothing to do with sort order.
+ADVERSARIAL_IDS = ["summary-table1", "summary_table1",
+                   "cox-adjusted", "cox+adjusted"]
+
+
+def _node(script: str) -> str:
+    import subprocess
+    proc = subprocess.run(["node", "--input-type=module", "-e", script],
+                          cwd=STATS_VALIDATION, capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.strip()
+
+
+def test_native_digest_agrees_with_the_javascript_on_adversarial_ids(tmp_path):
+    """The finding this pins: `sorted()` (code point) vs `localeCompare` (ICU)
+    diverge, so the two implementations would hash the same inputs in different
+    orders and the scorecard would report permanent staleness. These four ids
+    are chosen so the two orderings genuinely disagree — a plain
+    `logistic-*`/`cox-*` roster would pass even with the bug present."""
+    texts = {case_id: f"table for {case_id}\n" for case_id in ADVERSARIAL_IDS}
+    _write_native(tmp_path, texts)
+    python_digest = build_scorecard._native_digest(tmp_path,
+                                                   list(texts))  # unsorted
+    js = _node(f"""
+      import {{ nativeDigest }} from {json.dumps(str(E2E))};
+      const texts = {json.dumps(texts)};
+      const cases = Object.entries(texts).map(([id, text]) => ({{ id, text }}));
+      process.stdout.write("sha256:" + nativeDigest(cases));
+    """)
+    assert python_digest == js
+
+
+def test_web_digest_agrees_with_the_javascript_implementation(tmp_path):
+    """Same hazard, same pin, for the web/ digest — including a filename pair
+    the two sort orders disagree about, so the path sort is tested too."""
+    files = dict(WEB_FILES)
+    # The same '-' vs '_' divergence ADVERSARIAL_IDS uses, as FILENAMES, so the
+    # path sort is pinned too and not merely the file set. No case-only pair, for
+    # the case-insensitive-filesystem reason noted above.
+    files["lib/model-form.js"] = "export const a = 1;"
+    files["lib/model_form.js"] = "export const b = 2;"
+    web = _write_web(tmp_path / "web", files)
+    js = _node(f"""
+      import {{ webDigest }} from {json.dumps(str(E2E))};
+      process.stdout.write("sha256:" + webDigest({json.dumps(str(web))}).digest);
+    """)
+    assert build_scorecard._web_digest(web) == js
+
+
+def test_web_digest_of_the_real_web_tree_agrees_with_the_javascript():
+    """And on the actual repo, not only on fixtures — the tree the tier really
+    digests, with its real font/PNG/CNAME/test-file mix."""
+    web = STATS_VALIDATION.parent / "web"
+    if not web.is_dir():
+        pytest.skip("no web/ in this checkout")
+    js = _node(f"""
+      import {{ webDigest }} from {json.dumps(str(E2E))};
+      const out = webDigest({json.dumps(str(web))});
+      process.stdout.write("sha256:" + out.digest + " " + out.files.length);
+    """)
+    digest, count = js.split()
+    assert build_scorecard._web_digest(web) == digest
+    assert int(count) > 10, "the glob found suspiciously few app sources"
+
+
+def test_the_published_precision_is_documented_on_the_page(tmp_path):
+    """compare.py rounds measured values to PUBLISHED_SIGNIFICANT_DIGITS on the
+    way into findings.json. A reader must not be able to conclude the COMPARISON
+    was made at that precision — it was made on the full double."""
+    html = _build(tmp_path)
+    assert f"rounded to {PUBLISHED_SIGNIFICANT_DIGITS} significant digits" in html
+    assert "comparison itself ran at full double precision" in html
 
 
 def test_scorecard_is_a_pure_function_of_its_inputs(tmp_path):

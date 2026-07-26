@@ -22,7 +22,7 @@ CASES := logistic-confounding cox-adjusted km-twoarm \
 # the full case list.
 COMPARE_CASES := $(CASES)
 
-.PHONY: all test webr clean gate gate-update
+.PHONY: all test webr clean gate gate-update freshness
 
 # COMPARE MAY LEGITIMATELY EXIT 1. `logistic-dirty` is designed to publish real
 # findings (the app-vs-exported-script divergence of issues/02), so a non-zero
@@ -140,6 +140,28 @@ gate:
 
 gate-update:
 	$(PY) gate.py --update
+
+# THE OTHER HALF OF THE VERDICT: `gate` checks the findings SET (identity, kind,
+# coverage) and deliberately ignores the measured values — rewrite a `figura` to
+# 99999 and `gate` still exits 0. `freshness` is what owns the values: it reads
+# the artifact as COMMITTED (`git show HEAD:stats-validation/results/findings.json`)
+# and compares it against the regenerated one — structure exactly, numbers at
+# compare.py's own REL_TOL/ABS_TOL.
+#
+# WHY NOT `git diff --exit-code` ON findings.json. The file carries measured
+# floats. Local (Homebrew R + Accelerate, source-built numpy) and CI (Ubuntu R +
+# OpenBLAS, manylinux wheels) reproduce an iterative fit to about 1e-10, not to
+# the last bit, so a byte diff would fail the first CI run for a NON-regression
+# while accusing the developer of committing stale evidence — the same false red
+# `gate` was designed to avoid. scorecard.html IS still byte-diffed in CI: it
+# renders only the values findings.json publishes, and compare.py rounds those
+# to PUBLISHED_SIGNIFICANT_DIGITS on the way out.
+#
+# RUN IT AFTER `all`, like `gate`. An absent committed baseline (the commit that
+# first publishes the artifact) is reported and passes; a missing regenerated
+# findings.json is exit 2.
+freshness:
+	$(PY) freshness.py
 
 # THE ONE TIER THAT IS NOT IN `all` AND NOT IN `test`, AND MUST NOT BE ADDED TO
 # EITHER. Everything else here runs native R offline; this drives the shipped

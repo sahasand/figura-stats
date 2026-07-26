@@ -121,6 +121,21 @@ def test_a_float_move_in_the_measured_values_is_not_a_failure(tmp_path):
     assert code == 0, out
 
 
+def test_a_wildly_wrong_value_still_passes_this_gate(tmp_path):
+    """THE DIVISION OF LABOUR, pinned. Values are not merely compared loosely
+    here — they are not compared AT ALL, so `figura` -> 99999 is green. That is
+    only safe because `make freshness` owns the values (see test_freshness.py),
+    and a reader of a green gate must not be misled about it: the success message
+    itself has to say so."""
+    findings_path, baseline_path = _paths(tmp_path)
+    absurd = copy.deepcopy(FINDINGS)
+    absurd["cases"][1]["findings"][0]["figura"] = 99999
+    code, out = _run(findings_path, baseline_path, absurd)
+    assert code == 0, out
+    assert "VALUES" in out and "NOT checked here" in out
+    assert "freshness" in out
+
+
 def test_reordering_cases_and_findings_is_not_a_failure(tmp_path):
     """The baseline is a set keyed by identity, not a transcript. Array order
     is an implementation detail of the comparator's loops."""
