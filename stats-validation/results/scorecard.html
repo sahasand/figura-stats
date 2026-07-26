@@ -41,15 +41,15 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 <p class="sub">Every number Figura reports, re-derived by an independently
 programmed Python implementation from the same raw CSV.</p>
 <div class="tiles">
-  <div class="tile"><b>54</b><span>values compared</span></div>
+  <div class="tile"><b>160</b><span>values compared</span></div>
   <div class="tile"><b>0</b><span>differences</span></div>
   <div class="tile"><b>0</b><span>defects</span></div>
-  <div class="tile"><b>2/2</b><span>cases meet targets</span></div>
+  <div class="tile"><b>3/3</b><span>cases meet targets</span></div>
 </div>
 <div class="scroll"><table>
 <thead><tr><th>Case</th><th>Result</th><th>Coverage</th><th>Term</th>
 <th>Quantity</th><th>Figura</th><th>Python</th></tr></thead>
-<tbody><tr><td>logistic-confounding</td><td class='PASS'>PASS</td><td class='targets-met'>targets met</td><td colspan='4'>35 values compared, no differences</td></tr><tr><td>cox-adjusted</td><td class='PASS'>PASS</td><td class='targets-met'>targets met</td><td colspan='4'>19 values compared, no differences</td></tr></tbody></table></div>
+<tbody><tr><td>logistic-confounding</td><td class='PASS'>PASS</td><td class='targets-met'>targets met</td><td colspan='4'>35 values compared, no differences</td></tr><tr><td>cox-adjusted</td><td class='PASS'>PASS</td><td class='targets-met'>targets met</td><td colspan='4'>19 values compared, no differences</td></tr><tr><td>km-twoarm</td><td class='PASS'>PASS</td><td class='targets-met'>targets met</td><td colspan='4'>106 values compared, no differences</td></tr></tbody></table></div>
 <p class="sub"><b>Coverage</b> ("targets met") means every quantity the case
 declares in <code>exact_targets</code> was actually credited by a performed
 comparison — a coverage failure marks a case TARGETS UNMET even if every

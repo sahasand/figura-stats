@@ -31,8 +31,24 @@
         "n_dropped": 1
       },
       "findings": []
+    },
+    {
+      "id": "km-twoarm",
+      "kind": "km_summary",
+      "compared": 106,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "median_survival": 2,
+        "logrank_p": 1,
+        "curve": 94,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1
+      },
+      "findings": []
     }
   ],
-  "total_compared": 54,
+  "total_compared": 160,
   "total_findings": 0
 }
