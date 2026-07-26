@@ -35,13 +35,26 @@
 // produce a measured number, not a red X whose size nobody knows. Hard
 // PRECONDITIONS are still asserted loudly — the page rendered, the table
 // parsed, the row count matched — because a harness that silently measured
-// nothing must never be mistaken for a run that found no drift.
+// nothing must never be mistaken for a run that found no drift. BUT a
+// precondition failure on one case no longer destroys the whole run's
+// evidence: it is caught by `runCase` (compare-text.mjs) and published as an
+// honest `{id, aborted: true, reason}` case entry, so the scorecard can
+// distinguish "ran and hit structural drift" from "never run" — and the test
+// still fails loudly afterward (see the end of the test body).
+//
+// The comparator itself (`compareText`), its cell-kind classification, and
+// the abort wrapper live in ./compare-text.mjs — a plain-Node module with no
+// Playwright dependency, specifically so it can be pinned by a plain node
+// test (compare-text.test.mjs) that `make -C stats-validation test` runs on
+// every CI build even though this Playwright spec itself never does.
 const { test, expect } = require("@playwright/test");
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const { pathToFileURL } = require("url");
 
 const VALIDATION = path.join(__dirname, "..");
+const REPO_ROOT = path.join(VALIDATION, "..");
 const RESULTS = path.join(VALIDATION, "results");
 const OUT = path.join(RESULTS, "webr-tier.json");
 
@@ -58,10 +71,6 @@ const CASES = [
   { id: "logistic-confounding", nav: /logistic regression/i, kind: "logistic" },
   { id: "cox-adjusted", nav: /cox regression/i, kind: "cox" },
 ];
-
-// Column labels for the recorded findings. The parser's keys are `unadj`/`adj`;
-// the evidence file names the columns the way the table on screen does.
-const COLUMN_LABEL = { term: "characteristic", unadj: "unadjusted", adj: "adjusted" };
 
 // ---------------------------------------------------------------------------
 
@@ -83,62 +92,6 @@ function nativeText(id) {
       `display artifact; run \`make -C stats-validation all\` first.`);
   }
   return JSON.parse(fs.readFileSync(p, "utf8")).text;
-}
-
-// Sentences of the methods paragraph. The paragraph is where n, the event
-// count, the C-statistic and every advisory diagnostic live — the numbers most
-// exposed to an accumulator's precision — so it is compared too, not just the
-// table. Sentence-splitting keeps a difference readable instead of handing the
-// reader two paragraphs to diff by eye.
-function sentences(paragraph) {
-  return paragraph.split(/(?<=\.)\s+/).filter((s) => s.trim() !== "");
-}
-
-function compareText(parseRatioTable, native, webr) {
-  const nat = parseRatioTable(native);
-  const web = parseRatioTable(webr);
-
-  // HARD PRECONDITIONS — a harness failure must be loud and distinguishable
-  // from drift. If the table did not parse, or parsed to a different number of
-  // rows, then a cell-by-cell comparison is not comparing what it claims to.
-  expect(nat.rows.length, "native artifact parsed no table rows").toBeGreaterThan(0);
-  expect(web.rows.length, "webR output parsed no table rows").toBeGreaterThan(0);
-  expect(web.rows.length, "webR table row count differs from native R").toBe(nat.rows.length);
-
-  const differing = [];
-  let compared = 0;
-  const cell = (term, column, a, b) => {
-    compared += 1;
-    if (a !== b) differing.push({ term, column, native: a, webr: b });
-  };
-
-  // The TSV's first line is the static header ("Characteristic\tUnadjusted OR
-  // (95% CI, p)\t…"). parseRatioTable deliberately drops it — it holds labels,
-  // not values — but it is still one line of output the runtime produced, so
-  // it is compared as a single cell rather than left unchecked. This is a
-  // `split("\n")[0]`, not a second table parser.
-  cell("(header row)", "line", native.split("\n")[0], webr.split("\n")[0]);
-
-  for (let i = 0; i < nat.rows.length; i++) {
-    for (const key of ["term", "unadj", "adj"]) {
-      cell(nat.rows[i].term, COLUMN_LABEL[key], nat.rows[i][key], web.rows[i][key]);
-    }
-  }
-
-  const natS = sentences(nat.methods);
-  const webS = sentences(web.methods);
-  if (natS.length !== webS.length) {
-    // Different sentence counts mean a diagnostic fired on one runtime and not
-    // the other. Aligning by index would then misattribute every later
-    // sentence, so the whole paragraph is recorded as one difference.
-    cell("(methods paragraph)", "whole paragraph", nat.methods, web.methods);
-  } else {
-    for (let i = 0; i < natS.length; i++) {
-      cell("(methods paragraph)", `sentence ${i + 1}`, natS[i], webS[i]);
-    }
-  }
-
-  return { compared, differing };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,9 +153,38 @@ async function readRenderedText(page) {
   // being compared. Wait on the TSV header rather than on "not empty", so a
   // leftover render from the previous case can never be read as this one's.
   await expect(page.locator("#preview table")).toBeVisible({ timeout: 600000 });
-  await expect(page.locator("#stats")).toContainText("Characteristic", { timeout: 600000 });
-  await expect(page.locator("#stats")).not.toHaveClass(/error/);
-  return await page.locator("#stats").textContent();
+
+  const stats = page.locator("#stats");
+  // Wait for EITHER a real render or an error state, whichever comes first —
+  // via one poll, not two sequential waits. Previously this was
+  // `toContainText("Characteristic", {timeout: 600000})` FOLLOWED BY
+  // `not.toHaveClass(/error/)`: an error state does not contain
+  // "Characteristic", so a genuine app error would burn the entire 10-minute
+  // budget on the first wait before the test ever reached the class check —
+  // making that guard effectively unreachable in any useful time. Polling for
+  // both conditions together means an error surfaces in seconds, not minutes.
+  await expect
+    .poll(
+      async () => {
+        const cls = (await stats.getAttribute("class")) || "";
+        if (/error/.test(cls)) return "error";
+        const text = (await stats.textContent()) || "";
+        return text.includes("Characteristic") ? "ready" : "pending";
+      },
+      {
+        timeout: 600000,
+        message: "#stats never rendered a table nor an error state within the budget",
+      },
+    )
+    .not.toBe("pending");
+
+  const cls = (await stats.getAttribute("class")) || "";
+  if (/error/.test(cls)) {
+    throw new Error(
+      `#stats rendered an error state (class="${cls}"): ${await stats.textContent()}`,
+    );
+  }
+  return await stats.textContent();
 }
 
 // ---------------------------------------------------------------------------
@@ -250,14 +232,59 @@ async function detectRuntime(page, cdnUrls) {
 
 // ---------------------------------------------------------------------------
 
+// Repo HEAD at run time, so a later `make all` that changes native output
+// makes previously-published webR evidence visibly stale (it will name a
+// commit whose R/web state no longer matches what is on disk). Read via `git`
+// rather than any bundled version, because the thing that must be pinned is
+// the actual working tree the browser was driven against.
+function repoCommit() {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO_ROOT })
+      .toString()
+      .trim();
+  } catch (err) {
+    return null; // honest absence beats a fabricated hash
+  }
+}
+
+// The honest "36 cells" phrasing: not every compared cell is a number that
+// could drift. Aggregates the per-case cell-kind breakdown compareText
+// produces into one human-readable sentence for the scorecard and the
+// evidence file, so a reader cannot come away thinking "N numbers matched"
+// when most of N is static labels, headers, and intentionally-blank cells.
+function buildCellsNote(completedCases, totalCompared, totalWithNumbers) {
+  if (completedCases.length === 0) {
+    return "No case completed a comparison this run — see each case's " +
+      "\"reason\" for why, in cases[].";
+  }
+  const agg = completedCases.reduce(
+    (a, c) => ({
+      header: a.header + c.cell_kinds.header,
+      term: a.term + c.cell_kinds.term,
+      value: a.value + c.cell_kinds.value,
+      empty: a.empty + c.cell_kinds.empty,
+      methods: a.methods + c.cell_kinds.methods,
+      methods_with_number: a.methods_with_number + c.cell_kinds.methods_with_number,
+    }),
+    { header: 0, term: 0, value: 0, empty: 0, methods: 0, methods_with_number: 0 },
+  );
+  return (
+    `${totalCompared} = ${agg.value} numeric value cells + ${agg.methods} ` +
+    `methods sentences (${agg.methods_with_number} containing a number) + ` +
+    `${agg.term} term labels + ${agg.header} header line(s) + ${agg.empty} ` +
+    `empty-vs-empty placeholder cells (a categorical covariate's own ` +
+    `reference-level row). Only the ${totalWithNumbers} numeric cells (the ` +
+    `value cells plus the numeric-bearing methods sentences) can actually ` +
+    `show wasm-vs-native drift — the term labels, header line(s), and empty ` +
+    `cells are static or intentionally blank.`
+  );
+}
+
 test("webR renders the same numbers native R does", async ({ page }) => {
-  // parse-cells.mjs is ESM and this spec is CommonJS (the repo's package.json
-  // has no "type": "module"), so it is imported dynamically. Importing it is
-  // the point: the webR tier is the consumer A12 kept `parseRatioTable` for,
-  // and a second parser here could disagree with the real one and call that
-  // disagreement drift.
-  const { parseRatioTable } = await import(
-    pathToFileURL(path.join(VALIDATION, "harness", "parse-cells.mjs")).href);
+  // compare-text.mjs is ESM and this spec is CommonJS (the repo's
+  // package.json has no "type": "module"), so it is imported dynamically.
+  const { compareText, runCase, nativeDigest } = await import(
+    pathToFileURL(path.join(__dirname, "compare-text.mjs")).href);
 
   // STALE-EVIDENCE DELETE, the same precedent the Makefile's `all` target
   // applies to findings.json: if this run dies before it writes, there must be
@@ -290,34 +317,62 @@ test("webR renders the same numbers native R does", async ({ page }) => {
 
   const cases = [];
   for (const c of CASES) {
-    const { def, csv } = readCase(c.id);
-    // The nav button and the form driver above are a hand-written mapping;
-    // case.json is the authority on what the case actually is. Check them
-    // against each other so a case cannot be driven through the wrong
-    // analysis's form and have the mismatch read as parity.
-    expect(def.figure, `${c.id}: case.json figure vs this file's driver`)
-      .toBe(c.kind);
-    expect(def.display.kind, `${c.id}: not a ratio-table case`)
-      .toBe("ratio_table");
-    await openAnalyze(page, c.nav);
-    await DRIVERS[c.kind](page, def, csv);
-    const webrText = await readRenderedText(page);
+    // Wrapped in runCase: a precondition failure (or any other exception) on
+    // THIS case must not erase the evidence for the other case, and must not
+    // stop webr-tier.json from being written at all — it becomes an honest
+    // `{id, aborted: true, reason}` entry instead. The run still fails loudly
+    // below, after the file is written.
+    const result = await runCase(c.id, async () => {
+      const { def, csv } = readCase(c.id);
+      // The nav button and the form driver above are a hand-written mapping;
+      // case.json is the authority on what the case actually is. Check them
+      // against each other so a case cannot be driven through the wrong
+      // analysis's form and have the mismatch read as parity.
+      expect(def.figure, `${c.id}: case.json figure vs this file's driver`)
+        .toBe(c.kind);
+      expect(def.display.kind, `${c.id}: not a ratio-table case`)
+        .toBe("ratio_table");
+      await openAnalyze(page, c.nav);
+      await DRIVERS[c.kind](page, def, csv);
+      const webrText = await readRenderedText(page);
 
-    const { compared, differing } = compareText(
-      parseRatioTable, nativeText(c.id), webrText);
-    cases.push({
-      id: c.id,
-      identical: differing.length === 0,
-      cells_compared: compared,
-      differing_cells: differing,
+      const { compared, differing, cellKinds, cellsWithNumbers } =
+        compareText(nativeText(c.id), webrText);
+      // Reported, never thrown: the tier's output is a measurement.
+      for (const d of differing) {
+        console.log(`WEBR_DRIFT ${c.id} [${d.term} / ${d.column}] ` +
+          `native=${JSON.stringify(d.native)} webr=${JSON.stringify(d.webr)}`);
+      }
+      console.log(`${c.id}: ${compared} cells compared, ${differing.length} differing`);
+      return {
+        id: c.id,
+        identical: differing.length === 0,
+        cells_compared: compared,
+        differing_cells: differing,
+        cell_kinds: {
+          header: cellKinds.header,
+          term: cellKinds.term,
+          value: cellKinds.value,
+          empty: cellKinds.empty,
+          methods: cellKinds.methods,
+          methods_with_number: cellKinds.methodsWithNumber,
+        },
+        cells_with_numbers: cellsWithNumbers,
+      };
     });
-    // Reported, never thrown: the tier's output is a measurement.
-    for (const d of differing) {
-      console.log(`WEBR_DRIFT ${c.id} [${d.term} / ${d.column}] ` +
-        `native=${JSON.stringify(d.native)} webr=${JSON.stringify(d.webr)}`);
+    if (result.aborted) {
+      console.log(`WEBR_ABORT ${c.id}: ${result.reason}`);
     }
-    console.log(`${c.id}: ${compared} cells compared, ${differing.length} differing`);
+    cases.push(result);
   }
+
+  const completed = cases.filter((c) => !c.aborted);
+  const totalCellsCompared = completed.reduce((s, c) => s + c.cells_compared, 0);
+  const totalCellsWithNumbers = completed.reduce((s, c) => s + c.cells_with_numbers, 0);
+  // Digest over the native text actually compared, so a later `make all` that
+  // changes results/<id>.figura.json's `text` makes this evidence visibly
+  // stale even though the webR run itself is not repeated.
+  const digestInput = completed.map((c) => ({ id: c.id, text: nativeText(c.id) }));
 
   const runtime = await detectRuntime(page, cdnUrls);
   fs.mkdirSync(RESULTS, { recursive: true });
@@ -325,8 +380,27 @@ test("webR renders the same numbers native R does", async ({ page }) => {
     runtime: runtime.runtime,
     runtime_source: runtime.runtime_source,
     date: new Date().toISOString().slice(0, 10),
+    commit: repoCommit(),
+    native_digest: digestInput.length ? `sha256:${nativeDigest(digestInput)}` : null,
     cases,
+    cells_compared: totalCellsCompared,
+    cells_with_numbers: totalCellsWithNumbers,
+    cells_note: buildCellsNote(completed, totalCellsCompared, totalCellsWithNumbers),
   }, null, 2) + "\n");
   console.log(`runtime: ${runtime.runtime}`);
   console.log(`wrote ${OUT}`);
+
+  // LOUD FAILURE, AFTER THE WRITE: a structural precondition failure on any
+  // case must still fail the run (this is a release gate; a partial run must
+  // not read as "passed"), but only now — after the honest aborted record for
+  // it is safely on disk — so the artifact can distinguish "ran and hit
+  // structural drift" from "never run" even though the run itself failed.
+  const aborted = cases.filter((c) => c.aborted);
+  if (aborted.length) {
+    throw new Error(
+      `webR tier hit a structural precondition failure on: ` +
+      `${aborted.map((c) => c.id).join(", ")}. ${OUT} was still written with ` +
+      `an honest aborted record for each — see its "reason" field. This ` +
+      `failure is intentional: a precondition failure must be loud.`);
+  }
 });

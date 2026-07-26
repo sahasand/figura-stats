@@ -107,10 +107,17 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 /* A drifting case must not read like a passing one at a glance. IDENTICAL is
    the pass colour and normal weight; DRIFT is the fail colour and bold, same
    treatment the defect codes above get, and its rows carry the differing
-   values so the reader sees the size of the drift, not just its existence. */
+   values so the reader sees the size of the drift, not just its existence.
+   ABORTED (a structural precondition failure — e.g. a row-count mismatch)
+   gets the same fail colour and weight as DRIFT — it is not a lesser
+   problem, it is the harness saying the two runtimes disagreed on the SHAPE
+   of the output before any cell was even compared — but italic, so it is
+   never mistaken for a DRIFT verdict at a glance. */
 .webr-identical { color:var(--pass); }
 .webr-drift { color:var(--fail); font-weight:600; }
+.webr-aborted { color:var(--fail); font-weight:600; font-style:italic; }
 .webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
+.webr-totals { margin:0 0 1rem; }
 """
 
 
@@ -277,6 +284,15 @@ def _webr_section(results_dir: Path) -> str:
     A DRIFT case is styled like a defect, not like a footnote: the whole point
     of the tier is that a wasm-vs-native difference in a shipped number is a
     finding, and a reader skimming the section must not mistake one for a pass.
+
+    An ABORTED case (a structural precondition failure — e.g. a row-count
+    mismatch, caught by e2e/compare-text.mjs's `runCase`) is rendered as its
+    own distinct verdict, never silently absent. Before this existed, a
+    precondition failure aborted the whole spec before webr-tier.json was ever
+    written, so the single most alarming drift class — the two runtimes
+    disagreeing on the SHAPE of the output — rendered identically to "never
+    run" (the empty-state branch above). Distinguishing the two is the entire
+    point of this branch.
     """
     path = results_dir / "webr-tier.json"
     if not path.exists():
@@ -297,6 +313,15 @@ def _webr_section(results_dir: Path) -> str:
     cases = raw.get("cases") or []
     rows = []
     for c in cases:
+        if c.get("aborted"):
+            rows.append(
+                f"<tr><td>{esc(c.get('id'))}</td>"
+                f"<td class='webr-aborted'>ABORTED</td>"
+                f"<td>&mdash;</td>"
+                f"<td>Structural precondition failure &mdash; the two "
+                f"runtimes disagreed on the shape of the output before any "
+                f"cell was compared: {esc(c.get('reason'))}</td></tr>")
+            continue
         identical = bool(c.get("identical"))
         cls = "webr-identical" if identical else "webr-drift"
         label = "IDENTICAL" if identical else "DRIFT"
@@ -328,10 +353,43 @@ def _webr_section(results_dir: Path) -> str:
     # present so the runtime line can never be read as an unsourced claim.
     source = raw.get("runtime_source")
     source_html = f"<br>{esc(source)}" if source else ""
-    return (
+    # `commit` binds this evidence to the repo state it was measured against
+    # (finding: "the artifact binds to no app version/native baseline"). A
+    # later `make all` that changes native output leaves this commit visibly
+    # stale — the reader can `git diff` it against HEAD. Shown short (12 hex
+    # chars, same convention as `git rev-parse --short`) but the field itself
+    # stores the full hash.
+    commit = raw.get("commit")
+    commit_html = (f" &middot; commit <code>{esc(str(commit)[:12])}</code>"
+                    if commit else "")
+    header_html = (
         f"<p class=\"webr-runtime\">Runtime: <code>"
         f"{esc(raw.get('runtime'))}</code> &middot; run "
-        f"{esc(raw.get('date'))}{source_html}</p>"
+        f"{esc(raw.get('date'))}{commit_html}{source_html}</p>"
+    )
+
+    # The honest "36 cells" fix: not every compared cell is a number that
+    # could drift (most are static labels, headers, and intentionally-blank
+    # placeholder cells). When the run recorded the breakdown, say so in the
+    # reader's terms instead of leaving "N cells compared" to imply N
+    # measurements. Older webr-tier.json files (pre-fix) lack these top-level
+    # fields and render exactly as before — no crash, no fabricated numbers.
+    total_compared = raw.get("cells_compared")
+    total_with_numbers = raw.get("cells_with_numbers")
+    totals_html = ""
+    if total_compared is not None and total_with_numbers is not None:
+        note = raw.get("cells_note")
+        note_html = f"<br>{esc(note)}" if note else ""
+        totals_html = (
+            f"<p class=\"webr-totals\">Compared every one of the "
+            f"<b>{esc(total_compared)}</b> strings the app displays across "
+            f"these cases &mdash; <b>{esc(total_with_numbers)}</b> of them "
+            f"carrying a number that could actually drift between native R "
+            f"and webR.{note_html}</p>"
+        )
+
+    return (
+        f"{header_html}{totals_html}"
         "<div class=\"scroll\"><table><thead><tr><th>Case</th>"
         "<th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>")

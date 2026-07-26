@@ -88,6 +88,13 @@ results/%.done: cases/%/data.csv cases/%/case.json
 # along inside `cd compare && pytest tests -q` — it is discovered like any
 # other test_*.py in that directory, so it needs no separate recipe line.
 #
+# e2e/compare-text.test.mjs pins e2e/compare-text.mjs — the webR tier's
+# cell-by-cell comparator (`compareText`) and its abort wrapper (`runCase`),
+# exported specifically so this suite can exercise them even though the
+# Playwright spec that is their only OTHER caller (e2e/webr-parity.spec.js) is
+# excluded from CI below. Without this test, an edit that made the comparator
+# always report "identical" would fail nothing, ever.
+#
 # ORDER IS LOAD-BEARING: the python suite runs LAST. Make stops the chain at
 # the first failing line, so a genuinely broken comparator or harness must
 # never be able to hide behind a later, unrelated failure.
@@ -101,6 +108,7 @@ results/%.done: cases/%/data.csv cases/%/case.json
 test:
 	cd .. && node stats-validation/harness/build-spec.test.mjs
 	node harness/parse-cells.test.mjs
+	node e2e/compare-text.test.mjs
 	cd compare && $(PY) -m pytest tests -q
 	cd python && $(PY) -m pytest tests -q
 
@@ -128,9 +136,6 @@ webr:
 	cd .. && rm -rf web/R && cp -R R web/R
 	cd .. && npx playwright test --config stats-validation/e2e/playwright.config.js
 
-# results/webr-tier.json is deliberately NOT removed here: it is git-tracked
-# evidence of a release gate that a `make clean` of the local pipeline has no
-# business revoking. The webr target replaces it on its next run.
 # The $(filter-out ...) keeps webr-tier.json: it is git-tracked evidence of a
 # release gate that a `make clean` of the local pipeline has no business
 # revoking (`rm -f` with no remaining arguments is a no-op, so an empty or

@@ -290,6 +290,98 @@ def test_webr_file_with_no_cases_does_not_render_an_empty_pass(tmp_path):
     assert "class='webr-drift'" not in html
 
 
+# Fix-round fixture: a case that ABORTED with a structural precondition
+# failure (a row-count mismatch), alongside one that ran clean. This is the
+# fix for "structural drift publishes nothing": before it, a precondition
+# failure aborted the whole spec before webr-tier.json was ever written, so
+# this state rendered identically to "not yet run for this release" — the
+# empty-state branch, not a distinct row.
+WEBR_TIER_ABORTED = {
+    "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
+    "runtime_source": "read from the WebR instance's own version fields",
+    "date": "2026-07-26",
+    "commit": "815fa79d40d5bcb1a9cd5e3115694e51d58bd7b2",
+    "cases": [
+        {
+            "id": "cox-adjusted",
+            "identical": True,
+            "cells_compared": 13,
+            "differing_cells": [],
+        },
+        {
+            "id": "logistic-confounding",
+            "aborted": True,
+            "reason": "webR tier precondition failed: webR table row count "
+                      "(5) differs from native R (6)",
+        },
+    ],
+}
+
+
+def test_webr_aborted_case_is_rendered_distinctly(tmp_path):
+    """An ABORTED case must be its own visible verdict, not silently missing
+    and not folded into IDENTICAL/DRIFT — see the fixture's docstring for why
+    this state existing at all is the fix."""
+    html = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
+    assert "Not yet run for this release" not in html   # ran; must not read as unrun
+    assert "ABORTED" in html
+    assert "class='webr-aborted'>ABORTED" in html
+    assert ".webr-aborted" in html                       # ...and it reaches the CSS
+    assert "row count" in html                            # the reason is shown
+    # The other, non-aborted case in the same file still renders its own
+    # verdict — an abort on one case must not swallow the other's evidence.
+    assert "class='webr-identical'>IDENTICAL" in html
+
+
+def test_webr_aborted_verdict_is_distinguishable_from_drift(tmp_path):
+    """ABORTED and DRIFT are both "bad", but they are not the same finding —
+    ABORTED means no comparison happened at all. They must not share a CSS
+    class, or a reader cannot tell "no cells were compared" from "cells were
+    compared and some disagreed"."""
+    html = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
+    assert "class='webr-drift'" not in html
+    assert "class='webr-aborted'" in html
+
+
+def test_webr_commit_is_shown(tmp_path):
+    """The evidence file names the repo commit it was measured against
+    (finding: "the artifact binds to no app version/native baseline"), so a
+    reader can tell whether native output has moved on since."""
+    html = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
+    assert "815fa79d40d5" in html   # shown short, first 12 hex chars
+
+
+def test_webr_missing_commit_renders_without_crashing_or_a_stray_dot(tmp_path):
+    """Older webr-tier.json files (written before the commit field existed)
+    must still render — no crash, and no dangling " · commit" separator with
+    nothing after it."""
+    html = _build_with_webr(tmp_path)   # the original WEBR_TIER fixture, no commit
+    assert "commit <code>" not in html
+
+
+def test_webr_honest_cells_with_numbers_phrasing_is_rendered(tmp_path):
+    """The '36 cells' fix: the scorecard must say how many of the compared
+    cells actually carry a number, in the reader's terms, not just print a
+    raw compared-cell count that implies every one is a measurement."""
+    payload = dict(WEBR_TIER)
+    payload["cells_compared"] = 36
+    payload["cells_with_numbers"] = 17
+    payload["cells_note"] = "36 = 12 value cells + 7 methods sentences (5 with a number) + 9 term labels + 2 header lines + 6 empty cells."
+    html = _build_with_webr(tmp_path, payload)
+    assert "<b>36</b>" in html
+    assert "<b>17</b>" in html
+    assert "carrying a number that could actually drift" in html
+    assert "12 value cells" in html   # the note itself is rendered, not dropped
+
+
+def test_webr_file_without_cells_breakdown_renders_as_before(tmp_path):
+    """A webr-tier.json written before this fix (no top-level cells_compared /
+    cells_with_numbers) must render exactly as it did before — no crash, no
+    fabricated totals paragraph."""
+    html = _build_with_webr(tmp_path)   # the original WEBR_TIER fixture
+    assert "carrying a number that could actually drift" not in html
+
+
 def test_every_finding_row_names_the_two_artifacts_it_compared(tmp_path):
     """THE ATTRIBUTION PIN. "Figura" is the screen on the display tier, the
     exported script's harvest on the exact tier, and on the script tier the

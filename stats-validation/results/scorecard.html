@@ -46,10 +46,17 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 /* A drifting case must not read like a passing one at a glance. IDENTICAL is
    the pass colour and normal weight; DRIFT is the fail colour and bold, same
    treatment the defect codes above get, and its rows carry the differing
-   values so the reader sees the size of the drift, not just its existence. */
+   values so the reader sees the size of the drift, not just its existence.
+   ABORTED (a structural precondition failure — e.g. a row-count mismatch)
+   gets the same fail colour and weight as DRIFT — it is not a lesser
+   problem, it is the harness saying the two runtimes disagreed on the SHAPE
+   of the output before any cell was even compared — but italic, so it is
+   never mistaken for a DRIFT verdict at a glance. */
 .webr-identical { color:var(--pass); }
 .webr-drift { color:var(--fail); font-weight:600; }
+.webr-aborted { color:var(--fail); font-weight:600; font-style:italic; }
 .webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
+.webr-totals { margin:0 0 1rem; }
 </style></head>
 <body><main>
 <h1>Statistical validation scorecard</h1>
@@ -107,5 +114,5 @@ no 80-bit extended precision and webR ships reference BLAS/LAPACK, so an
 iterative fit is where a difference would appear. Cells are the strings the
 user is shown, so a difference here is a difference a reader of the manuscript
 would see.</p>
-<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26<br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
+<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26 &middot; commit <code>815fa79d40d5</code><br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><p class="webr-totals">Compared every one of the <b>36</b> strings the app displays across these cases &mdash; <b>17</b> of them carrying a number that could actually drift between native R and webR.<br>36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate&#x27;s own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
 </main></body></html>
