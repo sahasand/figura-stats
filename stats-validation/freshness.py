@@ -41,7 +41,7 @@ block the very commit that introduces the artifact.
 
 WHAT THIS DOES NOT COVER. `results/scorecard.html` — CI byte-diffs that one, and
 that is honest because the scorecard renders only the values findings.json
-publishes, which compare.py rounds to PUBLISHED_SIGNIFICANT_DIGITS (12) on the
+publishes, which compare.py rounds to PUBLISHED_SIGNIFICANT_DIGITS (9) on the
 way out. Do not add a second, looser check for it here: an HTML artifact either
 regenerates or it does not.
 

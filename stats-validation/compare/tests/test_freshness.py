@@ -41,7 +41,7 @@ import freshness  # noqa: E402
 TRACKED = "stats-validation/results/findings.json"
 
 # The shipped shape in miniature, with values at the precision compare.py
-# actually publishes (12 significant digits).
+# actually publishes (9 significant digits).
 FINDINGS = {
     "_published_precision": "values are rounded for publication; see compare.py",
     "total_compared": 30,

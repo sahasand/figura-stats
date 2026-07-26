@@ -95,16 +95,77 @@ or a checkout where it was never tracked) is reported and passes. A missing
 regenerated `findings.json`, an unresolvable `--ref`, or no git at all is exit 2
 — a gate that cannot answer its question must never render as "fresh".
 
-**Published values are rounded to 12 significant digits.** `compare.py` rounds
+**Published values are rounded to 9 significant digits.** `compare.py` rounds
 `figura`/`python` on the way *into* `findings.json` (`PUBLISHED_SIGNIFICANT_DIGITS`)
-— a million times tighter than `REL_TOL`, so nothing the comparator judges is
-affected, while the digits that are pure BLAS noise stop being committed. The
-comparison itself runs on the full double; full precision stays in the gitignored
-`results/*.figura-exact.json` and `results/*.python.json`. The artifact says so
-inline (`_published_precision`) and so does the scorecard, so no reader can
-conclude the harness *compared* at 12 digits. `results/scorecard.html` is
-therefore still **byte**-diffed in CI: it renders only what `findings.json`
+— three orders tighter than `REL_TOL` (1e-6), so nothing the comparator judges
+is affected, while the digits that are pure BLAS noise stop being committed.
+The comparison itself runs on the full double; full precision stays in the
+gitignored `results/*.figura-exact.json` and `results/*.python.json`. The
+artifact says so inline (`_published_precision`) and so does the scorecard, so
+no reader can conclude the harness *compared* at 9 digits. `results/scorecard.html`
+is therefore still **byte**-diffed in CI: it renders only what `findings.json`
 publishes, and `build_scorecard.py` reads no live state.
+
+**Why 9 and not 12.** An earlier round rounded to 12 significant digits
+(~1e-12 relative) on the theory that it was "a million times tighter than
+`REL_TOL`" and therefore safe. It is not safe for the *byte diff*: 12 digits
+is tight enough that a real cross-environment divergence at the scale CI is
+expected to show (Ubuntu R + OpenBLAS vs local Homebrew R + Accelerate BLAS,
+estimated ~1e-10) still changes the published digits, so `git diff --exit-code
+scorecard.html` could go red on the very first CI run for a non-regression —
+exactly the false-red class this whole gate exists to avoid.
+
+Measured directly, with the real `compare.py::main()` + real
+`build_scorecard.py::build()`, run end to end against a scratch copy of
+`results/`: `logistic-dirty`'s real Path B `age` estimate
+(`1.6648751058762834`, the published side of a genuine `DEFECT` finding) is
+perturbed by a relative gap, the whole pipeline is rerun (comparator decides,
+rounds, writes `findings.json`; the scorecard is rebuilt from it), and the
+regenerated `scorecard.html` is sha256-compared byte for byte against the
+unperturbed build — same case list, same code, only
+`PUBLISHED_SIGNIFICANT_DIGITS` and the injected gap differ between the two
+tables below:
+
+    PUBLISHED_SIGNIFICANT_DIGITS = 12 (the old value)
+    rel gap    published pair                        byte-identical
+    1e-16      1.68264486127 vs 1.66487510588        True
+    1e-13      1.68264486127 vs 1.66487510588        True
+    1e-11      1.68264486127 vs 1.66487510589        False
+    1e-10      1.68264486127 vs 1.66487510604        False
+    1e-9       1.68264486127 vs 1.66487510754        False
+
+    PUBLISHED_SIGNIFICANT_DIGITS = 9 (this round)
+    rel gap    published pair                        byte-identical
+    1e-16      1.68264486 vs 1.66487511              True
+    1e-13      1.68264486 vs 1.66487511              True
+    1e-11      1.68264486 vs 1.66487511              True
+    1e-10      1.68264486 vs 1.66487511              True
+    1e-9       1.68264486 vs 1.66487511              True
+
+12 digits reproduces the original concern exactly (breaks at 1e-11 and
+1e-10). At 9 digits both round-trip byte-identical, with margin to spare at
+1e-9 too. A finer scan (same value, same pipeline) localizes where it finally
+breaks:
+
+    rel gap    byte-identical at 9 digits
+    5e-9       True
+    6.3e-9     False   <- smallest measured perturbation that still breaks it
+    8e-9       False
+    1e-7       False
+
+**The gate's real, measured immunity threshold is ~6e-9 relative** for this
+value — a perturbation has to reach that scale before it can flip a published
+9th significant digit and therefore change `scorecard.html`'s bytes. (The
+exact break point is a per-value rounding-boundary artifact — it depends on
+where the specific double sits relative to the next representable 9-digit
+string, not a single universal constant — but it is consistent with the
+theoretical half-step of a 9-significant-digit round for a value of this
+magnitude, ~5e-9 relative.) That is comfortably above the ~1e-10 environment
+gap the reviewer estimated for Accelerate-vs-OpenBLAS — two orders of
+magnitude of headroom — and still three to four orders below `REL_TOL`
+(1e-6), so the comparator's verdicts never move.
+`results/*.figura-exact.json` and `results/*.python.json` keep full precision
+regardless — only the tracked, byte-diffed artifacts get the 9-digit cut.
 
 CI (`.github/workflows/ci.yml`, job `validation`) runs, in order: `make test`;
 `make clean all` with its status recorded but not obeyed; a check that

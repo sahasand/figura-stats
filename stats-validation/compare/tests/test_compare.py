@@ -954,15 +954,18 @@ def test_the_published_vocabulary_declares_only_codes_that_are_emitted():
 # PUBLICATION PRECISION. findings.json is TRACKED evidence a CI rebuild must
 # reproduce, and repr()-precision floats make it a claim about one machine's
 # last digits: local (Accelerate BLAS) and CI (OpenBLAS) reproduce an iterative
-# fit to ~1e-10, not ~1e-16. Values are therefore rounded to 12 significant
-# digits ON THE WAY OUT — a million times tighter than REL_TOL, so no comparison
-# this file makes can be affected.
+# fit to ~1e-10, not ~1e-16. Values are therefore rounded to 9 significant
+# digits ON THE WAY OUT — three orders tighter than REL_TOL, so no comparison
+# this file makes can be affected. (An earlier round used 12 digits; measured
+# to round-trip byte-identical in scorecard.html only down to ~1e-13, which a
+# real ~1e-10 environment gap can beat — see the README's "Why 9 and not 12"
+# section for the measured before/after tables.)
 # --------------------------------------------------------------------------
 
 def test_round_published_keeps_significant_digits_not_decimal_places():
-    # A p-value is the case that a `round(v, 12)` would destroy.
-    assert round_published(5.432109876543210e-8) == 5.43210987654e-8
-    assert round_published(1.6648751058762834) == 1.66487510588
+    # A p-value is the case that a `round(v, 9)` would destroy.
+    assert round_published(5.432109876543210e-8) == 5.43210988e-8
+    assert round_published(1.6648751058762834) == 1.66487511
     # Integers, strings, None, bools: published exactly as they are.
     assert round_published(312) == 312
     assert round_published("1.66 (1.24–2.23, p<0.001)") == \
@@ -971,8 +974,8 @@ def test_round_published_keeps_significant_digits_not_decimal_places():
     assert round_published(True) is True
     # Nested: a MISSING_QUANTITY finding publishes Path B's whole cell dict.
     assert round_published({"est": 1.6648751058762834, "lo": None}) == \
-        {"est": 1.66487510588, "lo": None}
-    assert round_published([1.6648751058762834]) == [1.66487510588]
+        {"est": 1.66487511, "lo": None}
+    assert round_published([1.6648751058762834]) == [1.66487511]
 
 
 def test_rounding_is_orders_of_magnitude_tighter_than_the_tolerance():
@@ -982,12 +985,15 @@ def test_rounding_is_orders_of_magnitude_tighter_than_the_tolerance():
     for value in (1.6648751058762834, 0.0005991419225210207, 6.546639459713925):
         published = round_published(value)
         assert close_enough(value, published)
-        assert abs(published - value) <= 1e-11 * abs(value)
+        # 9 significant digits is ~1e-9 relative (measured worst case among
+        # these three is ~2.5e-9); 1e-8 leaves headroom while staying two
+        # orders of magnitude tighter than REL_TOL (1e-6).
+        assert abs(published - value) <= 1e-8 * abs(value)
 
 
 def test_published_values_are_rounded_and_the_file_says_so(tmp_path):
-    """End to end: the artifact carries 12-digit values and an inline note, so a
-    reader of findings.json cannot conclude the COMPARISON ran at 12 digits."""
+    """End to end: the artifact carries 9-digit values and an inline note, so a
+    reader of findings.json cannot conclude the COMPARISON ran at 9 digits."""
     case, figura, exact, python = _base()
     # Break the exact tier so a real DEFECT finding carries real floats.
     python["terms"]["age"]["est"] = 1.6648751058762834
@@ -996,10 +1002,10 @@ def test_published_values_are_rounded_and_the_file_says_so(tmp_path):
     published = json.loads((results / "findings.json").read_text())
     values = [f["python"] for c in published["cases"] for f in c["findings"]
               if isinstance(f["python"], float)]
-    assert 1.66487510588 in values
+    assert 1.66487511 in values
     assert 1.6648751058762834 not in values
     note = published["_published_precision"]
-    assert "12 significant digits" in note
+    assert "9 significant digits" in note
     assert "full double precision" in note
     # And the note must be inert to every consumer of the file.
     assert set(published) == {"_published_precision", "cases", "total_compared",
@@ -1008,11 +1014,11 @@ def test_published_values_are_rounded_and_the_file_says_so(tmp_path):
 
 def test_rounding_cannot_change_a_verdict(tmp_path):
     """Rounding happens in main(), AFTER every comparison. A pair that differs
-    only in digits past the 12th must still be judged identical (no finding),
+    only in digits past the 9th must still be judged identical (no finding),
     which it would be even at full precision — the point is that the rounding
     step is not in the decision path at all."""
     case, figura, exact, python = _base()
-    # The fixture's own adjusted `age` estimate, perturbed only past the 12th
+    # The fixture's own adjusted `age` estimate, perturbed only past the 9th
     # significant digit on the Path B side — so the two rounded forms are equal
     # and the two unrounded ones are not.
     exact["terms"]["age"]["est"] = 1.68843291380710

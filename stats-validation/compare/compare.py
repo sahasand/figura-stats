@@ -91,18 +91,24 @@ GC_SIGNIF_DIGITS = 3
 # source-built numpy) and CI (Ubuntu R + OpenBLAS, manylinux wheels) reproduce
 # an iteratively fitted estimate to roughly 1e-10, not 1e-16, so committing all
 # 17 digits makes the tracked artifact a claim about one machine's last digits
-# rather than about the statistics. 12 significant digits is ~1e-12 relative —
-# a million times tighter than REL_TOL, so NOTHING the comparator judges is
-# lost — while dropping the digits that are pure environment noise.
+# rather than about the statistics. A 12-digit round-trip (~1e-12 relative) was
+# tried first and measured to NOT survive that ~1e-10 environment gap byte-for-
+# byte in scorecard.html (1e-11 and 1e-10 perturbations both broke it — see
+# stats-validation/.sdd/task-ci-report.md, Concern 1). 9 significant digits is
+# ~1e-9 relative — three orders tighter than REL_TOL, so NOTHING the comparator
+# judges is lost, and empirically wide enough to round-trip byte-identical at
+# the 1e-10/1e-11 scale CI is expected to show (measured: see the README's
+# "Published values are rounded to 9 significant digits" section for the
+# smallest perturbation that still breaks the byte diff).
 #
 # FULL PRECISION IS NOT DESTROYED, only not published: results/*.figura-exact.json
 # and results/*.python.json (both gitignored) keep every digit, and they are the
 # artifacts the comparison actually reads.
 #
 # It is a `%.<n>g` round-trip, not `round(v, n)`: these are SIGNIFICANT digits,
-# so a p-value of 5.4e-8 keeps 12 of its own digits rather than being flattened
+# so a p-value of 5.4e-8 keeps 9 of its own digits rather than being flattened
 # to zero.
-PUBLISHED_SIGNIFICANT_DIGITS = 12
+PUBLISHED_SIGNIFICANT_DIGITS = 9
 
 # Stamped into findings.json so no reader of the artifact — or of the scorecard
 # built from it — can mistake the published precision for the compared one.
@@ -112,7 +118,7 @@ PRECISION_NOTE = (
     f"full double precision (rel {REL_TOL} / abs {ABS_TOL}); the unrounded "
     f"numbers live in the gitignored results/*.figura-exact.json and "
     f"results/*.python.json. Rounding exists because this file is tracked "
-    f"evidence a CI rebuild must reproduce, and digits past the ~12th are "
+    f"evidence a CI rebuild must reproduce, and digits past the ~9th are "
     f"BLAS/toolchain noise rather than statistics."
 )
 
