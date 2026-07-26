@@ -43,6 +43,13 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 .source { color:var(--muted); font-size:.78rem; white-space:nowrap; }
 .webr-empty { border:1px dashed var(--rule); border-radius:8px; padding:1rem 1.1rem;
               color:var(--muted); }
+/* A drifting case must not read like a passing one at a glance. IDENTICAL is
+   the pass colour and normal weight; DRIFT is the fail colour and bold, same
+   treatment the defect codes above get, and its rows carry the differing
+   values so the reader sees the size of the drift, not just its existence. */
+.webr-identical { color:var(--pass); }
+.webr-drift { color:var(--fail); font-weight:600; }
+.webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
 </style></head>
 <body><main>
 <h1>Statistical validation scorecard</h1>
@@ -93,5 +100,12 @@ proportional-hazards note &mdash; fires at all. Those sentences never change a
 reported estimate, but they are printed for the user and pasted into a
 manuscript, so a disagreement about one is published like any other.</p>
 <h2>WebR tier</h2>
-<div class="webr-empty">Not yet run for this release &mdash; webR parity checks land in Task 12.</div>
+<p class="sub">Everything above ran native R. This tier checks the claim only
+this product has to make: that the same analyses, driven through the shipped
+browser UI with R compiled to WebAssembly, display the same numbers. wasm has
+no 80-bit extended precision and webR ships reference BLAS/LAPACK, so an
+iterative fit is where a difference would appear. Cells are the strings the
+user is shown, so a difference here is a difference a reader of the manuscript
+would see.</p>
+<p class="webr-runtime">Runtime: <code>webR 0.6.1-dev+7603db7 (R 4.6.0)</code> &middot; run 2026-07-26<br>read from the WebR instance&#x27;s own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.</p><div class="scroll"><table><thead><tr><th>Case</th><th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead><tbody><tr><td>logistic-confounding</td><td class='webr-identical'>IDENTICAL</td><td>23</td><td>23 displayed cells matched native R exactly</td></tr><tr><td>cox-adjusted</td><td class='webr-identical'>IDENTICAL</td><td>13</td><td>13 displayed cells matched native R exactly</td></tr></tbody></table></div>
 </main></body></html>

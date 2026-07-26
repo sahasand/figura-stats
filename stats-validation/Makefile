@@ -22,7 +22,7 @@ CASES := logistic-confounding cox-adjusted km-twoarm \
 # the full case list.
 COMPARE_CASES := $(CASES)
 
-.PHONY: all test clean
+.PHONY: all test webr clean
 
 # COMPARE MAY LEGITIMATELY EXIT 1. `logistic-dirty` is designed to publish real
 # findings (the app-vs-exported-script divergence of issues/02), so a non-zero
@@ -104,5 +104,37 @@ test:
 	cd compare && $(PY) -m pytest tests -q
 	cd python && $(PY) -m pytest tests -q
 
+# THE ONE TIER THAT IS NOT IN `all` AND NOT IN `test`, AND MUST NOT BE ADDED TO
+# EITHER. Everything else here runs native R offline; this drives the shipped
+# browser UI with R compiled to WebAssembly and compares what webR displays
+# against the native-R display artifacts in results/. It needs a real Chromium
+# and the network (Playwright downloads the webR runtime and its packages from
+# the CDN on every cold run), which is exactly the slow/flaky combination
+# CLAUDE.md keeps out of CI. It is a HAND-RUN RELEASE GATE: run it before a
+# release, read results/webr-tier.json, then rebuild the scorecard.
+#
+# Both lines run from the REPO ROOT (`cd ..`), for two different reasons: the
+# R->web/R copy is a repo-root build step (web/R is a gitignored copy of R/ and
+# `npm run serve` serves web/), and the Playwright config's paths — including
+# its webServer cwd — are anchored there too.
+#
+# The spec DELETES results/webr-tier.json before it runs, the same
+# stale-evidence rule `all` applies to findings.json: a run that dies before
+# writing must publish nothing, not last release's numbers under this
+# release's date. Rebuild the scorecard afterwards (`make all`, or just
+# `.venv/bin/python build_scorecard.py`) to publish the result. `make clean`
+# deliberately spares webr-tier.json for the same reason — see `clean` below.
+webr:
+	cd .. && rm -rf web/R && cp -R R web/R
+	cd .. && npx playwright test --config stats-validation/e2e/playwright.config.js
+
+# results/webr-tier.json is deliberately NOT removed here: it is git-tracked
+# evidence of a release gate that a `make clean` of the local pipeline has no
+# business revoking. The webr target replaces it on its next run.
+# The $(filter-out ...) keeps webr-tier.json: it is git-tracked evidence of a
+# release gate that a `make clean` of the local pipeline has no business
+# revoking (`rm -f` with no remaining arguments is a no-op, so an empty or
+# absent results/ is fine). The webr target replaces it on its next run.
 clean:
-	rm -rf results/*.json results/*.done results/scorecard.html
+	rm -f $(filter-out results/webr-tier.json,$(wildcard results/*.json))
+	rm -rf results/*.done results/scorecard.html

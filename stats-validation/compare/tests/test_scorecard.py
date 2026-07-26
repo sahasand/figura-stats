@@ -177,6 +177,117 @@ def test_no_dead_exact_pass_code_styled(tmp_path):
 def test_webr_section_renders_honest_empty_state(tmp_path):
     html = _build(tmp_path)
     assert "Not yet run for this release" in html
+    # ...and says how to produce one, including WHY it is not in `make all`.
+    assert "make -C stats-validation webr" in html
+
+
+# The shape stats-validation/e2e/webr-parity.spec.js writes: one identical case
+# and one drifting one, so both renderings are pinned by the same fixture. The
+# drifting values are the ones the tier's own negative-control run produced.
+WEBR_TIER = {
+    "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
+    "runtime_source": "read from the WebR instance's own version fields",
+    "date": "2026-07-26",
+    "cases": [
+        {
+            "id": "cox-adjusted",
+            "identical": True,
+            "cells_compared": 13,
+            "differing_cells": [],
+        },
+        {
+            "id": "logistic-confounding",
+            "identical": False,
+            "cells_compared": 23,
+            "differing_cells": [
+                {
+                    "term": "<script>alert(2)</script>",
+                    "column": "adjusted",
+                    "native": "0.51 (0.28-0.91, p=0.023)",
+                    "webr": "0.50 (0.28-0.91, p=0.023)",
+                },
+                {
+                    "term": "(methods paragraph)",
+                    "column": "sentence 3",
+                    "native": "C-statistic = 0.67.",
+                    "webr": "C-statistic = 0.68.",
+                },
+            ],
+        },
+    ],
+}
+
+
+def _build_with_webr(tmp_path, payload=None):
+    (tmp_path / "webr-tier.json").write_text(
+        json.dumps(WEBR_TIER if payload is None else payload))
+    return _build(tmp_path)
+
+
+def test_webr_section_renders_the_real_file(tmp_path):
+    """Runtime, date, and a per-case identical/drift verdict with the number of
+    cells behind it — not a raw JSON dump the reader has to parse by eye."""
+    html = _build_with_webr(tmp_path)
+    assert "Not yet run for this release" not in html
+    assert "webR 0.6.1-dev+7603db7 (R 4.6.0)" in html
+    assert "2026-07-26" in html
+    assert "cox-adjusted" in html
+    assert "IDENTICAL" in html
+    assert "13 displayed cells matched native R exactly" in html
+    assert "2 of 23 cells differ" in html
+
+
+def test_webr_drift_row_is_visually_distinct_from_an_identical_one(tmp_path):
+    """A drifting case must be styled like a defect, not like a footnote: the
+    tier exists because a wasm-vs-native difference in a displayed number is a
+    finding, and a reader skimming the section must not read one as a pass."""
+    html = _build_with_webr(tmp_path)
+    assert "class='webr-drift'>DRIFT" in html
+    assert "class='webr-identical'>IDENTICAL" in html
+    # ...and both classes reach the CSS, or the "distinct" claim is decorative.
+    assert ".webr-drift" in html
+    assert ".webr-identical" in html
+
+
+def test_webr_drift_names_the_two_values(tmp_path):
+    """"DRIFT" alone is unactionable. The cell, and both numbers, must be on
+    the page so the reader can judge the SIZE of the difference."""
+    html = _build_with_webr(tmp_path)
+    assert "0.51 (0.28-0.91, p=0.023)" in html
+    assert "0.50 (0.28-0.91, p=0.023)" in html
+    assert "sentence 3" in html
+
+
+def test_webr_runtime_provenance_is_shown(tmp_path):
+    """The page prints no webR version, so the tier records how it identified
+    the runtime. Rendering it keeps the runtime line from reading as an
+    unsourced claim. (Asserted without the apostrophe: `esc` escapes it to
+    `&#x27;`, which is correct output, not a missing string.)"""
+    assert "read from the WebR instance" in _build_with_webr(tmp_path)
+
+
+def test_webr_hostile_string_is_escaped(tmp_path):
+    html = _build_with_webr(tmp_path)
+    assert "<script>alert(2)</script>" not in html
+    assert "&lt;script&gt;alert(2)&lt;/script&gt;" in html
+
+
+def test_webr_file_that_is_not_json_says_so_rather_than_crashing(tmp_path):
+    (tmp_path / "webr-tier.json").write_text("{not json")
+    html = _build(tmp_path)
+    assert "could not be read as JSON" in html
+
+
+def test_webr_file_with_no_cases_does_not_render_an_empty_pass(tmp_path):
+    """A run that wrote the file but listed no cases has gated nothing. An
+    empty table would read as "no problems found"."""
+    html = _build_with_webr(
+        tmp_path, {"runtime": "webR x", "date": "2026-07-26", "cases": []})
+    assert "lists no cases" in html
+    # The verdict CLASS is the thing that must be absent — the words IDENTICAL
+    # and DRIFT also appear in the CSS comment explaining how they are styled.
+    assert "class='webr-identical'" not in html
+    assert "class='webr-drift'" not in html
 
 
 def test_every_finding_row_names_the_two_artifacts_it_compared(tmp_path):

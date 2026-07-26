@@ -104,6 +104,13 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 .source { color:var(--muted); font-size:.78rem; white-space:nowrap; }
 .webr-empty { border:1px dashed var(--rule); border-radius:8px; padding:1rem 1.1rem;
               color:var(--muted); }
+/* A drifting case must not read like a passing one at a glance. IDENTICAL is
+   the pass colour and normal weight; DRIFT is the fail colour and bold, same
+   treatment the defect codes above get, and its rows carry the differing
+   values so the reader sees the size of the drift, not just its existence. */
+.webr-identical { color:var(--pass); }
+.webr-drift { color:var(--fail); font-weight:600; }
+.webr-runtime { color:var(--muted); font-size:.85rem; margin:0 0 1rem; }
 """
 
 
@@ -258,13 +265,26 @@ def _rows(data: dict) -> str:
 
 
 def _webr_section(results_dir: Path) -> str:
-    """Task 12 fills this in. Until webr-tier.json exists, render an honest
-    empty state rather than fabricating a result or crashing."""
+    """The webR-vs-native-R release gate, read from results/webr-tier.json.
+
+    That file is written ONLY by a real browser run of
+    stats-validation/e2e/webr-parity.spec.js (a hand-run gate — it needs a
+    browser and the network, so it is in neither `make all` nor CI). It is
+    deleted at the start of every run, so an absent file means "this release
+    has not been gated", never "the last run's numbers still apply". Say that
+    plainly rather than fabricating a result or crashing.
+
+    A DRIFT case is styled like a defect, not like a footnote: the whole point
+    of the tier is that a wasm-vs-native difference in a shipped number is a
+    finding, and a reader skimming the section must not mistake one for a pass.
+    """
     path = results_dir / "webr-tier.json"
     if not path.exists():
         return (
             "<div class=\"webr-empty\">Not yet run for this release &mdash; "
-            "webR parity checks land in Task 12.</div>"
+            "run <code>make -C stats-validation webr</code> (a hand-run "
+            "release gate: it needs a browser and the network, so it is "
+            "excluded from CI and from <code>make all</code>).</div>"
         )
     try:
         raw = json.loads(path.read_text())
@@ -273,7 +293,48 @@ def _webr_section(results_dir: Path) -> str:
             "<div class=\"webr-empty\">webr-tier.json is present but could "
             "not be read as JSON.</div>"
         )
-    return f"<div class=\"scroll\"><pre>{esc(json.dumps(raw, indent=2))}</pre></div>"
+
+    cases = raw.get("cases") or []
+    rows = []
+    for c in cases:
+        identical = bool(c.get("identical"))
+        cls = "webr-identical" if identical else "webr-drift"
+        label = "IDENTICAL" if identical else "DRIFT"
+        differing = c.get("differing_cells") or []
+        compared = c.get("cells_compared")
+        if identical:
+            detail = (f"{esc(compared)} displayed cells matched native R "
+                      "exactly")
+        else:
+            items = "".join(
+                f"<li><b>{esc(d.get('term'))}</b> / {esc(d.get('column'))}: "
+                f"native <code>{esc(d.get('native'))}</code> &rarr; "
+                f"webR <code>{esc(d.get('webr'))}</code></li>"
+                for d in differing)
+            detail = (f"{len(differing)} of {esc(compared)} cells differ"
+                      f"<ul>{items}</ul>")
+        rows.append(
+            f"<tr><td>{esc(c.get('id'))}</td>"
+            f"<td class='{cls}'>{label}</td>"
+            f"<td>{esc(compared)}</td>"
+            f"<td>{detail}</td></tr>")
+
+    if not rows:
+        rows.append("<tr><td colspan='4'>webr-tier.json lists no cases.</td>"
+                    "</tr>")
+
+    # `runtime_source` is optional provenance: the page prints no version
+    # string, so the tier records HOW it identified the runtime. Rendered when
+    # present so the runtime line can never be read as an unsourced claim.
+    source = raw.get("runtime_source")
+    source_html = f"<br>{esc(source)}" if source else ""
+    return (
+        f"<p class=\"webr-runtime\">Runtime: <code>"
+        f"{esc(raw.get('runtime'))}</code> &middot; run "
+        f"{esc(raw.get('date'))}{source_html}</p>"
+        "<div class=\"scroll\"><table><thead><tr><th>Case</th>"
+        "<th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>")
 
 
 def build(findings_path: Path | str | None = None,
@@ -340,6 +401,13 @@ proportional-hazards note &mdash; fires at all. Those sentences never change a
 reported estimate, but they are printed for the user and pasted into a
 manuscript, so a disagreement about one is published like any other.</p>
 <h2>WebR tier</h2>
+<p class="sub">Everything above ran native R. This tier checks the claim only
+this product has to make: that the same analyses, driven through the shipped
+browser UI with R compiled to WebAssembly, display the same numbers. wasm has
+no 80-bit extended precision and webR ships reference BLAS/LAPACK, so an
+iterative fit is where a difference would appear. Cells are the strings the
+user is shown, so a difference here is a difference a reader of the manuscript
+would see.</p>
 {_webr_section(results_dir)}
 </main></body></html>"""
 
