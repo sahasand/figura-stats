@@ -2325,12 +2325,49 @@ def test_diagnostics_are_deferred_while_path_b_has_no_block(tmp_path):
     assert "logistic" in PENDING_PATH_B_DIAGNOSTICS
 
 
+def test_targets_met_and_deferred_targets_are_published_together(tmp_path):
+    """The real logistic-confounding/cox-adjusted shape: a case declares BOTH
+    a met, non-deferred target (`_base()`'s adjusted_or/n/n_event/...) and
+    diagnostics targets that are all deferred while Path B has no
+    `diagnostics` block. `targets_met` reads True here — deferred targets are
+    deliberately excluded from that computation, since a deferred target is
+    neither met nor failed — so a machine consumer reading `targets_met`
+    alone would see "true" and miss that five targets were never checked.
+    `deferred_targets` is published in the SAME dict for exactly this reason:
+    it is always present (see compare_case), never conditional on whether it
+    is empty, so the qualification sits right next to the claim it
+    qualifies."""
+    report = _run_diag(tmp_path, lambda c, f, e, p: p.pop("diagnostics"))
+    assert report["targets_met"] is True
+    assert "deferred_targets" in report
+    assert report["deferred_targets"] == [
+        "c_statistic", "vif_note", "epv_note", "cooks_note", "separation_note"]
+
+
 def test_a_present_but_empty_diagnostics_block_is_not_deferred(tmp_path):
     """The gate is narrow on purpose: it fires only when the key is ABSENT. A
     block that is present but hollow goes through the normal MISSING_QUANTITY
     path, so a half-implemented Path B can never hide behind the deferral."""
     report = _run_diag(tmp_path, lambda c, f, e, p: p.__setitem__(
         "diagnostics", {}))
+    assert report["deferred_targets"] == []
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["targets_met"] is False
+
+
+@pytest.mark.parametrize("bogus", [None, [], "oops"])
+def test_a_null_or_malformed_diagnostics_value_is_not_deferred(tmp_path, bogus):
+    """The deferral gate is `"diagnostics" not in python`, not an isinstance
+    check: the KEY being present is what "Path B has started publishing this
+    contract" means, per PENDING_PATH_B_DIAGNOSTICS's own comment. A
+    clean-room module that returns `diagnostics=None` (or `[]`, or a stray
+    string) on some internal failure has still published the key — that must
+    read as a coverage failure (MISSING_QUANTITY, targets unmet) on the
+    normal path, not as "not implemented yet" (deferred, silently excused).
+    A prior `not isinstance(python.get("diagnostics"), dict)` gate would have
+    misread every one of these three as deferred."""
+    report = _run_diag(
+        tmp_path, lambda c, f, e, p: p.__setitem__("diagnostics", bogus))
     assert report["deferred_targets"] == []
     assert "MISSING_QUANTITY" in _codes(report)
     assert report["targets_met"] is False
@@ -2604,6 +2641,20 @@ def test_cox_diagnostics_are_deferred_while_path_b_has_no_block(tmp_path):
     assert report["deferred_targets"] == ["zph", "ph_note", "epv_note",
                                           "separation_note"]
     assert "cox" in PENDING_PATH_B_DIAGNOSTICS
+
+
+@pytest.mark.parametrize("bogus", [None, [], "oops"])
+def test_a_null_or_malformed_cox_diagnostics_value_is_not_deferred(
+        tmp_path, bogus):
+    """The logistic twin of this test lives above; the deferral gate is
+    shared code (`compare_ratio_table`), so both figures must read a
+    present-but-malformed `diagnostics` value the same way — a coverage
+    failure now, not a deferral."""
+    report = _run_cox_diag(
+        tmp_path, lambda c, f, e, p: p.__setitem__("diagnostics", bogus))
+    assert report["deferred_targets"] == []
+    assert "MISSING_QUANTITY" in _codes(report)
+    assert report["targets_met"] is False
 
 
 def test_an_unusable_note_state_is_not_credited_as_a_comparison(tmp_path):

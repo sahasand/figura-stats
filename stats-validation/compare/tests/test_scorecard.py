@@ -316,3 +316,39 @@ def test_a_case_without_the_deferred_field_renders_as_before(tmp_path):
     for it are always present, so the assertion is on the per-case SPAN's class
     ATTRIBUTE — the only thing that could misreport a row."""
     assert "class='targets-deferred'" not in _build(tmp_path)
+
+
+def test_a_case_with_deferred_targets_does_not_count_toward_the_tile_numerator(tmp_path):
+    """Same precedent this file already applies to NOT_COMPARED's denominator
+    ("a tile can never read complete while such a case exists"), applied to
+    the numerator: a case can carry `targets_met: true` while some of its
+    declared targets are DEFERRED (not yet checked at all, per compare.py's
+    `_Targets.met`, which is computed only over the non-deferred declared
+    targets). Left uncorrected the tile would read "8/8 cases meet targets"
+    while 14 declared targets across three real cases were never enforced —
+    exactly the misleading combination this test pins against a minimal
+    fixture. `test_tile_counts_correct` established the base fixture's
+    "2/4"; giving one of those two cases a deferred target must knock it out
+    of the numerator without changing the denominator."""
+    fixture = json.loads(json.dumps(FIXTURE))
+    fixture["cases"][0]["targets_met"] = True
+    fixture["cases"][0]["deferred_targets"] = ["c_statistic"]
+    findings_path = tmp_path / "findings.json"
+    findings_path.write_text(json.dumps(fixture))
+    html = build_scorecard.build(
+        findings_path=findings_path,
+        out_path=tmp_path / "scorecard.html").read_text()
+    assert "<b>1/4</b>" in html
+    assert "<b>2/4</b>" not in html
+    # ...and the label no longer overclaims what the tile counts.
+    assert "cases fully meet targets" in html
+    # A new tile, mirroring "registered, not compared", makes the excluded
+    # case visible rather than just silently smaller.
+    assert "<b>1</b><span>cases with deferred targets</span>" in html
+
+
+def test_no_deferred_cases_tile_when_nothing_is_deferred(tmp_path):
+    """The base fixture predates `deferred_targets` entirely, so the new tile
+    must not render a stray "0" (or any) tile — mirroring how the pending
+    tile is absent when nothing is pending."""
+    assert "cases with deferred targets</span>" not in _build(tmp_path)

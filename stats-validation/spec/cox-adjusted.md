@@ -128,7 +128,14 @@ is zero there, so the test reduces to the Schur complement
     S = I_θθ − I_βθ' · I_ββ⁻¹ · I_βθ
 
 - **Per covariate**: `chisq_j = U_j² / S_jj`, on 1 degree of freedom for a
-  single-column term.
+  single-column term. For a multi-column term (a categorical covariate on
+  more than 1 degree of freedom), the quadratic-form generalisation is
+  `chisq_j = U_j' · (S_jj)⁻¹ · U_j`, where `U_j` is the sub-vector of `U` for
+  that covariate's columns and `S_jj` is the SUBMATRIX of `S` restricted to
+  those same rows and columns — **not** the corresponding block of `S⁻¹`.
+  The submatrix-of-`S` reading is the one that reproduces R (verified to
+  6.4e-15 on the shipped case); inverting the wrong piece gives a chi-square
+  that is wildly wrong, not merely imprecise.
 - **Global**: `chisq = U' · S⁻¹ · U`, on `p` degrees of freedom.
 - Each p-value is the **upper** tail of the chi-square distribution on those
   degrees of freedom.

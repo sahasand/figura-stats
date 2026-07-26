@@ -151,7 +151,18 @@ def _tiles(data: dict, pending: list[str]) -> str:
         if f["code"] in DEFECT_CODES
     )
     cases = data["cases"]
-    met = sum(1 for c in cases if c["targets_met"])
+    # A case whose `targets_met` is True can still carry non-empty
+    # `deferred_targets` — that field is deliberately excluded from the `met`
+    # computation itself (a deferred target is neither met nor failed), so
+    # `targets_met: true` alone does not mean every declared target was
+    # checked. Applying the SAME PRECEDENT this file already applies to
+    # NOT_COMPARED ("a tile can never read complete while such a case
+    # exists"): a case with any deferred target does not count toward the
+    # numerator here either, and the label says "fully" so the tile cannot be
+    # read as a stronger claim than it is.
+    met = sum(
+        1 for c in cases if c["targets_met"] and not c.get("deferred_targets"))
+    deferred_cases = sum(1 for c in cases if c.get("deferred_targets"))
     # DENOMINATOR IS EVERY REGISTERED CASE, not just the compared ones: a tile
     # reading "7/7" while an eighth case sits uncompared is a true statement
     # that reads as a false one.
@@ -159,11 +170,14 @@ def _tiles(data: dict, pending: list[str]) -> str:
     pending_tile = (
         f"\n  <div class=\"tile\"><b>{len(pending)}</b>"
         f"<span>registered, not compared</span></div>" if pending else "")
+    deferred_tile = (
+        f"\n  <div class=\"tile\"><b>{deferred_cases}</b>"
+        f"<span>cases with deferred targets</span></div>" if deferred_cases else "")
     return f"""<div class="tiles">
   <div class="tile"><b>{esc(compared)}</b><span>values compared</span></div>
   <div class="tile"><b>{esc(findings)}</b><span>differences</span></div>
   <div class="tile"><b>{esc(defects)}</b><span>defects</span></div>
-  <div class="tile"><b>{met}/{total}</b><span>cases meet targets</span></div>{pending_tile}
+  <div class="tile"><b>{met}/{total}</b><span>cases fully meet targets</span></div>{deferred_tile}{pending_tile}
 </div>"""
 
 

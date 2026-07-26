@@ -1064,15 +1064,20 @@ def _compare_cox_diagnostics(text, exact, python, targets):
     _source(findings[mark:], SRC_EXACT)
 
     # -- script tier: does the exported .R's global p re-render the sentence the
-    # screen showed?
+    # screen showed? Re-searches `text` rather than reusing `m` from the
+    # display-tier block ~90 lines above — the logistic twin does the same
+    # (its own `shown = C_STAT_RE.search(text)` right before this tier) so
+    # neither function's script tier depends on nothing having reassigned a
+    # shared variable in between.
     mark = len(findings)
-    if a_global is not None and m is not None:
+    shown = ZPH_RE.search(text)
+    if a_global is not None and shown is not None:
         compared += 1
         rendered = format_p(float(a_global))
-        if rendered != m.group(1):
+        if rendered != shown.group(1):
             findings.append(finding(
-                "SCRIPT_DIVERGENCE", "-", "exported script zph p", m.group(1),
-                rendered,
+                "SCRIPT_DIVERGENCE", "-", "exported script zph p",
+                shown.group(1), rendered,
                 "the exported .R's proportional-hazards p does not reproduce "
                 "the value the screen showed"))
     _source(findings[mark:], SRC_SCRIPT)
@@ -1112,9 +1117,17 @@ def compare_ratio_table(case, figura, exact, python):
     # HERE, before _Targets is built, is what lets the case's diagnostics
     # exact_targets read as deferred rather than as unmet coverage.
     figure = case.get("figure")
+    # "diagnostics" not in python — not an isinstance check — because the
+    # documented invariant (see PENDING_PATH_B_DIAGNOSTICS above) is that the
+    # key is ABSENT ENTIRELY until Path B lands. `not isinstance(..., dict)`
+    # would also fire for null/[]/"oops", which would misread a clean-room
+    # module's own internal-failure sentinel (`diagnostics: None`, say) as
+    # "not implemented yet" instead of the coverage failure it actually is;
+    # a present-but-malformed value must fall through to the ordinary
+    # MISSING_QUANTITY path in the handlers below, not the deferral gate.
     diagnostics_deferred = (
         figure in PENDING_PATH_B_DIAGNOSTICS
-        and not isinstance(python.get("diagnostics"), dict))
+        and "diagnostics" not in python)
     # `or []` so an explicit null reads as "no contract" and hits the vacuity
     # guard, rather than raising inside _Targets.
     targets = _Targets(
