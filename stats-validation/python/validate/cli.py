@@ -49,6 +49,10 @@ RESULTS = Path(__file__).resolve().parents[2] / "results"
 #                     options.get("ref_levels", {}))
 #       ... (skip the generic FITTERS.get(figure) call below for this figure)
 #
+# INTEGRATION STEP: delete the 'Path B cox not yet present' guard below
+# (the `if figure == "cox" and figure not in FITTERS:` block) as part of
+# wiring the explicit branch above.
+#
 # Kept lazy/absent until then so this module keeps importing cleanly with no
 # cox.py on disk.
 FITTERS = {"logistic": fit_logistic}
