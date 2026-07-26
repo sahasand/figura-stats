@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { buildSpecForCase } from "./build-spec.mjs";
 import { parseCsv } from "../../web/lib/csv.js";
 import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
@@ -187,10 +188,22 @@ assert.ok(Array.isArray(summarySpec.data) && summarySpec.data.length === 120,
 // and the shipped builder re-derives its own via classifyColumns. The two must
 // agree, or the comparator's expectations are keyed to rows the app will never
 // print — and the harvester's s1..sN / t1..tM would be mis-keyed too.
-assert.deepEqual(summarySpec.options.continuous,
-  ["age", "length_of_stay", "crp"],
+//
+// THIS IS ALSO THE ONLY CHECK THAT CATCHES A SAME-ARITY SWAP. run-script.R's
+// harvest_summary keys s1..sN / t1..tM by the case's declared roles and stops
+// loudly when the COUNTS disagree; a swap (one variable moving each way) leaves
+// the counts intact and would silently file one variable's numbers under
+// another's name. It is caught here, by comparing the two lists element by
+// element — so this assertion reads the case's roles from case.json rather than
+// restating them, and the literal expectation is asserted against case.json
+// separately (a case.json that lost both keys must not pass vacuously).
+const summaryCase = JSON.parse(readFileSync(
+  "stats-validation/cases/summary-table1/case.json", "utf8"));
+assert.deepEqual(summaryCase.roles.continuous, ["age", "length_of_stay", "crp"]);
+assert.deepEqual(summaryCase.roles.categorical, ["sex", "diabetes"]);
+assert.deepEqual(summarySpec.options.continuous, summaryCase.roles.continuous,
   "the app's own classification must match the case's declared continuous set");
-assert.deepEqual(summarySpec.options.categorical, ["sex", "diabetes"],
+assert.deepEqual(summarySpec.options.categorical, summaryCase.roles.categorical,
   "the app's own classification must match the case's declared categorical set");
 // Blank cells travel as empty strings, not as dropped keys: fig_summary counts
 // them per variable and never drops the row.

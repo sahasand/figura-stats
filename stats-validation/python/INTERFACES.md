@@ -195,9 +195,13 @@ and reproduces R.
   - `fmt_num(v) -> str` — R's `.fmt_num`, three significant figures, plain
     notation, trailing zeros dropped, **round-half-to-even at the tie**
     (`1.125` renders `"1.12"`). Note that R's `signif` rounds the SCALED value
-    `x * 10^e`, not the exact decimal expansion of the double: `2.225` renders
-    `"2.22"` (because `2.225 * 100` is `222.49999999999997`) while `2.475`
-    renders `"2.48"`. `compare.py`'s `_signif` restates that algorithm and
-    documents the measurement.
+    `x * 10^e`, not the exact decimal expansion of the double — and the
+    difference is that the multiply can land *exactly* on a `.5` tie, where
+    half-to-even applies, while a decimal-exact round never sees a tie. So
+    `2.225` renders `"2.22"` (`2.225 * 100` is exactly `222.5`; half-to-even
+    gives `222`, whereas `round(2.225, 2)` gives `2.23`) and `1.315` renders
+    `"1.32"` (`131.5` -> `132`, whereas `round(1.315, 2)` gives `1.31`).
+    `compare.py`'s `_signif` restates that algorithm; both probes are pinned in
+    `tests/test_summary.py` and `compare/tests/test_compare.py`.
 
 Cells are rendered strings by design; every other quantity is at full precision.

@@ -24,7 +24,16 @@ import pytest
 from compare import (
     DISPOSITIONS,
     KIND_HANDLERS,
+    PASS_CODES,
     PENDING_KINDS,
+    SEVERITY,
+    SOURCES,
+    SRC_DISPLAY,
+    SRC_EXACT,
+    SRC_SCRIPT,
+    SRC_UNCLASSIFIED,
+    _table1_harvest_cells,
+    _table1_script_tier,
     classify_cell,
     classify_gc_effect_display,
     classify_km_logrank_display,
@@ -139,12 +148,32 @@ def _tree(tmp_path, case, figura, exact, python):
     return results, tmp_path / "cases"
 
 
+def _report(case_id, results, cases):
+    """EVERY whole-case test runs through here, so the source-attribution
+    invariant is enforced by all ~90 of them rather than by one test.
+
+    A finding with no source renders on the scorecard as "UNCLASSIFIED
+    (comparator bug)" instead of naming which two artifacts it compared — and
+    "Figura" alone means the screen on one tier and the exported script's
+    harvest on another. Any new tier or guard that forgets its `_source(...)`
+    marker fails here, in whichever test first provokes the finding.
+    """
+    report = compare_case(case_id, results=results, cases=cases)
+    for f in report["findings"]:
+        assert f["source"] in SOURCES, f
+        assert f["source"] != SRC_UNCLASSIFIED, (
+            f"{case_id}: finding {f['quantity']!r} ({f['code']}) reached "
+            "publication with no comparison source — a _source(...) marker is "
+            "missing in compare.py")
+    return report
+
+
 def _run(tmp_path, mutate=None):
     case, figura, exact, python = _base()
     if mutate is not None:
         mutate(case, figura, exact, python)
     results, cases = _tree(tmp_path, case, figura, exact, python)
-    return compare_case(case["id"], results=results, cases=cases)
+    return _report(case["id"], results, cases)
 
 
 def _codes(report):
@@ -588,7 +617,7 @@ def _run_km(tmp_path, mutate=None):
     if mutate is not None:
         mutate(case, figura, exact, python)
     results, cases = _tree(tmp_path, case, figura, exact, python)
-    return compare_case(case["id"], results=results, cases=cases)
+    return _report(case["id"], results, cases)
 
 
 # -- pure-function vectors ---------------------------------------------------
@@ -1060,7 +1089,7 @@ def _run_gc(tmp_path, mutate=None, base=_base_gc):
     if mutate is not None:
         mutate(case, figura, exact, python)
     results, cases = _tree(tmp_path, case, figura, exact, python)
-    return compare_case(case["id"], results=results, cases=cases)
+    return _report(case["id"], results, cases)
 
 
 # -- pure-function vectors ---------------------------------------------------
@@ -1685,7 +1714,7 @@ def _run_t1(tmp_path, mutate=None):
     if mutate is not None:
         mutate(case, figura, exact, python)
     results, cases = _tree(tmp_path, case, figura, exact, python)
-    return compare_case(case["id"], results=results, cases=cases)
+    return _report(case["id"], results, cases)
 
 
 def _codes(report):
@@ -1695,20 +1724,38 @@ def _codes(report):
 # -- pure-function vectors ---------------------------------------------------
 
 def test_signif_restates_rs_scaled_rounding_not_a_decimal_exact_round():
-    """R's `signif` is `nearbyint(x * 10^e) / 10^e`, so it can disagree with a
-    decimal-exact round on the double either side of a tie. Both probes are
-    real cells: crp's Control and Treatment first quartiles in the shipped
-    summary-table1 case, displayed as "2.48" and "2.22".
+    """R's `signif` is `nearbyint(x * 10^e) / 10^e`, which disagrees with a
+    decimal-exact round whenever the SCALING MULTIPLY lands exactly on a .5
+    tie: `nearbyint` resolves a tie half to EVEN, while a decimal-exact round
+    of the double never sees a tie at all (the double is a hair above or below
+    it). The direction depends on the parity of the scaled integer, not on any
+    drift, so the rule has to be restated rather than approximated.
 
-    R: f <- function(v) format(signif(v, 3), trim = TRUE, scientific = FALSE,
-                               drop0trailing = TRUE)
-       f(2.225)  # "2.22"   -- 2.225 * 100 is 222.49999999999997
-       f(2.475)  # "2.48"   -- 2.475 * 100 is 247.50000000000003
-    A `round(v, 2)` restatement answers 2.23 for the first, and reported a
-    SCRIPT_DIVERGENCE against a correct cell before this was fixed.
+    2.225 and 2.475 are real cells — crp's Treatment and Control first
+    quartiles in the shipped summary-table1 case, displayed as "2.22" and
+    "2.48". VERIFIED, in Python:
+        Decimal(2.225)       -> 2.2250000000000000888...  (above the tie)
+        Decimal(2.225 * 100) -> exactly 222.5 -> half-to-even -> 222 -> 2.22
+        round(2.225, 2)      -> 2.23         (the OLD restatement: wrong)
+        Decimal(2.475 * 100) -> exactly 247.5 -> half-to-even -> 248 -> 2.48
+        round(2.475, 2)      -> 2.48         (agrees, by coincidence)
+        Decimal(1.315)       -> 1.3149999999999999467...  (BELOW the tie)
+        Decimal(1.315 * 100) -> exactly 131.5 -> half-to-even -> 132 -> 1.32
+        round(1.315, 2)      -> 1.31         (the OLD restatement: wrong)
+    and in R:
+        f <- function(v) format(signif(v, 3), trim = TRUE, scientific = FALSE,
+                                drop0trailing = TRUE)
+        f(2.225); f(2.475); f(1.315)   # "2.22"  "2.48"  "1.32"
+
+    2.225 is the probe that CAUGHT the bug (a SCRIPT_DIVERGENCE reported
+    against a perfectly correct cell); 1.315 is the second discriminating
+    probe, in the opposite direction, so a restatement that "fixed" 2.225 by
+    nudging ties downward is caught too.
     """
     assert format_num_gc(2.225) == "2.22"
     assert format_num_gc(2.475) == "2.48"
+    assert format_num_gc(1.315) == "1.32"
+    assert round(1.315, 2) == 1.31  # what the wrong restatement answered
 
 
 def test_table1_cell_renderers_match_r():
@@ -2022,3 +2069,159 @@ def test_t1_a_missing_row_is_not_also_reported_as_an_ordering_difference(tmp_pat
     report = _run_t1(tmp_path, mutate)
     assert not any(f["quantity"] == "row order" for f in report["findings"])
     assert "MISSING_QUANTITY" in _codes(report)
+
+
+def test_t1_two_path_b_rows_with_the_same_key_is_a_defect(tmp_path):
+    """SYMMETRY with the displayed side, which already flags a duplicate key.
+    Before this, Path B's second row silently replaced the first and the
+    comparison ran against whichever one it emitted last — the overwritten row
+    was never compared and nothing said so."""
+    def mutate(case, figura, exact, python):
+        dup = copy.deepcopy(next(r for r in python["rows"]
+                                 if r.get("level") == "Female"))
+        python["rows"].append(dup)
+    report = _run_t1(tmp_path, mutate)
+    hit = [f for f in report["findings"] if f["quantity"] == "Path B row"]
+    assert [f["code"] for f in hit] == ["DEFECT"]
+    assert hit[0]["term"] == "sex: Female"
+
+
+def test_t1_an_unreadable_group_header_never_mis_keys_the_columns(tmp_path):
+    """FINDINGS-FIRST IS FINE; MIS-KEYING IS NOT. When a column header fails
+    the '<level> (N=n)' regex, the readable headers must keep their own column
+    positions. Zipping cells against the SURVIVING header list would shift
+    every column after the bad one and file Treatment's numbers under a third
+    group's name, manufacturing disagreements that do not exist."""
+    case, _f, _e, _p = _base_t1()
+    case["roles"]["group"] = "arm"
+    broken = T1_TSV.replace("Control (N=60)\t", "Control\t")
+    headers, group_n, rows, findings = parse_table1_tsv(broken, case)
+    assert [f["code"] for f in findings] == ["DEFECT"]
+    assert headers == ["Treatment"]
+    assert group_n == {"Treatment": 60}
+    by_key = {r["key"]: r for r in rows}
+    # Treatment's cell is Treatment's, NOT the Control column shifted left.
+    assert by_key["age"]["cells"] == {"Treatment": f"60.2 {PM} 11.4"}
+    assert by_key["sex: Female"]["cells"] == {"Treatment": "28 (47%)"}
+
+
+def test_t1_vacuous_categorical_kind_claims_are_not_counted_as_comparisons():
+    """The script tier's `compared` is an EVIDENCE count, so a comparison of two
+    constants must not inflate it.
+
+    For a CONTINUOUS variable the harvest's kind is a claim the exported script
+    really made: run-script.R reads it off the harvested element names
+    (`c("mean","sd")` vs `c("25%","50%","75%")`), so the script re-expressed the
+    app's mean-vs-median choice and checking it is evidence. For a CATEGORICAL
+    one there is no choice and no name to read — "count" is written by
+    _table1_harvest_cells on one side and by parse_table1_tsv on the other, so
+    the comparison cannot fail and proves nothing. Six such rows (2 headers +
+    4 levels) were being counted in the shipped case.
+    """
+    case, _figura, exact, _python = _base_t1()
+    _h, _g, rows, parse_findings = parse_table1_tsv(T1_TSV, case)
+    assert parse_findings == []
+    script_findings, compared = _table1_script_tier(
+        exact, {r["key"]: r for r in rows})
+    assert script_findings == []
+    # 3 continuous kind claims + 3 continuous vars x 2 groups of cells
+    # + 6 categorical rows x 2 groups of cells = 21. NOT 27: the six
+    # categorical kind claims are performed but not counted.
+    assert compared == 3 + 6 + 12
+
+    # The harvest still LABELS the categorical rows, so a screen row claiming
+    # `mean` for a variable the script tabulated is still reported — it just
+    # does not buy coverage.
+    flags = {key: is_evidence
+             for key, (_kind, is_evidence, _cells)
+             in _table1_harvest_cells(exact).items()}
+    assert flags == {"age": True, "length_of_stay": True, "crp": True,
+                     "sex": False, "sex: Female": False, "sex: Male": False,
+                     "diabetes": False, "diabetes: No": False,
+                     "diabetes: Yes": False}
+
+
+# ==========================================================================
+# finding attribution — which two artifacts each finding compared
+# ==========================================================================
+
+def test_severity_ranks_every_non_pass_code(tmp_path):
+    """_rank falls back to len(SEVERITY) for an unranked code, which would sort
+    a brand-new defect code BELOW every display artifact — the least severe
+    position — silently. Every code the comparator can publish must have an
+    explicit rank."""
+    publishable = set(DISPOSITIONS) - PASS_CODES
+    assert publishable <= set(SEVERITY), (
+        f"unranked finding codes: {sorted(publishable - set(SEVERITY))}")
+    # ...and nothing in SEVERITY that DISPOSITIONS does not declare.
+    assert set(SEVERITY) <= set(DISPOSITIONS)
+
+
+def _sources(report):
+    return {f["quantity"]: f["source"] for f in report["findings"]}
+
+
+def test_every_published_finding_names_its_comparison(tmp_path):
+    """No finding may reach the scorecard unattributed: the Figura column means
+    three different artifacts depending on the tier."""
+    reports = [
+        _run(tmp_path / "ratio", lambda c, f, e, p: p.__setitem__("n", 1)),
+        _run_km(tmp_path / "km", lambda c, f, e, p: p.__setitem__("n", 1)),
+        _run_gc(tmp_path / "gc", lambda c, f, e, p: p.__setitem__("n", 1)),
+        _run_t1(tmp_path / "t1", lambda c, f, e, p: p.__setitem__("n", 1)),
+    ]
+    for report in reports:
+        assert report["findings"], "each mutation is expected to find something"
+        for f in report["findings"]:
+            assert f["source"] in SOURCES, f
+            assert f["source"] != SRC_UNCLASSIFIED, (
+                f"{report['id']} {f['quantity']} reached publication with no "
+                "source; a block marker is missing in compare.py")
+
+
+def test_exact_tier_findings_are_attributed_to_the_exported_script(tmp_path):
+    """THE logistic-dirty SHAPE, pinned. The exact tier's Path A side is the
+    harvest from RE-RUNNING THE EXPORTED SCRIPT, so an exact-tier defect (and
+    the count mismatch that usually comes with it) indicts the export path —
+    not the numbers the user was shown. The display tier is what speaks for the
+    screen, and here it stays silent."""
+    def mutate(case, figura, exact, python):
+        # Path B and the SCREEN agree; only the exported script's harvest
+        # disagrees — exactly logistic-dirty's shape.
+        exact["n"] = 100
+        exact["terms"]["age"]["est"] = 9.99
+
+    report = _run(tmp_path, mutate)
+    by_quantity = _sources(report)
+    assert by_quantity["n"] == SRC_EXACT
+    assert by_quantity["est"] == SRC_EXACT
+    # The screen was never accused: no display-tier finding at all.
+    assert not any(f["source"] == SRC_DISPLAY for f in report["findings"])
+    # ...while the script tier, which reads the same harvest against the
+    # screen, does fire — and is attributed as screen vs exported script.
+    script = [f for f in report["findings"] if f["code"] == "SCRIPT_DIVERGENCE"]
+    assert script and all(f["source"] == SRC_SCRIPT for f in script)
+
+
+def test_display_tier_findings_are_attributed_to_the_screen(tmp_path):
+    def mutate(case, figura, exact, python):
+        python["display_terms"]["age"] = {"est": 9.99, "lo": 8.0, "hi": 11.0,
+                                          "p": 0.5}
+    report = _run(tmp_path, mutate)
+    hit = [f for f in report["findings"]
+           if f["quantity"] == "displayed adjusted cell"]
+    assert hit and all(f["source"] == SRC_DISPLAY for f in hit)
+
+
+def test_t1_tier_sources(tmp_path):
+    """table1's four tiers, each attributed from its own artifacts."""
+    def mutate(case, figura, exact, python):
+        python["n"] = 119                                    # exact tier
+        next(r for r in python["rows"]
+             if r["variable"] == "age")["cells"]["Control"] = "x"  # display
+        exact["continuous"]["crp"]["stats"]["Control"]["50%"] = 9.9  # script
+    report = _run_t1(tmp_path, mutate)
+    by_quantity = _sources(report)
+    assert by_quantity["n"] == SRC_EXACT
+    assert by_quantity["displayed cell [Control]"] == SRC_DISPLAY
+    assert by_quantity["exported script cell [Control]"] == SRC_SCRIPT

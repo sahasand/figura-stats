@@ -128,17 +128,31 @@ def test_three_significant_figures_with_trailing_zeros_dropped():
 def test_signif_rounds_the_scaled_value_the_way_r_does():
     """R's `signif` is `nearbyint(x * 10^e) / 10^e`, NOT a decimal-exact round.
 
-    The double nearest 2.225 is 2.2250000000000000888..., so a decimal-exact
-    rule gives 2.23 — but `2.225 * 100` is 222.49999999999997, so R gives 2.22.
-    2.475 goes the other way. Both are real cells: 2.225 and 2.475 are crp's
-    Treatment and Control first quartiles in the shipped summary-table1 case,
-    displayed as "2.22" and "2.48".
+    THE MECHANISM: the scaling multiply lands EXACTLY on a .5 tie, where
+    `nearbyint` rounds half to EVEN — while a decimal-exact round of the double
+    never sees a tie at all, because the double sits a hair above or below it.
+    Which way they differ depends on the parity of the scaled integer, so this
+    cannot be approximated by "round, but nudge ties down".
 
-    R:  f(2.225)   # 2.22
-        f(2.475)   # 2.48
+    Verified in Python (Decimal shows the exact double):
+        Decimal(2.225)       -> 2.2250000000000000888...   above the tie
+        Decimal(2.225 * 100) -> exactly 222.5 -> half-even -> 222 -> 2.22
+        round(2.225, 2)      -> 2.23     <- what a decimal-exact rule answers
+        Decimal(2.475 * 100) -> exactly 247.5 -> half-even -> 248 -> 2.48
+        round(2.475, 2)      -> 2.48     <- agrees here, by coincidence
+        Decimal(1.315)       -> 1.3149999999999999467...   BELOW the tie
+        Decimal(1.315 * 100) -> exactly 131.5 -> half-even -> 132 -> 1.32
+        round(1.315, 2)      -> 1.31     <- differs in the OTHER direction
+    and in R:
+        f(2.225); f(2.475); f(1.315)     # "2.22"  "2.48"  "1.32"
+
+    2.225 and 2.475 are real cells — crp's Treatment and Control first
+    quartiles in the shipped summary-table1 case, displayed as "2.22" and
+    "2.48". 1.315 is the discriminating probe in the opposite direction.
     """
     assert fmt_num(2.225) == "2.22"
     assert fmt_num(2.475) == "2.48"
+    assert fmt_num(1.315) == "1.32"
 
 
 # ---------------------------------------------------------------------------

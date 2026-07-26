@@ -304,11 +304,19 @@ harvest_groupcompare <- function(env, id) {
 # way to name them is the selection order, so this harvester reads the case's
 # declared roles (cwd is the case dir while it runs, so "case.json" resolves)
 # and re-derives the order the way buildSummarySpec does: CSV COLUMN ORDER
-# filtered to the selected variables, taken from the script's own `df`. A
-# mismatch between the case's declared split and what the app actually
-# classified would silently mis-key every s/t object, so the arity is checked
-# and a disagreement stops loudly rather than harvesting the wrong variable's
-# numbers under the right variable's name.
+# filtered to the selected variables, taken from the script's own `df`.
+#
+# WHAT THE CHECK BELOW ACTUALLY CATCHES, stated exactly. A mismatch between the
+# case's declared split and what the app really classified would mis-key every
+# s/t object. The check here compares ARITY: it stops loudly when the script
+# defines an s/t object the declared roles do not account for (a variable moved
+# INTO continuous, or an extra one selected), and `need()` stops when a declared
+# variable has no object at all. It does NOT catch a SAME-ARITY SWAP — one
+# variable moving from continuous to categorical while another moves the other
+# way, leaving the counts unchanged. That case is caught upstream instead, by
+# harness/build-spec.test.mjs, which asserts the app's own classifyColumns split
+# equals the case's declared roles.continuous/roles.categorical. Two checks, and
+# the pair covers the failure; neither covers it alone.
 harvest_summary <- function(env, id) {
   df <- need(env, "df", id)
   grp <- need(env, ".grp", id)

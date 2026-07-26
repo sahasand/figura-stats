@@ -6,8 +6,24 @@ findings.json):
 
   {cases: [{id, kind, compared, passed, targets_met, targets: {...},
             findings: [{code, disposition, term, quantity, figura, python,
-                        note}, ...]}, ...],
+                        note, source}, ...]}, ...],
    total_compared, total_findings}
+
+TWO THINGS THIS FILE REFUSES TO LET THE READER ASSUME.
+
+1. `figura` is not one artifact. On the display tier it is the SCREEN; on the
+   exact tier it is the harvest from re-running the EXPORTED SCRIPT; on the
+   script tier the `python` column is the exported script rather than Path B.
+   compare.py stamps every finding with a `source` naming the comparison, and
+   the table prints it in its own column — because the shipped logistic-dirty
+   case fails its exact tier while its display tier passes, i.e. the numbers on
+   screen were right and the exported .R was wrong, and a column headed
+   "Figura" alone says the opposite.
+2. findings.json only lists cases that were COMPARED. A case can be registered
+   in the Makefile, run its Path A half, and still have no second opinion (no
+   python.json). Those cases get their own visibly-incomplete rows here, from
+   the artifacts on disk in results/ — otherwise a scorecard reading "7/7"
+   while eight cases are registered looks complete when it is not.
 
 There is no top-level `targets` key — only per-case. Findings never carry
 `code == "PASS"` (compare.py only appends non-pass findings; a passing case
@@ -67,13 +83,19 @@ th { font-weight:600; }
 code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
 /* Real emitted finding codes only (compare.py DISPOSITIONS). No EXACT_PASS:
    the comparator never emits it, so styling it would suggest a tier ran that
-   did not. */
+   did not. NOT_COMPARED is the one class here that is NOT a compare.py code —
+   it is this file's own state for a registered case findings.json never
+   mentions, and it is styled warn rather than fail because nothing failed:
+   nothing was checked. */
 .PASS { color:var(--pass); }
 .DISPLAY_ARTIFACT { color:var(--warn); }
 .DEFECT,.COUNT_MISMATCH,.SCRIPT_DIVERGENCE,.MISSING_QUANTITY,
 .DECISION_MISMATCH { color:var(--fail); font-weight:600; }
+.NOT_COMPARED { color:var(--warn); font-weight:600; }
 .targets-met { color:var(--pass); font-size:.78rem; white-space:nowrap; }
 .targets-unmet { color:var(--fail); font-weight:600; font-size:.78rem; white-space:nowrap; }
+.targets-none { color:var(--warn); font-weight:600; font-size:.78rem; white-space:nowrap; }
+.source { color:var(--muted); font-size:.78rem; white-space:nowrap; }
 .webr-empty { border:1px dashed var(--rule); border-radius:8px; padding:1rem 1.1rem;
               color:var(--muted); }
 """
@@ -92,7 +114,30 @@ DEFECT_CODES = frozenset(
 )
 
 
-def _tiles(data: dict) -> str:
+def registered_cases(results_dir: Path) -> list[str]:
+    """Every case the pipeline actually RAN, read off results/.
+
+    The Makefile touches `results/<id>.done` per case — including cases that
+    only have a Path A half — so the marker files are the case list. The
+    `.figura.json` artifacts are unioned in as a fallback for a results/ that
+    was populated without the marker (e.g. a hand-run harness step).
+    """
+    results_dir = Path(results_dir)
+    if not results_dir.is_dir():
+        return []
+    ids = {p.name[: -len(".done")] for p in results_dir.glob("*.done")}
+    ids |= {p.name[: -len(".figura.json")]
+            for p in results_dir.glob("*.figura.json")}
+    return sorted(ids)
+
+
+def _pending(data: dict, results_dir: Path) -> list[str]:
+    """Registered cases that findings.json does not account for."""
+    compared = {c["id"] for c in data["cases"]}
+    return [c for c in registered_cases(results_dir) if c not in compared]
+
+
+def _tiles(data: dict, pending: list[str]) -> str:
     compared = data["total_compared"]
     findings = data["total_findings"]
     defects = sum(
@@ -101,12 +146,45 @@ def _tiles(data: dict) -> str:
     )
     cases = data["cases"]
     met = sum(1 for c in cases if c["targets_met"])
+    # DENOMINATOR IS EVERY REGISTERED CASE, not just the compared ones: a tile
+    # reading "7/7" while an eighth case sits uncompared is a true statement
+    # that reads as a false one.
+    total = len(cases) + len(pending)
+    pending_tile = (
+        f"\n  <div class=\"tile\"><b>{len(pending)}</b>"
+        f"<span>registered, not compared</span></div>" if pending else "")
     return f"""<div class="tiles">
   <div class="tile"><b>{esc(compared)}</b><span>values compared</span></div>
   <div class="tile"><b>{esc(findings)}</b><span>differences</span></div>
   <div class="tile"><b>{esc(defects)}</b><span>defects</span></div>
-  <div class="tile"><b>{met}/{len(cases)}</b><span>cases meet targets</span></div>
+  <div class="tile"><b>{met}/{total}</b><span>cases meet targets</span></div>{pending_tile}
 </div>"""
+
+
+def _pending_rows(pending: list[str], results_dir: Path) -> str:
+    """A visible row per registered-but-uncompared case, saying which half is
+    missing — read from the artifacts on disk, never hard-coded to one case."""
+    rows = []
+    for case_id in pending:
+        have_a = (results_dir / f"{case_id}.figura.json").exists()
+        have_b = (results_dir / f"{case_id}.python.json").exists()
+        if have_a and not have_b:
+            why = ("Path A artifacts published; no Path B artifact "
+                   f"({case_id}.python.json) exists, so nothing was compared "
+                   "and this case is covered by no guarantee")
+        elif not have_a:
+            why = ("no Path A artifact "
+                   f"({case_id}.figura.json); the case did not run")
+        else:
+            why = ("both paths produced artifacts but the case was not passed "
+                   "to the comparator")
+        rows.append(
+            f"<tr><td>{esc(case_id)}</td>"
+            f"<td class='NOT_COMPARED'>NOT COMPARED</td>"
+            f"<td class='targets-none'>NO COVERAGE</td>"
+            f"<td class='source'>&mdash;</td>"
+            f"<td colspan='4'>{esc(why)}</td></tr>")
+    return "".join(rows)
 
 
 def _rows(data: dict) -> str:
@@ -118,16 +196,20 @@ def _rows(data: dict) -> str:
         if not c["findings"]:
             rows.append(
                 f"<tr><td>{esc(c['id'])}</td><td class='PASS'>PASS</td>"
-                f"{coverage_cell}"
+                f"{coverage_cell}<td class='source'>&mdash;</td>"
                 f"<td colspan='4'>{esc(c['compared'])} values compared, "
                 f"no differences</td></tr>"
             )
             continue
         for f in c["findings"]:
+            # `source` names which two artifacts the two value columns hold.
+            # Older findings.json files predate it; they render an em dash
+            # rather than an unlabelled (and therefore misattributed) row.
             rows.append(
                 f"<tr><td>{esc(c['id'])}</td>"
                 f"<td class='{esc(f['code'])}'>{esc(f['code'])}</td>"
                 f"{coverage_cell}"
+                f"<td class='source'>{esc(f.get('source') or '—')}</td>"
                 f"<td>{esc(f['term'])}</td><td>{esc(f['quantity'])}</td>"
                 f"<td><code>{esc(f['figura'])}</code></td>"
                 f"<td><code>{esc(f['python'])}</code></td></tr>"
@@ -160,7 +242,16 @@ def build(findings_path: Path | str | None = None,
     results_dir = findings_path.parent
     out_path = Path(out_path) if out_path else results_dir / "scorecard.html"
 
+    # An absent findings.json means compare.py never got as far as writing one.
+    # Say that in one line instead of a traceback — and never fall back to
+    # whatever scorecard.html happens to be sitting on disk.
+    if not findings_path.exists():
+        raise SystemExit(
+            f"scorecard: no findings to publish ({findings_path} does not "
+            "exist). compare.py writes it before it returns, so its absence "
+            "means the comparator did not finish.")
     data = json.loads(findings_path.read_text())
+    pending = _pending(data, results_dir)
 
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -169,15 +260,28 @@ def build(findings_path: Path | str | None = None,
 <h1>Statistical validation scorecard</h1>
 <p class="sub">Every number Figura reports, re-derived by an independently
 programmed Python implementation from the same raw CSV.</p>
-{_tiles(data)}
+{_tiles(data, pending)}
 <div class="scroll"><table>
-<thead><tr><th>Case</th><th>Result</th><th>Coverage</th><th>Term</th>
-<th>Quantity</th><th>Figura</th><th>Python</th></tr></thead>
-<tbody>{_rows(data)}</tbody></table></div>
+<thead><tr><th>Case</th><th>Result</th><th>Coverage</th><th>Compared</th>
+<th>Term</th><th>Quantity</th><th>Figura</th><th>Python</th></tr></thead>
+<tbody>{_rows(data)}{_pending_rows(pending, results_dir)}</tbody></table></div>
+<p class="sub"><b>Compared</b> names the two artifacts behind the Figura and
+Python columns, in that order, because "Figura" is three different things
+depending on the tier. <i>screen vs Python</i> checks the numbers the user was
+actually shown against the independent implementation. <i>exported script vs
+Python</i> checks the harvest from re-running the <code>.R</code> the app
+exports &mdash; so a defect on that line indicts the <b>export path</b>, and
+says nothing against the displayed numbers unless a <i>screen vs Python</i> row
+fails too. <i>screen vs exported script</i> is Path A against itself: there the
+Python column holds the exported script's own value, not Path B's.</p>
 <p class="sub"><b>Coverage</b> ("targets met") means every quantity the case
 declares in <code>exact_targets</code> was actually credited by a performed
 comparison — a coverage failure marks a case TARGETS UNMET even if every
-comparison that did run passed. <b>Display artifact</b> means both paths
+comparison that did run passed. <b>NOT COMPARED</b> marks a case that is
+registered and ran, but whose two paths were never set against each other; it
+carries no guarantee at all, and it is counted in the cases tile's denominator
+so the tile can never read complete while such a case exists.
+<b>Display artifact</b> means both paths
 computed the same number and only the rendered string differs, within half a
 display step. <b>Defect</b> means the values themselves disagree beyond a
 relative tolerance of 1e-6. <b>Missing quantity</b> means something expected

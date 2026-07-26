@@ -57,6 +57,49 @@ and applies `String(cell).trim()` to every cell as it builds the table
   cells.)
 - Whitespace-only cells cannot survive the parser's trim, so they are blanks.
 
+## Which variables are continuous and which are categorical
+
+**Normative, and `summarize`'s own job.** `summarize(df, variables, group=None)`
+receives a FLAT list of variables — the split into continuous and categorical is
+not an input, it is a decision the implementation makes from the data, exactly
+as the app does. (The case's declared `roles.continuous` / `roles.categorical`
+are the comparator's expectation of the answer, never a hint to Path B.)
+
+The rule, restating `classifyColumns` in `web/guided/summary/analyze-form.js`
+(whose output becomes `options.continuous` / `options.categorical` in the spec
+sent to R — `R/summarize.R` never re-classifies anything, it does what those two
+lists say):
+
+> A variable is **continuous** if and only if its column is **numeric** AND it
+> has **MORE THAN FIVE** distinct non-missing values. Everything else is
+> **categorical**.
+
+with the two terms pinned:
+
+- **numeric** is the CSV parser's per-column type (`web/lib/csv.js`'s
+  `parseCsv`): a column is numeric when **every non-blank cell parses as a
+  finite number** and at least one cell is non-blank. Blank cells do not
+  disqualify a column. The literal text `NA` is not a number, so **one `NA`
+  cell makes the whole column categorical** — the same asymmetry the Cell
+  reading section describes.
+- **distinct** counts the trimmed cell TEXT, not parsed values, and excludes
+  blanks. `"1"` and `"1.0"` are two distinct values.
+
+Consequences worth stating because they are easy to get backwards:
+
+- The boundary is **more than five**, not five or more: a numeric column with
+  exactly 5 distinct values is CATEGORICAL.
+- A 0/1-coded numeric flag is categorical (2 distinct values), and is reported
+  as counts and percentages, never as a mean.
+- A numeric column carrying one literal `NA` is categorical, so it never
+  reaches `.numeric_col` and never raises the "must be numeric" error.
+- The group column is never among `variables`, so it is never classified.
+
+For this case (counted from the file): `age` numeric with 45 distinct values,
+`length_of_stay` numeric with 64 (and 8 blanks), `crp` numeric with 82 — all
+three continuous; `sex` and `diabetes` are non-numeric with 2 levels each —
+categorical; `arm` is the group.
+
 ## Population
 
 **No row is ever dropped.** Unlike every other analysis in this repository,
@@ -161,11 +204,34 @@ That is: round to **3 significant figures** (not 3 decimal places), render in
 **plain notation** (never scientific, at any magnitude), and **drop trailing
 zeros** (and a trailing decimal point).
 
-`signif` inherits IEEE **round-half-to-even** on an exactly representable tie,
-so a `.xx5` value at the third significant figure rounds to the *even* digit,
-not away from zero. This is the one nuance an independent implementation is
-likely to get wrong (Python's `round()` does the same thing; C's `printf("%.2f")`
-and a naive `Decimal(ROUND_HALF_UP)` do not).
+**How `signif` actually rounds, which is the one thing an independent
+implementation is likely to get wrong.** `signif(x, 3)` is not "round the exact
+decimal value of the double to 3 significant figures". R computes it
+(`src/nmath/fprec.c`) as
+
+```
+e = 3 - 1 - floor(log10(|x|));   nearbyint(x * 10^e) / 10^e
+```
+
+— it **scales, rounds the scaled value half-to-even, and scales back**. The
+scaling multiply is itself a floating-point operation, and it can land *exactly*
+on a `.5` tie even when the original double is not a tie at all. That is where a
+decimal-exact rounding rule diverges:
+
+- `2.225` as a double is `2.2250000000000000888…`, strictly ABOVE the tie, so a
+  decimal-exact rule rounds it up to `2.23` — but `2.225 * 100` is **exactly**
+  `222.5`, and half-to-even gives `222`, so R renders **`2.22`**.
+- `1.315` as a double is `1.3149999999999999467…`, strictly BELOW the tie, so a
+  decimal-exact rule rounds it down to `1.31` — but `1.315 * 100` is again
+  exactly `131.5`, and half-to-even gives `132`, so R renders **`1.32`**.
+- `2.475` gives `2.48` under both rules — the scaled `247.5` rounds up to the
+  even `248`, and the double is above the tie. Agreement by coincidence.
+
+So implement the algorithm, not an approximation of it: **scale, round the
+scaled value half-to-even (Python's one-argument `round()` on a float is exactly
+that), scale back** — never a two-argument `round(v, k)` or a decimal-exact
+half-up rule. (C's `printf("%.2f")` and a naive `Decimal(ROUND_HALF_UP)` are
+wrong in a third way.)
 
 R-verified probe set (`format(signif(v, 3), trim = TRUE, scientific = FALSE,
 drop0trailing = TRUE)`):
@@ -178,6 +244,9 @@ drop0trailing = TRUE)`):
 | `2.50` | `2.5` |
 | `2.0` | `2` |
 | **`1.125`** | **`1.12`** (half-to-even; NOT `1.13`) |
+| **`2.225`** | **`2.22`** (scaled tie; a decimal-exact round says `2.23`) |
+| **`1.315`** | **`1.32`** (scaled tie; a decimal-exact round says `1.31`) |
+| `2.475` | `2.48` |
 | `250000` | `250000` (plain, not `2.5e+05`) |
 | `0` | `0` |
 

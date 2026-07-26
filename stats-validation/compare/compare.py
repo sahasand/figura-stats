@@ -14,12 +14,22 @@ Three comparison tiers, each answering a different question:
   display tier   Does Python's number, pushed through Figura's own display
                  rule, produce the identical string the user saw? Both the
                  unadjusted and the adjusted column.
+                 (screen vs Path B)
   exact tier     Do the full-precision adjusted numbers agree to rel 1e-6 /
-                 abs 1e-9? est, se, lo, hi, p.
+                 abs 1e-9? est, se, lo, hi, p. The Path A side here is the
+                 EXPORTED SCRIPT's harvest, so an exact-tier finding indicts
+                 the exported .R, not necessarily the screen.
+                 (exported script vs Path B)
   script tier    Does the exported .R, rendered through the display rule,
                  reproduce the screen? This one never touches Path B — it is
                  an internal Path A consistency check, and a failure means the
                  user cannot reproduce what they saw.
+                 (screen vs exported script)
+
+Every finding therefore carries a `source` naming which two things it compared
+— see the SRC_* constants. "Figura" alone is ambiguous, and the ambiguity is
+not academic: logistic-dirty's display tier PASSES while its exact tier fails,
+which means the screen was right and the export path was wrong.
 
 DESIGN RULE — NO SILENT SKIPS. A quantity that cannot be compared is never
 dropped; it becomes a MISSING_QUANTITY finding. Every `continue` in this file
@@ -138,12 +148,63 @@ TARGET_QUANTITIES = {
 # findings
 # ---------------------------------------------------------------------------
 
-def finding(code, term, quantity, figura, python, note):
+# WHAT THE TWO VALUE COLUMNS HOLD. A finding carries `figura` and `python`, and
+# the names are not enough: "figura" is TWO different artifacts depending on the
+# tier, and on the script tier the `python` column is not Path B at all.
+#
+#   display tier   figura = the DISPLAYED table/sentence (the screen)
+#                  python = Path B
+#   exact tier     figura = the harvest from RE-RUNNING THE EXPORTED SCRIPT
+#                  python = Path B
+#   script tier    figura = the screen
+#                  python = the exported script's harvest, rendered
+#
+# That distinction is load-bearing evidence, not bookkeeping: the shipped
+# logistic-dirty case fails its exact tier while its display tier PASSES,
+# meaning the numbers on screen were right and the exported .R was wrong. A
+# scorecard that labels those rows "Figura" alone reads as an indictment of the
+# displayed numbers, which is the opposite of what was measured. Every finding
+# therefore names its comparison, and build_scorecard.py prints it in its own
+# column.
+SRC_DISPLAY = "screen vs Python"
+SRC_EXACT = "exported script vs Python"
+SRC_SCRIPT = "screen vs exported script"
+# One-sided findings: something is wrong with a single artifact, so there is no
+# comparison to name — only the artifact the value came from.
+SRC_SCREEN = "screen (displayed artifact)"
+SRC_HARVEST = "exported script (harvest)"
+SRC_PATH_B = "Python (Path B output)"
+SRC_COVERAGE = "coverage contract"
+# A finding that reached publication without a source is a comparator bug, and
+# it says so on the scorecard rather than silently borrowing a neighbour's
+# attribution.
+SRC_UNCLASSIFIED = "UNCLASSIFIED (comparator bug)"
+
+SOURCES = (SRC_DISPLAY, SRC_EXACT, SRC_SCRIPT, SRC_SCREEN, SRC_HARVEST,
+           SRC_PATH_B, SRC_COVERAGE, SRC_UNCLASSIFIED)
+
+
+def finding(code, term, quantity, figura, python, note, source=None):
     if code not in DISPOSITIONS:
         raise SystemExit(f"comparator bug: unknown finding code {code!r}")
+    if source is not None and source not in SOURCES:
+        raise SystemExit(f"comparator bug: unknown finding source {source!r}")
     return {"code": code, "disposition": DISPOSITIONS[code], "term": term,
             "quantity": quantity, "figura": figura, "python": python,
-            "note": note}
+            "note": note, "source": source}
+
+
+def _source(findings, source):
+    """Stamp a slice of freshly-appended findings with their comparison source.
+
+    FIRST TAG WINS: a finding that already named its own source (the mixed
+    loops, where two tiers append inside one pass) keeps it, so a coarse
+    block-level marker can never overwrite a precise per-finding one.
+    """
+    for f in findings:
+        if f.get("source") is None:
+            f["source"] = source
+    return findings
 
 
 def _rank(f):
@@ -485,7 +546,11 @@ def compare_ratio_table(case, figura, exact, python):
     covariates = list(case["roles"]["covariates"])
 
     # -- counts. The highest-severity class: if the two paths disagree about
-    # which rows were analysed, nothing downstream is interpretable.
+    # which rows were analysed, nothing downstream is interpretable. The counts
+    # come from the EXPORTED SCRIPT's harvest, not from the screen — hence
+    # SRC_EXACT (see the SRC_* comment above; this is exactly the attribution
+    # logistic-dirty depends on).
+    mark = len(findings)
     for key in ("n", "n_event", "n_dropped"):
         a, b = exact.get(key), python.get(key)
         if a is None or b is None:
@@ -501,8 +566,10 @@ def compare_ratio_table(case, figura, exact, python):
             findings.append(finding(
                 "COUNT_MISMATCH", "-", key, a, b,
                 "the two paths analysed different rows"))
+    _source(findings[mark:], SRC_EXACT)
 
     # -- display tier, BOTH columns.
+    mark = len(findings)
     text = figura.get("text")
     if not isinstance(text, str):
         findings.append(finding(
@@ -520,11 +587,15 @@ def compare_ratio_table(case, figura, exact, python):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed table", text, None,
             "the displayed table carried no estimate rows to compare"))
+    _source(findings[mark:], SRC_SCREEN)
+    mark = len(findings)
     if not exact.get("terms"):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "exact terms", None, None,
             "the exported script's harvest carried no terms to compare"))
+    _source(findings[mark:], SRC_HARVEST)
 
+    mark = len(findings)
     columns = (
         ("unadjusted", "unadj", "display_unadjusted"),
         ("adjusted", "adj", "display_terms"),
@@ -559,7 +630,9 @@ def compare_ratio_table(case, figura, exact, python):
                     "MISSING_QUANTITY", key, f"displayed {label} cell", None,
                     key, f"Path B produced a {label} term with no displayed "
                          "row to compare it against"))
+    _source(findings[mark:], SRC_DISPLAY)
 
+    mark = len(findings)
     # -- exact tier, adjusted terms only (the unadjusted column is a display
     # claim; only the joint model is harvested at full precision).
     #
@@ -593,7 +666,9 @@ def compare_ratio_table(case, figura, exact, python):
                 findings.append(finding(
                     "DEFECT", display_key(key, covariates), q, av, bv,
                     f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+    _source(findings[mark:], SRC_EXACT)
 
+    mark = len(findings)
     # -- script tier. Path A against itself: does the exported .R, rendered
     # through the display rule, reproduce the adjusted column the user saw?
     # Independent of Path B — a failure here means the user cannot reproduce
@@ -623,8 +698,9 @@ def compare_ratio_table(case, figura, exact, python):
                 rendered,
                 "the exported .R does not reproduce the adjusted cell the "
                 "screen showed"))
+    _source(findings[mark:], SRC_SCRIPT)
 
-    findings.extend(targets.findings())
+    findings.extend(_source(targets.findings(), SRC_COVERAGE))
     return findings, compared, targets
 
 
@@ -758,7 +834,10 @@ def compare_km_summary(case, figura, exact, python):
     compared = 0
     targets = _Targets(case.get("exact_targets") or [])
 
-    # -- counts. Same shape/severity as compare_ratio_table's own count loop.
+    # -- counts. Same shape/severity as compare_ratio_table's own count loop,
+    # and the same source: the counts are the exported script's, not the
+    # screen's.
+    mark = len(findings)
     for key in ("n", "n_event", "n_dropped"):
         a, b = exact.get(key), python.get(key)
         if a is None or b is None:
@@ -866,6 +945,7 @@ def compare_km_summary(case, figura, exact, python):
             findings.append(finding(
                 "DEFECT", "-", "logrank_p", lr_a, lr_b,
                 f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+    _source(findings[mark:], SRC_EXACT)
 
     # -- display tier. Path B's own numbers, pushed through Figura's real
     # display rule (format_p_km/format_median_km), string-compared against
@@ -873,11 +953,13 @@ def compare_km_summary(case, figura, exact, python):
     # run over the SAME group union so a Path B absence is flagged here too,
     # exactly as compare_ratio_table's display loop independently flags it
     # alongside its own exact-tier MISSING_QUANTITY.
+    mark = len(findings)
     text = figura.get("text")
     if not isinstance(text, str):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed text", text, None,
-            "Path A's displayed artifact has no `text` field to parse"))
+            "Path A's displayed artifact has no `text` field to parse",
+            source=SRC_SCREEN))
         text = ""
     for group in sorted(set(exact_medians) | set(python_medians)):
         shown = parse_km_group_median(text, group)
@@ -913,7 +995,9 @@ def compare_km_summary(case, figura, exact, python):
         f = classify_km_logrank_display(shown_logrank, lr_b)
         if f["code"] != "PASS":
             findings.append(f)
+    _source(findings[mark:], SRC_DISPLAY)
 
+    mark = len(findings)
     # -- script tier. Path A against itself: does exact.json's full-precision
     # median/log-rank, rendered through fig_km's own display rule, reproduce
     # the text the screen actually showed? Mirrors compare_ratio_table's own
@@ -942,8 +1026,9 @@ def compare_km_summary(case, figura, exact, python):
                 "SCRIPT_DIVERGENCE", "-", "exported script logrank",
                 shown_logrank, rendered, "the exported script's log-rank p "
                 "does not reproduce the screen's displayed value"))
+    _source(findings[mark:], SRC_SCRIPT)
 
-    findings.extend(targets.findings())
+    findings.extend(_source(targets.findings(), SRC_COVERAGE))
     return findings, compared, targets
 
 
@@ -1000,16 +1085,28 @@ def _signif(value: float, digits: int = GC_SIGNIF_DIGITS) -> float:
     own floating-point error. The two rules disagree whenever `x * 10^e` lands
     on the far side of a .5 boundary from x's exact decimal expansion.
 
-    MEASURED, and the reason this function has this shape: the double nearest
-    2.225 is 2.22500000000000008882..., so a decimal-exact rounding (Python's
-    TWO-argument `round(2.225, 2)`) gives 2.23 — but `2.225 * 100` is
-    222.49999999999997, so R's `signif(2.225, 3)` gives **2.22**. And 2.22 is
-    what `fig_summary` printed for crp's Treatment Q1 in the shipped
-    summary-table1 case. The previous two-argument-`round` restatement reported
-    a SCRIPT_DIVERGENCE against a perfectly correct cell; this one does not.
-    (`2.475 * 100` is 247.50000000000003, so 2.475 rounds UP to 2.48 in both —
-    the error is not a consistent direction, which is exactly why the rule has
-    to be restated rather than approximated.)
+    THE MECHANISM, measured, and the reason this function has this shape. The
+    double nearest 2.225 is 2.22500000000000008882..., which is strictly ABOVE
+    the decimal tie, so a decimal-exact rounding (Python's TWO-argument
+    `round(2.225, 2)`) rounds up and gives 2.23. But the scaling multiply SNAPS
+    that value onto the tie: `2.225 * 100` is exactly 222.5 (verified —
+    `Decimal(2.225 * 100) == Decimal("222.5")`), and `nearbyint` resolves an
+    exact tie half to EVEN, giving 222 and therefore **2.22**. 2.22 is what
+    `fig_summary` printed for crp's Treatment Q1 in the shipped summary-table1
+    case. The previous two-argument-`round` restatement reported a
+    SCRIPT_DIVERGENCE against a perfectly correct cell; this one does not.
+
+    So the disagreement is not "the multiply drifts below the tie" — it is that
+    the multiply LANDS ON the tie, where half-to-even applies, while a
+    decimal-exact round never sees a tie at all. Which way that goes depends on
+    the parity of the scaled integer, not on the direction of any drift:
+    `2.475 * 100` is likewise exactly 247.5, and half-to-even rounds it UP to
+    248 (248 is the even neighbour), so 2.475 gives 2.48 under both rules —
+    agreement by coincidence, not by construction. 1.315 is the discriminating
+    probe in the OTHER direction: its double is 1.31499999999999994670...,
+    just BELOW the tie, so `round(1.315, 2)` gives 1.31 — while `1.315 * 100`
+    is again exactly 131.5 and half-to-even gives 132, so R's signif answers
+    **1.32**. Both probes are pinned in the tests.
 
     R's fprec additionally splits the scaling into two powers near the
     representable extremes; that guard is replaced here by returning `x`
@@ -1309,7 +1406,10 @@ def compare_gc_summary(case, figura, exact, python):
     targets = _Targets(case.get("exact_targets") or [])
 
     # -- counts. Same shape/severity as the other branches' count loops. There
-    # is no `n_event` in a group comparison: nothing here is an event.
+    # is no `n_event` in a group comparison: nothing here is an event. Source
+    # as elsewhere: the counts are the exported script's harvest, not the
+    # screen's.
+    mark = len(findings)
     for key in ("n", "n_dropped"):
         a, b = exact.get(key), python.get(key)
         if a is None or b is None:
@@ -1408,13 +1508,16 @@ def compare_gc_summary(case, figura, exact, python):
             findings.append(finding(
                 "DEFECT", "-", "test_statistic", s_a, s_b,
                 f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+    _source(findings[mark:], SRC_EXACT)
 
     # -- display tier.
+    mark = len(findings)
     text = figura.get("text")
     if not isinstance(text, str):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed text", text, None,
-            "Path A's displayed artifact has no `text` field to parse"))
+            "Path A's displayed artifact has no `text` field to parse",
+            source=SRC_SCREEN))
         text = ""
 
     group_levels = sorted(set(exact_groups) | set(python_groups))
@@ -1445,7 +1548,11 @@ def compare_gc_summary(case, figura, exact, python):
             findings.append(finding(
                 "MISSING_QUANTITY", "-", quantity, None, None,
                 "the displayed test clause could not be located, so this "
-                "quantity had no displayed value to compare against"))
+                "quantity had no displayed value to compare against",
+                # The third hole is the SCRIPT tier's, not the display tier's:
+                # it is the screen-vs-exported-script check that did not happen.
+                source=(SRC_SCRIPT if quantity == "exported script p"
+                        else SRC_DISPLAY)))
     else:
         # p, display tier. Mirrors addendum 6 / classify_km_logrank_display: a
         # differing p-part is NEVER a display artifact.
@@ -1515,7 +1622,9 @@ def compare_gc_summary(case, figura, exact, python):
                     "the significant-pair sets differ; only Figura: "
                     f"{sorted(shown_set - py_set)}, only Python: "
                     f"{sorted(py_set - shown_set)}"))
+    _source(findings[mark:], SRC_DISPLAY)
 
+    mark = len(findings)
     # -- script tier. Path A against itself: does the exported .R's harvested
     # p-value, rendered through fig_groupcompare's own display rule, reproduce
     # the p the screen showed? Never touches Path B — a finding here means the
@@ -1537,8 +1646,9 @@ def compare_gc_summary(case, figura, exact, python):
                     clause["p_text"], rendered,
                     "the exported .R's p-value does not reproduce the p the "
                     "screen showed"))
+    _source(findings[mark:], SRC_SCRIPT)
 
-    findings.extend(targets.findings())
+    findings.extend(_source(targets.findings(), SRC_COVERAGE))
     return findings, compared, targets
 
 
@@ -1694,14 +1804,24 @@ def parse_table1_tsv(text: str, case: dict):
             "DEFECT", "-", "table header", lines[0], None,
             f"expected a header starting {TABLE1_HEADER_FIRST_CELL!r} and "
             f"ending {TABLE1_HEADER_LAST_CELL!r}"))
+    # `slots` is POSITIONAL — one entry per group column, None where that
+    # column's header could not be read. The cells below are keyed through it,
+    # never through `headers`: `headers` drops the unreadable ones, so zipping
+    # a row's cells against it positionally would shift every column after the
+    # first bad header and file one group's numbers under the next group's
+    # name. A finding then reports a real disagreement that never happened.
+    # Reporting the bad header first is right; mis-keying afterwards is not.
+    slots = []
     for cell in head[1:-1]:
         m = TABLE1_GROUP_HEADER_RE.match(cell)
         if m is None:
+            slots.append(None)
             findings.append(finding(
                 "DEFECT", cell, "group header", cell, None,
                 "the column header does not match the app's '<level> (N=<n>)' "
                 "rule, so its group level and N cannot be read"))
             continue  # NOT a silent skip: the unreadable header was recorded
+        slots.append(m["level"])
         headers.append(m["level"])
         group_n[m["level"]] = int(m["n"])
 
@@ -1716,8 +1836,9 @@ def parse_table1_tsv(text: str, case: dict):
                 f"row does not carry {n_cols + 2} tab-separated cells"))
             continue  # NOT a silent skip: the malformed row was just recorded
         label = parts[0].strip()
-        cells = {headers[i]: parts[i + 1].strip()
-                 for i in range(min(n_cols, len(headers)))}
+        cells = {slots[i]: parts[i + 1].strip()
+                 for i in range(min(n_cols, len(slots)))
+                 if slots[i] is not None}
         missing = parts[-1].strip()
 
         variable = level = None
@@ -1788,6 +1909,17 @@ def python_table1_rows(python: dict):
             continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
         var, level = row["variable"], row.get("level")
         key = var if level in (None, "") else f"{var}: {level}"
+        if key in by_key:
+            # SYMMETRIC with parse_table1_tsv's own duplicate-key DEFECT on the
+            # displayed side. Without this the second row silently replaced the
+            # first and the comparison ran against whichever one Path B happened
+            # to emit last — a passing result that proves nothing about the row
+            # that was overwritten. The overwrite still happens (last wins, as
+            # on the displayed side), but it is now published.
+            findings.append(finding(
+                "DEFECT", key, "Path B row", None, key,
+                "two Path B rows resolve to the same key; the later one "
+                "overwrites the earlier, so one of them was never compared"))
         by_key[key] = row
         kind = row.get("kind")
         if var in kinds and kinds[var] != kind:
@@ -1807,7 +1939,9 @@ def compare_table1(case, figura, exact, python):
     targets = _Targets(case.get("exact_targets") or [])
 
     # -- counts. Same shape/severity as every other branch's count loop. There
-    # is no `n_event`: Table 1 has no event.
+    # is no `n_event`: Table 1 has no event. Source as elsewhere: `exact` is the
+    # exported script's harvest, not the screen.
+    mark = len(findings)
     for key in ("n", "n_dropped"):
         a, b = exact.get(key), python.get(key)
         if a is None or b is None:
@@ -1823,7 +1957,9 @@ def compare_table1(case, figura, exact, python):
             findings.append(finding(
                 "COUNT_MISMATCH", "-", key, a, b,
                 "the two paths analysed different rows"))
+    _source(findings[mark:], SRC_EXACT)
 
+    mark = len(findings)
     text = figura.get("text")
     if not isinstance(text, str):
         findings.append(finding(
@@ -1832,29 +1968,35 @@ def compare_table1(case, figura, exact, python):
         text = ""
     headers, shown_group_n, rows, parse_findings = parse_table1_tsv(text, case)
     findings.extend(parse_findings)
+    _source(findings[mark:], SRC_SCREEN)
     rows_by_key = {r["key"]: r for r in rows}
+    mark = len(findings)
     py_by_key, py_kinds, py_findings = python_table1_rows(python)
     findings.extend(py_findings)
+    _source(findings[mark:], SRC_PATH_B)
 
     # A table1 with nothing in it must never pass: every loop below is driven by
     # these collections, so an empty one means the comparison proved nothing.
     if not rows:
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed table", text, None,
-            "the displayed table carried no rows to compare"))
+            "the displayed table carried no rows to compare",
+            source=SRC_SCREEN))
     if not py_by_key:
         findings.append(finding(
             "MISSING_QUANTITY", "-", "Path B rows", None, None,
-            "Path B produced no rows to compare"))
+            "Path B produced no rows to compare", source=SRC_PATH_B))
     if not (exact.get("continuous") or exact.get("categorical")):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "exported script harvest", None, None,
-            "the exported script's harvest carried no per-variable statistics"))
+            "the exported script's harvest carried no per-variable statistics",
+            source=SRC_HARVEST))
 
     # -- per-group Ns, from BOTH directions. The displayed `(N=...)` headers are
     # a display claim; the harvest's n_per_group is Path A's own count. Both are
     # compared against Path B over the key union, so a level present on only one
     # side is a finding either way.
+    mark = len(findings)
     py_group_n = python.get("n_per_group") or {}
     exact_group_n = exact.get("n_per_group") or {}
     if not py_group_n:
@@ -1879,11 +2021,15 @@ def compare_table1(case, figura, exact, python):
                 findings.append(finding(
                     "COUNT_MISMATCH", level, "n_per_group", a, b,
                     "the two paths analysed different rows for this group"))
+        # This loop is MIXED: the n_per_group comparisons above are harvest vs
+        # Path B, the two below are screen vs Path B. A block marker cannot tell
+        # them apart, so the displayed ones name their own source and the marker
+        # (first tag wins) leaves them alone.
         if shown is None:
             findings.append(finding(
                 "MISSING_QUANTITY", level, "displayed group header", None, b,
                 "the displayed table has no column header for this group "
-                "level"))
+                "level", source=SRC_DISPLAY))
             continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
         if b is None:
             continue  # already recorded as MISSING_QUANTITY above
@@ -1892,7 +2038,8 @@ def compare_table1(case, figura, exact, python):
             findings.append(finding(
                 "COUNT_MISMATCH", level, "displayed group header", shown, b,
                 "the displayed column header's N disagrees with Path B's "
-                "per-group count"))
+                "per-group count", source=SRC_DISPLAY))
+    _source(findings[mark:], SRC_EXACT)
 
     # -- ORDER. The spec pins both orders as normative — group levels in
     # FIRST-APPEARANCE order (never sorted), and rows as all continuous
@@ -1902,6 +2049,7 @@ def compare_table1(case, figura, exact, python):
     # Both comparisons are gated on the two sides carrying the same keys, so a
     # missing row or level is reported once, as MISSING_QUANTITY, rather than
     # also as a spurious ordering difference.
+    mark = len(findings)
     py_levels = python.get("levels")
     if not isinstance(py_levels, list):
         findings.append(finding(
@@ -1997,23 +2145,40 @@ def compare_table1(case, figura, exact, python):
                 "DEFECT", key, "displayed missing cell", row["missing"],
                 mine_missing,
                 "the displayed missing-value counts differ"))
+    # Covers the order block, the decision tier and the display tier above: all
+    # three read the SCREEN on the left and Path B on the right.
+    _source(findings[mark:], SRC_DISPLAY)
 
     # -- script tier. Path A against itself: does the exported .R, rendered
     # through fig_summary's own display rule, reproduce the table on screen —
     # both the numbers AND the statistic it chose? Never touches Path B.
     script_findings, script_compared = _table1_script_tier(exact, rows_by_key)
-    findings.extend(script_findings)
+    findings.extend(_source(script_findings, SRC_SCRIPT))
     compared += script_compared
 
-    findings.extend(targets.findings())
+    findings.extend(_source(targets.findings(), SRC_COVERAGE))
     return findings, compared, targets
 
 
 def _table1_harvest_cells(exact):
-    """The exported script's harvest -> {row key: (kind, {level: cell string})}.
+    """The exported script's harvest -> {row key: (kind, kind_is_evidence,
+    {level: cell string})}.
 
     One place builds this so the script tier's count of comparisons and its
     findings can never be derived from two different readings of the harvest.
+
+    `kind_is_evidence` says whether the harvest's `kind` is a CLAIM the script
+    made or a label this function wrote. For a continuous variable it is a
+    claim: run-script.R reads it off the harvested element names (`c("mean",
+    "sd")` vs `c("25%","50%","75%")`), so the script really did re-express the
+    app's mean-vs-median choice and comparing it is evidence. For a categorical
+    variable there is no choice to make and no name to read — "count" is
+    hard-coded on BOTH sides (here, and in parse_table1_tsv's categorical
+    branch), so comparing them is comparing two constants. The comparison is
+    still performed (a screen row that claimed `mean` for a variable the script
+    tabulated is worth saying out loud), but it is NOT counted as a comparison
+    performed: `compared` is the evidence count, and a constant equals itself
+    for free.
     """
     out = {}
     for var, info in (exact.get("continuous") or {}).items():
@@ -2029,14 +2194,14 @@ def _table1_harvest_cells(exact):
                     stat.get("25%"), stat.get("50%"), stat.get("75%"))
             else:
                 cells[level] = None
-        out[var] = (kind, cells)
+        out[var] = (kind, True, cells)
     for var, info in (exact.get("categorical") or {}).items():
         denom = info.get("denom") or {}
         counts = info.get("counts") or {}
-        out[var] = ("count", {level: "" for level in counts})
+        out[var] = ("count", False, {level: "" for level in counts})
         for level in info.get("levels") or []:
             out[f"{var}: {level}"] = (
-                "count",
+                "count", False,
                 {g: format_count_cell_t1((counts.get(g) or {}).get(level, 0),
                                          denom.get(g))
                  for g in counts})
@@ -2048,7 +2213,7 @@ def _table1_script_tier(exact, rows_by_key):
     findings = []
     compared = 0
     harvest = _table1_harvest_cells(exact)
-    for key, (kind, cells) in sorted(harvest.items()):
+    for key, (kind, kind_is_evidence, cells) in sorted(harvest.items()):
         row = rows_by_key.get(key)
         if row is None:
             findings.append(finding(
@@ -2056,7 +2221,8 @@ def _table1_script_tier(exact, rows_by_key):
                 "the exported script produced a variable or level with no "
                 "displayed row"))
             continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
-        compared += 1  # the kind claim itself
+        if kind_is_evidence:
+            compared += 1  # the kind claim the script actually made
         if kind != row["kind"]:
             findings.append(finding(
                 "SCRIPT_DIVERGENCE", key, "exported script decision",
@@ -2144,6 +2310,12 @@ def compare_case(case_id: str, results: Path = RESULTS,
             f"Implemented kinds: {sorted(KIND_HANDLERS)}.")
 
     findings, compared, targets = handler(case, figura, exact, python)
+    # Safety net for the source attribution: a finding that reached publication
+    # without one is a comparator bug, and it must SAY so on the scorecard
+    # rather than inherit a neighbour's label. Not a crash — an unlabelled
+    # finding is still a real finding, and suppressing the whole report to
+    # punish a missing annotation would lose evidence.
+    _source(findings, SRC_UNCLASSIFIED)
     findings.sort(key=_rank)
     return {
         "id": case_id,
@@ -2190,8 +2362,12 @@ def main(case_ids, results: Path = RESULTS, cases: Path = CASES) -> int:
         met = "targets met" if c["targets_met"] else "TARGETS UNMET"
         print(f"{c['id']}: {c['compared']} compared, {status}, {met}")
         for f in c["findings"]:
-            print(f"  [{f['disposition']:6}] {f['code']} {f['term']} "
-                  f"{f['quantity']}: figura={f['figura']!r} "
+            # The source is printed here too, not only on the scorecard: this
+            # console output is what gets pasted into reports, and "figura="
+            # alone does not say whether the value came from the screen or from
+            # the exported script.
+            print(f"  [{f['disposition']:6}] {f['code']} [{f['source']}] "
+                  f"{f['term']} {f['quantity']}: figura={f['figura']!r} "
                   f"python={f['python']!r} — {f['note']}")
     ok = all(c["passed"] and c["targets_met"] for c in reports)
     return 0 if ok else 1

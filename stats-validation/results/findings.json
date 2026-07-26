@@ -112,7 +112,8 @@
           "quantity": "n",
           "figura": 312,
           "python": 320,
-          "note": "the two paths analysed different rows"
+          "note": "the two paths analysed different rows",
+          "source": "exported script vs Python"
         },
         {
           "code": "COUNT_MISMATCH",
@@ -121,7 +122,8 @@
           "quantity": "n_event",
           "figura": 87,
           "python": 91,
-          "note": "the two paths analysed different rows"
+          "note": "the two paths analysed different rows",
+          "source": "exported script vs Python"
         },
         {
           "code": "COUNT_MISMATCH",
@@ -130,7 +132,8 @@
           "quantity": "n_dropped",
           "figura": 8,
           "python": 0,
-          "note": "the two paths analysed different rows"
+          "note": "the two paths analysed different rows",
+          "source": "exported script vs Python"
         },
         {
           "code": "MISSING_QUANTITY",
@@ -139,7 +142,8 @@
           "quantity": "exact term",
           "figura": null,
           "python": "stageNA",
-          "note": "Path A has no full-precision term 'stageNA'"
+          "note": "Path A has no full-precision term 'stageNA'",
+          "source": "exported script vs Python"
         },
         {
           "code": "SCRIPT_DIVERGENCE",
@@ -148,7 +152,8 @@
           "quantity": "exported script cell",
           "figura": "1.66 (1.24\u20132.23, p<0.001)",
           "python": "1.68 (1.25\u20132.26, p<0.001)",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
+          "note": "the exported .R does not reproduce the adjusted cell the screen showed",
+          "source": "screen vs exported script"
         },
         {
           "code": "SCRIPT_DIVERGENCE",
@@ -157,7 +162,8 @@
           "quantity": "exported script cell",
           "figura": "0.53 (0.30\u20130.95, p=0.033)",
           "python": "0.51 (0.28\u20130.93, p=0.029)",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
+          "note": "the exported .R does not reproduce the adjusted cell the screen showed",
+          "source": "screen vs exported script"
         },
         {
           "code": "SCRIPT_DIVERGENCE",
@@ -166,7 +172,8 @@
           "quantity": "exported script cell",
           "figura": "1.94 (1.03\u20133.67, p=0.041)",
           "python": "1.95 (1.03\u20133.70, p=0.040)",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
+          "note": "the exported .R does not reproduce the adjusted cell the screen showed",
+          "source": "screen vs exported script"
         },
         {
           "code": "SCRIPT_DIVERGENCE",
@@ -175,7 +182,8 @@
           "quantity": "exported script cell",
           "figura": "3.30 (1.66\u20136.55, p<0.001)",
           "python": "3.34 (1.68\u20136.67, p<0.001)",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
+          "note": "the exported .R does not reproduce the adjusted cell the screen showed",
+          "source": "screen vs exported script"
         },
         {
           "code": "DEFECT",
@@ -184,7 +192,8 @@
           "quantity": "est",
           "figura": 1.68264486127139,
           "python": 1.6648751058762834,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -193,7 +202,8 @@
           "quantity": "se",
           "figura": 0.150437214602083,
           "python": 0.14852847617610576,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -202,7 +212,8 @@
           "quantity": "lo",
           "figura": 1.25296148477588,
           "python": 1.2443761199276735,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -211,7 +222,8 @@
           "quantity": "hi",
           "figura": 2.25968137374107,
           "python": 2.2274689089402253,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -220,7 +232,8 @@
           "quantity": "p",
           "figura": 0.000542123993077906,
           "python": 0.0005991419225210207,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -229,7 +242,8 @@
           "quantity": "est",
           "figura": 0.51473208231846,
           "python": 0.5311684969022287,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -238,7 +252,8 @@
           "quantity": "se",
           "figura": 0.303585335225232,
           "python": 0.2962213331511752,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -247,7 +262,8 @@
           "quantity": "lo",
           "figura": 0.283899209700071,
           "python": 0.2972238260088141,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -256,7 +272,8 @@
           "quantity": "hi",
           "figura": 0.933250630911606,
           "python": 0.949250858822489,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -265,7 +282,8 @@
           "quantity": "p",
           "figura": 0.0287022431126639,
           "python": 0.032693939558156665,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -274,7 +292,8 @@
           "quantity": "est",
           "figura": 1.95342670915745,
           "python": 1.941750527582527,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -283,7 +302,8 @@
           "quantity": "se",
           "figura": 0.325988208533696,
           "python": 0.32529079346556977,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -292,7 +312,8 @@
           "quantity": "lo",
           "figura": 1.03112272036703,
           "python": 1.0263614188730408,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -301,7 +322,8 @@
           "quantity": "hi",
           "figura": 3.70070005507341,
           "python": 3.673554989534748,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -310,7 +332,8 @@
           "quantity": "p",
           "figura": 0.0399741072415156,
           "python": 0.04135134187314797,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -319,7 +342,8 @@
           "quantity": "est",
           "figura": 3.34363401201513,
           "python": 3.2952132461297032,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -328,7 +352,8 @@
           "quantity": "se",
           "figura": 0.352261429855152,
           "python": 0.35024539512450226,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -337,7 +362,8 @@
           "quantity": "lo",
           "figura": 1.67636178434977,
           "python": 1.6586265983163135,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -346,7 +372,8 @@
           "quantity": "hi",
           "figura": 6.6691381959896,
           "python": 6.546639459713925,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         },
         {
           "code": "DEFECT",
@@ -355,7 +382,8 @@
           "quantity": "p",
           "figura": 0.000611193604503687,
           "python": 0.0006624343383404345,
-          "note": "beyond rel 1e-06 / abs 1e-09"
+          "note": "beyond rel 1e-06 / abs 1e-09",
+          "source": "exported script vs Python"
         }
       ]
     }
