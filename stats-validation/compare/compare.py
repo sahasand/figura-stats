@@ -891,6 +891,35 @@ def compare_km_summary(case, figura, exact, python):
         if f["code"] != "PASS":
             findings.append(f)
 
+    # -- script tier. Path A against itself: does exact.json's full-precision
+    # median/log-rank, rendered through fig_km's own display rule, reproduce
+    # the text the screen actually showed? Mirrors compare_ratio_table's own
+    # script tier (SCRIPT_DIVERGENCE) — never touches Path B, so a finding
+    # here means the user cannot reproduce the screen from the exported
+    # script, independent of whether Python agrees with either side.
+    for group in sorted(exact_medians):
+        shown = parse_km_group_median(text, group)
+        if shown is None:
+            continue  # already recorded as MISSING_QUANTITY by the display tier above
+        a = exact_medians[group]
+        rendered = "not reached" if a is None else format_median_km(a)
+        shown_str = "not reached" if shown.get("not_reached") else f"{shown['value']:.1f}"
+        compared += 1
+        if rendered != shown_str:
+            findings.append(finding(
+                "SCRIPT_DIVERGENCE", group, "exported script median",
+                shown["raw"], rendered, "the exported script's median does "
+                "not reproduce the screen's displayed value"))
+
+    if shown_logrank is not None and lr_a is not None:
+        compared += 1
+        rendered = format_p_km(lr_a)
+        if rendered != shown_logrank:
+            findings.append(finding(
+                "SCRIPT_DIVERGENCE", "-", "exported script logrank",
+                shown_logrank, rendered, "the exported script's log-rank p "
+                "does not reproduce the screen's displayed value"))
+
     findings.extend(targets.findings())
     return findings, compared, targets
 

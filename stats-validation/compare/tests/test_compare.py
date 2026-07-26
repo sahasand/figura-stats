@@ -653,8 +653,9 @@ def test_km_agreeing_fixture_passes_everything(tmp_path):
     assert report["targets_met"] is True
     # 3 counts + curve(2 pts * 2 quantities + 1 pt * 2 quantities = 6)
     # + 2 medians (exact) + 1 logrank (exact) + 2 medians (display)
-    # + 1 logrank (display) = 3 + 6 + 2 + 1 + 2 + 1 = 15
-    assert report["compared"] == 15
+    # + 1 logrank (display) + 2 medians (script) + 1 logrank (script)
+    # = 3 + 6 + 2 + 1 + 2 + 1 + 2 + 1 = 18
+    assert report["compared"] == 18
 
 
 def test_km_one_sided_not_reached_is_a_defect_end_to_end(tmp_path):
@@ -717,6 +718,27 @@ def test_km_displayed_logrank_p_disagreement_is_a_defect(tmp_path):
     report = _run_km(tmp_path, mutate)
     hits = _by_code(report, "DEFECT")
     assert any(h["quantity"] == "displayed logrank" for h in hits)
+
+
+def test_km_script_median_disagrees_with_displayed_text_is_script_divergence(tmp_path):
+    # Path-A-internal: exact.json (the exported script's own harvest) says
+    # a different median than what the screen displayed. Python is left
+    # UNTOUCHED (still 24.0, still agreeing with the display) so this finding
+    # can only come from the script tier, never the exact or display tiers.
+    def mutate(case, figura, exact, python):
+        exact["medians"]["New treatment"] = 30.0
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "SCRIPT_DIVERGENCE")
+    assert any(h["term"] == "New treatment"
+               and h["quantity"] == "exported script median" for h in hits)
+
+
+def test_km_script_logrank_disagrees_with_displayed_text_is_script_divergence(tmp_path):
+    def mutate(case, figura, exact, python):
+        exact["logrank_p"] = 0.5  # displayed text still says "p = 0.045"
+    report = _run_km(tmp_path, mutate)
+    hits = _by_code(report, "SCRIPT_DIVERGENCE")
+    assert any(h["quantity"] == "exported script logrank" for h in hits)
 
 
 def test_km_count_mismatch(tmp_path):

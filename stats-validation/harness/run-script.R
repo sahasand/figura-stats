@@ -148,6 +148,26 @@ harvest_cox <- function(env, id) {
 # log-rank stat for one group either); logrank_p is harvested as NA (-> JSON
 # null) rather than failing loudly, since there is genuinely nothing to
 # harvest, not a bug.
+# Group label(s) for one survfit summary object, shared by BOTH the curve
+# (per-point strata) and the medians table (per-row rownames) so the two can
+# never disagree about a group's key. `x` is `sf$strata` (curve; NULL for a
+# single-group fit) or `rownames(med_tab)` (medians; ALSO NULL for a
+# single-group fit — `summary(fit)$table` for one group is a plain named
+# vector with no per-group name at all, and the `t(as.matrix(...))` reshape
+# below that gives it a `dim` carries the reshape's OWN row/col labels, not a
+# group name, so `rownames(med_tab)` stays NULL after it too). Genuinely
+# mirrors fig_km's own median-line fallback (R/km.R:140:
+# `rownames(med_tab)[i] %||% as.character(unique(df$group)[i])`) rather than
+# a synthetic sentinel like "Overall": the real, single group value carried
+# in the exported script's complete-case frame, so a one-group case's curve
+# and medians share the SAME key the app's own displayed line would use —
+# and that key is one of the "literal group-column strings" the interface
+# contract (INTERFACES.md) requires, which "Overall" would not be.
+.km_group_labels <- function(x, group_col, n = 1L) {
+  if (is.null(x)) rep(as.character(unique(group_col))[1], n)
+  else sub("^group=", "", as.character(x))
+}
+
 harvest_km <- function(env, id) {
   fit <- need(env, "fit", id)
   dat <- need(env, "dat", id)
@@ -158,8 +178,7 @@ harvest_km <- function(env, id) {
   # the censoring tick marks on the curve — that is a display-only need this
   # harvest does not share.)
   sf <- summary(fit)
-  strata <- if (is.null(sf$strata)) rep("Overall", length(sf$time))
-            else sub("^group=", "", as.character(sf$strata))
+  strata <- .km_group_labels(sf$strata, dat$group, length(sf$time))
   curve_rows <- data.frame(t = sf$time, surv = sf$surv, at_risk = sf$n.risk)
   # Build each point as a PLAIN named list, not a 1-row data.frame slice:
   # jsonlite always serialises a data.frame (even one row) as an ARRAY of
@@ -176,12 +195,22 @@ harvest_km <- function(env, id) {
 
   # summary(fit)$table: a plain named vector for a single stratum, a matrix
   # (one row per stratum) for two or more — mirrored from fig_km's own
-  # median-line code so this harvest can never disagree with the app's own
-  # reading of the same object. NA (median not reached) -> JSON null via
-  # jsonlite's default NA handling; never rewritten to a sentinel here.
+  # median-line code (R/km.R:136-144) so this harvest can never disagree
+  # with the app's own reading of the same object, INCLUDING its `%||%`
+  # single-group fallback: after the single-vs-matrix reshape below,
+  # `rownames(med_tab)` is NULL for a one-group fit (the reshape gives the
+  # object a `dim` but no row name), exactly like `sf$strata` is NULL for
+  # the curve above — .km_group_labels() resolves both the same way, so a
+  # single-group case's curve and medians can never come out keyed
+  # differently (previously: curve keyed "Overall", medians keyed literal
+  # NA, via `setNames(list(...), character(0))` recycling a name-less
+  # vector — a real, verified bug, caught by generating and reading this
+  # exact JSON, not by inspection). NA (median not reached) -> JSON null via
+  # jsonlite's `na = "null"` (see main(), below); never rewritten to a
+  # sentinel here.
   med_tab <- summary(fit)$table
   if (is.null(dim(med_tab))) med_tab <- t(as.matrix(med_tab))
-  med_names <- sub("^group=", "", rownames(med_tab))
+  med_names <- .km_group_labels(rownames(med_tab), dat$group, nrow(med_tab))
   medians <- setNames(as.list(unname(med_tab[, "median"])), med_names)
 
   logrank_p <- NA_real_
@@ -253,6 +282,16 @@ main <- function() {
   # a Python reader's `json.loads` must see `null` (-> None), never the
   # 2-character string "NA", or every not-reached comparison downstream would
   # silently compare a string against a float instead of None against None.
+  # This is applied to EVERY harvester's payload, not just km's — verified
+  # empirically that na = "null" ALSO remaps Inf/-Inf/NaN to JSON null (their
+  # own default serialisation is likewise the literal strings "Inf"/"-Inf"/
+  # "NaN", the identical failure mode one level up), so cox/logistic pick up
+  # the same protection for free: a complete-separation fit whose harvested
+  # `est`/`hi` lands on Inf now reads as Python `None`/`math.inf`-comparable
+  # null instead of a string a numeric comparison would silently choke on or
+  # miscompare. No regression for either: neither cox-adjusted nor
+  # logistic-confounding's real harvest ever emits NA/Inf/NaN, re-confirmed
+  # by re-running both full pipelines after this argument was added.
   jsonlite::write_json(payload, out_path, auto_unbox = TRUE, digits = NA,
                        pretty = TRUE, na = "null")
   cat(sprintf("wrote %s\n", out_path))

@@ -11,28 +11,59 @@ string).
 
 ## Population
 
+**This spec, and `fit_km`, model the LIVE APP ONLY** (`web/guided/km/spec.js`'s
+`buildKmSpec`, which is what a user's browser session actually runs) — never
+the downloadable/exported `.R` script. The two are NOT interchangeable for
+missing-value handling; see the divergence note at the end of this section
+before assuming otherwise.
+
 Complete cases across all three roles: time, status, AND group. A row is
 dropped, and counted in `n_dropped`, when time, status, or group is blank
 (an empty string after trimming whitespace) — unlike Cox regression, where a
 blank status cell is coded as censored rather than dropped, Kaplan-Meier
-drops a blank status cell exactly like a blank time or group cell. This was
-verified two ways, not assumed from analogy with Cox:
+drops a blank status cell exactly like a blank time or group cell. Verified
+directly in the live app's own source: `buildKmSpec` builds its working rows
+with `if (blank(t) || blank(s) || blank(g)) { dropped++; continue; }`
+(`blank = (v) => v == null || String(v).trim() === ""`) before any status
+recoding happens — a blank status cell never reaches the figure-rendering
+code at all.
 
-- The app's live analyze form (`web/guided/km/spec.js`'s `buildKmSpec`)
-  builds its working rows with `if (blank(t) || blank(s) || blank(g)) {
-  dropped++; continue; }` before any status recoding happens — a blank
-  status cell never reaches the figure-rendering code at all.
-- The app's downloadable/exported R script (`R/km.R`'s `.km_script`,
-  verified by actually generating and running it) begins with `df[df ==
-  ""] <- NA` before building its own working frame, so a blank status cell
-  becomes `NA` there too, and the exported script's own final filter
-  (`dat <- dat[!is.na(dat$time) & !is.na(dat$status) & !is.na(dat$group), ]`)
-  drops it. Both code paths agree.
+The literal string `"NA"` is an ordinary value, not missing, in the live
+app — do not treat it as blank. `blank()` above checks for the trimmed-empty
+string specifically; the two-character text `"NA"` does not trim to `""`, so
+it is kept as an ordinary (non-matching, hence censored) status value.
 
-The literal string `"NA"` is an ordinary value, not missing — do not treat
-it as blank. (Confirmed against the same two code paths above: both check
-for the empty string specifically, `String(v).trim() === ""` in JS and
-`df == ""` in R — neither treats the two-character text `"NA"` as blank.)
+**Divergence from the exported script, a real, separately verified Figura
+finding (`stats-validation/issues/02-app-vs-exported-script-missing-values.md`)
+— stated here so this spec's Population rule is never mistaken for a
+description of the script too:** the downloadable `.R` script's missing-value
+handling is NOT identical to the live app's `blank()` rule above, in two
+concrete ways:
+
+- **A literal `"NA"` text cell IS treated as missing by the script**, unlike
+  the live app: the script's `read.csv(...)` call (`R/script.R`'s
+  `.script_data`, shared by every figure's export) uses R's default
+  `na.strings = "NA"`, so a status cell containing the literal text `"NA"`
+  becomes R's real `NA` at parse time — BEFORE the script's own
+  `df[df == ""] <- NA` line ever runs — and the row is then dropped by the
+  script's `!is.na(...)` filter. The live app keeps that same row (coded
+  censored, unless the event value itself is the literal string `"NA"`).
+- **A whitespace-only cell (e.g. a single space `" "`) is KEPT by the
+  script**, unlike the live app: `df[df == ""] <- NA` matches the exact
+  empty string only, so `" "` (which does not equal `""`) survives as the
+  literal one-character string. The live app's `blank()` trims first, so the
+  same cell is dropped there and counted in `n_dropped`. The script instead
+  keeps the row, with the literal `" "` compared against the event value
+  (per Event coding below) — a non-match, so the row survives as censored.
+
+Both divergences were verified empirically (not just read from source): a
+five-row fixture with `status` values `Death` / `NA` / `" "` (whitespace) /
+`""` (empty) / `Censored`, run through both paths, produces the SAME row
+COUNT after filtering (23 of 24 rows survive both the live app and the
+script, in one concrete regenerated repro) but a DIFFERENT SET of surviving
+rows — the app drops the whitespace row and keeps the literal-`"NA"` row;
+the script drops the literal-`"NA"` row and keeps the whitespace row. See
+the issue file for the full repro and line references.
 
 Every non-blank time value must parse as a finite, non-negative number. This
 is a precondition the app itself enforces at the whole-analysis level (`if
@@ -64,6 +95,18 @@ fallback event-coding helper (such as one written for Cox or logistic) here
 without removing that fallback — on data where it would matter (e.g. a
 status cell reading `"1.0"` against an event value of `"1"`), the two rules
 disagree.
+
+**This string-equality-only claim is scoped to the live app, per the
+Population section above — the exported script is NOT the same code path
+and does NOT follow this rule.** `R/km.R:219-224`'s `.km_script` DOES emit a
+second, numeric-equality OR branch (`status_raw == suppressWarnings(as.numeric(event))`
+when both sides parse as numbers) that the live app has no equivalent of.
+For this case, that branch is inert — the event value `"Death"` never
+parses as a number, so the fallback can never fire — but it is a real,
+verified app-vs-script divergence for a case whose event value IS numeric
+(e.g. `event_value = "1"` with a status column read.csv infers as numeric),
+documented alongside the other two exported-script divergences in
+`stats-validation/issues/02-app-vs-exported-script-missing-values.md`.
 
 ## Roles
 
@@ -119,12 +162,49 @@ will compute a smaller, wrong denominator and a wrong `S(t)`.
 
 ## Reported quantities
 
-- **Median survival per group**: the smallest reported event time `t` (see
-  Reported quantities' step function, below) at which `S(t) <= 0.5`. If the
-  group's curve never reaches `S(t) <= 0.5` — including a group with zero
-  events, whose survival curve never drops from 1 — the median is NOT
-  REACHED. Report it as such (`None`/null), NEVER as the group's largest
-  observed time or any other numeric stand-in.
+- **Median survival per group**: **R's actual rule, verified directly
+  against a live `Rscript` run of `survival::survfit`/`summary()$table` (R
+  4.6.0) — NOT the naive "smallest `t` with `S(t) <= 0.5`" reading of the
+  product-limit formula, which is wrong in a case common enough to matter.**
+  This is the same "minmin" rule `survival:::survmean` uses internally
+  (verified by reading that function's source, `getAnywhere(survmean)`, not
+  guessed). Let `tol = sqrt(.Machine$double.eps)` (~1.4901161e-08 in IEEE
+  double precision — Python's `math.sqrt(sys.float_info.epsilon)` is the
+  identical value):
+  - Walk the group's step function (see the step function below; because
+    `S(t)` only changes at event times, restricting the walk to distinct
+    EVENT times, as this spec's step function already does, loses nothing —
+    a pure-censoring time never causes `S` to first cross 0.5) in increasing
+    `t` order and find the smallest `t1` with `S(t1) < 0.5 + tol`.
+  - If no such `t1` exists — including a group with zero events, whose
+    survival curve never drops from 1 — the median is NOT REACHED. Report it
+    as such (`None`/null), NEVER as the group's largest observed time or any
+    other numeric stand-in.
+  - **If `S(t1)` is within `tol` of exactly 0.5, AND some later reported time
+    `t2 > t1` has `S(t2) < S(t1)` (a strictly lower survival probability),
+    the median is the MIDPOINT `(t1 + t2) / 2`, where `t2` is the SMALLEST
+    such later time** — not `t1` alone. This is not a rare edge case to
+    special-case away: it is the ordinary rule whenever a group's curve
+    happens to land exactly on 0.5 partway through, which routinely happens
+    with small or heavily tied samples (any group whose event count near the
+    midpoint is a power of two is a common trigger, e.g. 4 subjects with a
+    2/4 risk-set fraction at the crossing time).
+  - Otherwise (S(t1) is not indistinguishable from 0.5 — the curve stepped
+    past 0.5 without landing on it) the median is `t1` itself.
+
+  **Worked example, checked against a real `survival::survfit` call, not
+  merely derived from the formula:** 4 subjects, all events (no censoring),
+  at times 1, 2, 3, 4. `S(1) = 0.75`, `S(2) = 0.50`, `S(3) = 0.25`,
+  `S(4) = 0`. The first `t1` with `S(t1) < 0.5 + tol` is `t1 = 2`
+  (`S(2) = 0.5`). `S(2)` is exactly 0.5 (within `tol`), and `S(3) = 0.25 <
+  S(2)`, so the median is `(2 + 3) / 2 = 2.5` — **not `2`**. Confirmed
+  directly: `Rscript -e 'library(survival);
+  summary(survfit(Surv(c(1,2,3,4), c(1,1,1,1)) ~ 1))$table["median"]'`
+  prints `2.5`. `stats-validation/python/tests/test_km.py`'s
+  `test_median_rule_matches_rs_minmin_rule_not_the_naive_reading` pins this
+  exact fixture at `2.5`, with the derivation hand-commented above the
+  assertion, specifically to catch an implementation that stops at the naive
+  "first `t` with `S(t) <= 0.5`" rule (which would silently return `2`).
 - **The two-sided log-rank test p-value** comparing the groups: the
   Mantel-Haenszel form, with equal weight at every distinct event time
   across the pooled groups (i.e., the ordinary log-rank test — not the Peto

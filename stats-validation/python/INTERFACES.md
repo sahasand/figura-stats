@@ -63,3 +63,27 @@ tied-times acceptance test enforces rel 1e-6, the same tolerance the exact
 tier's comparator gate (`compare.py`'s `REL_TOL`) enforces. Converge well
 past whatever your solver's defaults are before returning — tightening the
 convergence criteria closed the same gap to ~1e-8 in the same check.
+
+## validate/km.py
+
+- `fit_km(df, time, status, event_value, group) -> dict` with keys:
+  - `curve`: `{group_level: [{"t", "surv", "at_risk"}, ...]}` — one entry per
+    DISTINCT EVENT time (a pure-censoring time contributes no row). `t` is
+    the raw parsed number, never rounded — the comparator matches curve
+    points by exact float equality, per the spec's own tie/precision
+    convention (both paths parse the same CSV strings).
+  - `medians`: `{group_level: float | None}` — `None` means the median was
+    not reached, never a sentinel value (e.g. never the group's largest
+    observed time). Per the spec's median rule (`spec/km-twoarm.md`), this
+    is R's own "minmin" rule, not the naive "smallest t with S(t) <= 0.5"
+    reading of the formula.
+  - `logrank_p`: `float | None` — `None` when there are fewer than two
+    groups (a log-rank test needs at least two to compare).
+  - `n`, `n_event`, `n_dropped`: integers.
+  - **Group keys are the literal group-column strings** (e.g. `"Standard
+    care"`), identical between `curve` and `medians` — never a synthetic
+    label like `"Overall"` for a single-group case; a group key is always
+    one of the values actually present in the group column after the
+    Population filter.
+
+Report all floats at full precision — never round inside the module.

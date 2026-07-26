@@ -112,3 +112,35 @@ def test_n_dropped_counts_a_blank_cell_in_any_of_time_status_group():
     out = fit_km(df, "time", "status", "1", "group")
     assert out["n_dropped"] == 1
     assert out["n"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Median rule: R's actual "minmin" rule (spec/km-twoarm.md's Reported
+# quantities), not the naive "smallest t with S(t) <= 0.5" reading of the
+# product-limit formula. The spec's ORIGINAL version of this rule (before
+# this fix round) said the naive thing and was wrong — this test pins the
+# fixture that discriminates the two.
+#
+# 4 subjects, group "A", all events (no censoring), at times 1, 2, 3, 4:
+#   S(1) = 1 - 1/4 = 0.75
+#   S(2) = 0.75 * (1 - 1/3) = 0.50   <- first t with S(t) <= 0.5
+#   S(3) = 0.50 * (1 - 1/2) = 0.25   <- strictly lower than S(2)
+#   S(4) = 0.25 * (1 - 1/1) = 0.00
+# S(2) lands EXACTLY on 0.5 (within tol = sqrt(.Machine$double.eps)), and a
+# later time (3) has a strictly lower survival than S(2) — so per the
+# minmin rule, the median is the MIDPOINT of t=2 and t=3, i.e. (2+3)/2 = 2.5,
+# NOT 2. Confirmed directly against R: `Rscript -e 'library(survival);
+# summary(survfit(Surv(c(1,2,3,4), c(1,1,1,1)) ~ 1))$table["median"]'`
+# prints 2.5. A naive "first t with S(t) <= 0.5" implementation would
+# wrongly return 2 here — this fixture is chosen specifically because it
+# discriminates the two rules (most fixtures don't: the midpoint step only
+# ever fires when S lands EXACTLY on 0.5, which needs a risk-set fraction
+# like 2/4, 1/2, 4/8, ... at the crossing time).
+def test_median_rule_matches_rs_minmin_rule_not_the_naive_reading():
+    df = pd.DataFrame({
+        "time":   ["1", "2", "3", "4"],
+        "status": ["1", "1", "1", "1"],
+        "group":  ["A"] * 4,
+    })
+    out = fit_km(df, "time", "status", "1", "group")
+    assert abs(out["medians"]["A"] - 2.5) < 1e-12
