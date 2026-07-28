@@ -89,8 +89,16 @@ not a result.
 **Divergence from the exported script (stated so this Population rule is never
 mistaken for a description of the script too).** The downloadable `.R` script
 that the app offers alongside the figure does its own CSV read with R's
-`read.csv(...)`, and its missing-value handling is not identical to the live
-app's:
+`read.csv(...)`, and its missing-value handling was not identical to the live
+app's.
+
+> **All three are CLOSED as of 2026-07-28** (`issues/02` resolved).
+> `.script_data` now emits `read.csv(..., na.strings = character(0))` plus a
+> `trimws` pass ahead of `df[df == ""] <- NA`, so the script reads a cell the
+> way `web/lib/csv.js` does — including the two-arm case below, which used to
+> fail outright and now runs. The measured numbers are kept as the record of
+> what the divergence cost; `fit_groupcompare` is unaffected either way,
+> because this spec models the live app and the live app's rule never changed.
 
 - **Whitespace is not trimmed by the script for text columns.** The script's
   parser leaves a padded group cell as the literal padded string, so `"Placebo "`

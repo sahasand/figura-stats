@@ -391,16 +391,29 @@ claim:
 
 ## Divergence from the exported script (informational)
 
-The downloadable `.R` script re-reads the CSV with
-`read.csv(..., check.names = FALSE)` followed by `df[df == ""] <- NA`
-(`R/script.R`'s `.script_data`), which is **not** the browser parser. For this
+The downloadable `.R` script re-reads the CSV with `read.csv(...)` followed by a
+`trimws` pass and `df[df == ""] <- NA` (`R/script.R`'s `.script_data`), which is
+**not** the browser parser — it is a second reader built to match it. For this
 case the two agree — the file has no literal `NA` text, no whitespace-padded
 cells, and blank numeric cells become `NA` under both readers — so the exported
-script reproduces every cell in the table above. That agreement is a property of
-this file, not a general guarantee: see
-`stats-validation/issues/02-app-vs-exported-script-missing-values.md`, and
-`stats-validation/cases/logistic-dirty/` for a case where the same preamble makes
-the script analyse a different study.
+script reproduces every cell in the table above.
+
+That agreement used to be a property of this file rather than a general
+guarantee, and `stats-validation/cases/logistic-dirty/` was a case where the same
+preamble made the script analyse a different study. Since **2026-07-28** it is a
+general guarantee: `issues/02` is resolved, `.script_data` overrides
+`na.strings` and trims character columns, and `logistic-dirty` publishes zero
+findings. The reason to keep reading it as two readers rather than one is that
+the parity is a maintained contract on `R/script.R`, not an identity — see
+`stats-validation/issues/02-app-vs-exported-script-missing-values.md`.
+
+**One thing that constrains any future edit to that preamble, and is easiest to
+see from this case:** `.summary_script` calls `mean()`/`quantile()` on the raw
+`df[[col]]` with no `as.numeric()` in front of it, so the preamble must keep
+letting `read.csv` type-convert numeric columns. `colClasses = "character"` — the
+apparently-closer mirror of the browser parser, which hands R strings for every
+column — would break Table 1's exported script specifically. It was considered
+and rejected for that reason when issue 02 was fixed.
 
 The script also computes only the statistic the app chose (`tapply(..., mean/sd)`
 for a mean variable, `tapply(..., quantile(type = 7))` for a median one), so the

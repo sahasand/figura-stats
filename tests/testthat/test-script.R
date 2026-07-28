@@ -23,7 +23,9 @@ test_that("source_filename switches to read.csv and embeds nothing", {
   code <- .script_assemble("Test analysis",
                            script_spec(source_filename = "my data.csv"),
                            c("a", "b"), character(0), "nrow(df)")
-  expect_match(code, 'read.csv("my data.csv", check.names = FALSE)', fixed = TRUE)
+  expect_match(code,
+    'read.csv("my data.csv", check.names = FALSE, na.strings = character(0))',
+    fixed = TRUE)
   expect_false(grepl("data.frame(", code, fixed = TRUE))
   expect_match(code, "# Data: my data.csv", fixed = TRUE)
 })
@@ -34,9 +36,136 @@ test_that("source_filename with a double quote stays parseable and escaped", {
                            c("a", "b"), character(0), "nrow(df)")
   # The read.csv line embeds the filename with the quote backslash-escaped, so
   # the generated script parses instead of terminating the string early.
-  expect_match(code, 'read.csv("my \\"study\\".csv", check.names = FALSE)',
-               fixed = TRUE)
+  expect_match(code,
+    'read.csv("my \\"study\\".csv", check.names = FALSE, na.strings = character(0))',
+    fixed = TRUE)
   expect_silent(parse(text = code))
+})
+
+# --- parseCsv parity ---------------------------------------------------------
+# Regression cover for stats-validation/issues/02: the exported script used to
+# re-read the CSV with a bare read.csv, whose defaults disagree with the browser
+# parser three ways — a literal "NA" became missing, a whitespace-only cell did
+# not, and a padded text cell became a second, phantom factor level. The fixture
+# below carries one of each.
+#
+# The reference here is web/lib/csv.js's parseCsv, transcribed rather than
+# imported: it is the reader the app really uses, and the point of the test is
+# that the script agrees with the APP, not with a second copy of its own rules.
+# parseCsv trims every cell, calls a cell missing only when it is empty AFTER
+# trimming, and infers a column numeric only when every non-blank cell parses.
+app_parse_csv <- function(path) {
+  lines <- readLines(path)
+  lines <- lines[nzchar(trimws(lines))]
+  columns <- trimws(strsplit(lines[[1]], ",", fixed = TRUE)[[1]])
+  cells <- lapply(lines[-1], function(l) {
+    v <- trimws(strsplit(l, ",", fixed = TRUE)[[1]])
+    if (length(v) != length(columns))
+      stop("fixture row does not have one cell per column")
+    setNames(as.list(v), columns)
+  })
+  types <- setNames(vapply(columns, function(cl) {
+    v <- vapply(cells, function(r) r[[cl]], character(1))
+    nb <- v[nzchar(v)]
+    if (length(nb) > 0 && !any(is.na(suppressWarnings(as.numeric(nb)))))
+      "numeric" else "categorical"
+  }, character(1)), columns)
+  list(columns = columns, rows = cells, types = types)
+}
+
+# The frame the app analysed: parseCsv's cells, typed by parseCsv's own rule,
+# with a blank cell as NA — the shape every fig_* prep receives.
+app_frame <- function(p) {
+  out <- lapply(p$columns, function(cl) {
+    v <- vapply(p$rows, function(r) r[[cl]], character(1))
+    v[!nzchar(v)] <- NA_character_
+    if (p$types[[cl]] == "numeric") as.numeric(v) else v
+  })
+  names(out) <- p$columns
+  as.data.frame(out, stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+# read.csv returns integer for a whole-number column and double for a decimal
+# one; parseCsv has only "number". Compare on that common footing so an int/dbl
+# difference cannot masquerade as a parity failure (or hide one).
+as_common <- function(d)
+  as.data.frame(lapply(d, function(x) if (is.numeric(x)) as.numeric(x) else as.character(x)),
+                stringsAsFactors = FALSE, check.names = FALSE)
+
+dirty_spec <- function(roles, options = list()) {
+  path <- normalizePath(test_path("fixtures", "dirty-cells.csv"), winslash = "/")
+  p <- app_parse_csv(path)
+  list(parsed = p, path = path,
+       spec = list(data = p$rows, roles = roles,
+                   options = c(list(source_filename = path), options)))
+}
+
+# Evaluate ONLY the data preamble .script_data emits, in a clean environment.
+eval_preamble <- function(spec, cols) {
+  d <- .script_data(spec, cols)
+  env <- new.env(parent = globalenv())
+  eval(parse(text = paste(d$lines, collapse = "\n")), env)
+  env$df
+}
+
+test_that("the emitted preamble reads a dirty CSV exactly as the app's parser did", {
+  s <- dirty_spec(list())
+  app <- app_frame(s$parsed)
+  script <- expect_silent(eval_preamble(s$spec, s$parsed$columns))
+
+  # The three divergences, named, so a regression says which one came back.
+  expect_equal(script$stage[[3]], "NA")        # literal "NA" is a value
+  expect_true(is.na(script$stage[[8]]))        # whitespace-only cell is missing
+  expect_equal(sort(unique(script$arm)), c("Drug", "Placebo"))   # no phantom level
+
+  # And the whole frame, cell for cell: same columns, same numeric/text split,
+  # same values, same missingness.
+  expect_equal(names(script), s$parsed$columns)
+  expect_equal(vapply(script, function(x) if (is.numeric(x)) "numeric" else "categorical",
+                      character(1)),
+               s$parsed$types)
+  expect_equal(as_common(script), as_common(app))
+})
+
+test_that("the exported logistic script analyses the same rows the app fitted", {
+  s <- dirty_spec(list(outcome = "complication", covariates = list("arm", "stage")),
+                  list(event_value = "Yes"))
+  p <- .logistic_prep(s$spec)
+  res <- fig_logistic(s$spec)
+
+  env <- new.env(parent = globalenv())
+  capture.output(eval(parse(text = res$code), env))   # the script prints; drop it
+  dat <- env$dat
+
+  # Row count: the app keeps the four literal-"NA" stage rows and drops the two
+  # whitespace-only ones. Before the fix the script did the exact opposite.
+  expect_equal(nrow(dat), p$n)
+  expect_equal(nrow(dat), 28L)
+  # Coded outcome: same events, row for row.
+  expect_equal(sum(dat$.y == 1), p$n_event)
+  expect_equal(unname(dat$.y), unname(p$df$.y))
+  # Factor levels, including reference order: "NA" is a stage level in both, and
+  # the padded "Placebo " cells are the same arm as the unpadded ones.
+  expect_equal(levels(dat$stage), levels(p$df$stage))
+  expect_equal(levels(dat$arm), levels(p$df$arm))
+  expect_true("NA" %in% levels(dat$stage))
+  expect_equal(levels(dat$arm), c("Drug", "Placebo"))
+  # And the fit itself: the coefficients the user reproduces are the app's.
+  expect_equal(unname(coef(env$fit)),
+               unname(coef(.logistic_fits(p$df, p$covs, p$cov_types)$joint$fit)))
+})
+
+test_that("the exported group-comparison script still runs on padded group cells", {
+  # Divergence 3's hardest symptom: the app saw two arms and deparsed a two-group
+  # t.test into the script, whose own frame had three levels — so the download
+  # died with "grouping factor must have exactly 2 levels" in the user's face.
+  s <- dirty_spec(list(outcome = "score", group = "arm"))
+  res <- fig_groupcompare(s$spec)
+
+  env <- new.env(parent = globalenv())
+  expect_no_error(capture.output(eval(parse(text = res$code), env)))
+  expect_equal(sort(unique(env$dat$group)), c("Drug", "Placebo"))
+  expect_equal(nrow(env$dat), 29L)   # only the whitespace-only score cell drops
 })
 
 test_that("header lists package versions and .script_fun embeds source", {

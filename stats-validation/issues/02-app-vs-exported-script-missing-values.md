@@ -1,6 +1,6 @@
 # 02 — The downloadable/exported `.R` script's cell handling disagrees with the live app (KM, Cox, and Group comparison)
 
-Status: needs-triage
+Status: resolved
 Type: task
 Location: **`stats-validation/issues/`, not `.scratch/<slug>/issues/`.** This is a
 deliberate deviation from `docs/agents/issue-tracker.md` and the repo `CLAUDE.md`.
@@ -278,6 +278,9 @@ in `results/findings.json` and `expected-findings.json` is 30 — 3/1/5/21):
   completely about what the screen showed. The disagreement is entirely between the app and
   its own exported script — which is precisely this issue.
 
+*(Written 2026-07-26, before the fix. Superseded by "Resolution" below: the fix landed
+2026-07-28 and this case now publishes 0 findings across 52 compared values.)*
+
 **This does not close the issue.** The underlying behaviour is unchanged, and the fix is
 still the maintainer decision described in the Scope note above (`na.strings = character(0)`
 plus a `trimws` pass in `R/script.R`'s `.script_data`, which would close all three
@@ -308,7 +311,9 @@ fix planned; and who it affects (only a downloaded script, only for a file conta
 `NA`-as-text or padded cells). The "how to check this yourself" section carries the same
 caveat against its own advice to re-run the exported `.R`.
 
-Two consequences for whoever lands the fix:
+Two consequences for whoever lands the fix (*both discharged 2026-07-28 — see
+"Resolution" below: `CASE_STATUS`/`CASE_CAUSE` are now empty dicts, and the fix commit
+regenerated the page*):
 
 - **The page's copy is generated, not written.** Every number in it comes from
   `findings.json`, and the narrative block, the caveat and the `CASE_STATUS` box are all
@@ -320,6 +325,92 @@ Two consequences for whoever lands the fix:
 - **CI byte-diffs `web/validation.html`.** The fix commit must regenerate it (`make -C
   stats-validation all`) alongside `expected-findings.json` and the scorecard, in the same
   commit, or the build fails on a stale published page.
+
+## Resolution — all three divergences closed in `.script_data` (2026-07-28)
+
+Phase 2 item 2. **One change, in `R/script.R`'s `.script_data` uploaded-file branch.**
+The emitted preamble went from two lines to three, and now reproduces `parseCsv`
+(`web/lib/csv.js:21`, `row[c] = (cells[j] ?? "").trim()`) instead of relying on
+`read.csv`'s defaults:
+
+```r
+# before
+df <- read.csv("data.csv", check.names = FALSE)
+df[df == ""] <- NA   # blank cells are missing values
+
+# after
+df <- read.csv("data.csv", check.names = FALSE, na.strings = character(0))
+df[] <- lapply(df, function(x) if (is.character(x)) trimws(x) else x)
+df[df == ""] <- NA
+```
+
+(preceded by a four-line comment saying, in the app's voice, that these lines read the
+file the way the app read it). Which line closes which divergence:
+
+- **Divergence 1 — literal `"NA"` eaten.** `na.strings = character(0)` removes the only
+  string `read.csv` would otherwise convert. The two-character text `NA` now arrives as
+  the value `"NA"`, exactly as `parseCsv` delivers it, and becomes an ordinary factor
+  level rather than a dropped row.
+- **Divergence 2 — whitespace-only cell survives.** `trimws` on every character column
+  turns `" "` into `""`, which the existing `df[df == ""] <- NA` line then makes missing.
+  Order is load-bearing: trimming must run BEFORE the blank check, or `" "` survives it.
+- **Divergence 3 — padded text becomes a phantom level.** The same `trimws` pass makes
+  `"Placebo "` and `"Placebo"` one value, so a two-arm comparison stays two-arm and the
+  deparsed `t.test` runs instead of dying on `grouping factor must have exactly 2 levels`.
+
+**`colClasses = "character"` was considered and rejected.** It would be the most literal
+mirror of `parseCsv` (which hands R strings for every column), but it breaks
+`.summary_script`, whose emitted code calls `mean()`/`quantile()` on the raw column with
+no `as.numeric()` in front of it. It is also unnecessary: `read.table` always strips
+whitespace from a numeric field and reads a blank one as `NA`, so numeric columns already
+agreed with `parseCsv` on all three counts — verified empirically before choosing, not
+assumed. Type inference stays in agreement too: a column carrying a literal `NA` fails
+`type.convert` under `na.strings = character(0)` and comes back character, which is what
+`parseCsv`'s own numeric test decides for the same column.
+
+**The embedded-example branch (no `source_filename`) needed no change**, and now says so
+in a comment. Its cells are `spec$data`, which already came through `parseCsv`; a literal
+`"NA"` fails its `as.numeric` test, stays character, and deparses back out as the quoted
+string `"NA"` while a real `NA` deparses bare — so the distinction the file branch had to
+restore was never lost there.
+
+**Regression cover:** `tests/testthat/fixtures/dirty-cells.csv` (30 rows carrying a
+literal `NA`, a whitespace-only cell, and a padded text value) plus three tests in
+`tests/testthat/test-script.R`, which transcribe `parseCsv` into R as the reference and
+assert against the app, not against a second copy of the script's own rules: the emitted
+preamble's frame cell-for-cell, an end-to-end logistic run (row count, coded outcome,
+factor levels, joint coefficients), and the group-comparison script running at all on
+padded group cells. All three fail on the pre-fix `.script_data` (verified by reverting).
+
+**Measured result — the pipeline, not a prediction.** `make -C stats-validation clean all`:
+
+```
+                            before            after
+logistic-dirty              46 compared, 30 findings   52 compared, 0 findings
+every other case            unchanged                  unchanged
+total                       325 compared, 30 findings  331 compared, 0 findings
+```
+
+`make all` exits 0 for the first time. The comparison count rose by 6 because the
+`stage = NA` term now exists on both sides, so its five quantities plus the C-statistic
+pair became comparable instead of being a `MISSING_QUANTITY`. `expected-findings.json`
+was rewritten by `make gate-update` in the same commit; `web/validation.html` and
+`results/scorecard.html` regenerated; two consecutive `make clean all` runs are
+byte-identical.
+
+**`logistic-dirty` stays in the roster and stays exactly as it is.** It was never a case
+to "fix"; it is now the standing regression test for this issue on the published page —
+a case built to fail that passes only while `.script_data` keeps parity with `parseCsv`.
+
+**The standing contract, for whoever edits `.script_data` next:** the emitted preamble
+must reproduce `parseCsv` (`web/lib/csv.js`), not `read.csv`'s defaults. The app parses
+CSVs in the browser and never calls `read.csv` at all, so any divergence between the two
+readers is a divergence between the screen and the download.
+
+**Not fixed here, and still open:** the KM-specific numeric-equality branch described
+above (`R/km.R:219-224` adds an OR term the live app's JS event coding has no counterpart
+for). It is a different mechanism in a different file, out of this task's scope, and
+remains inert for a non-numeric event value.
 
 ## Comments
 

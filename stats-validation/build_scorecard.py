@@ -27,9 +27,11 @@ TWO THINGS THIS FILE REFUSES TO LET THE READER ASSUME.
    script tier the `python` column is the exported script rather than Path B.
    compare.py stamps every finding with a `source` naming the comparison, and
    the table prints it in its own column — because the shipped logistic-dirty
-   case fails its exact tier while its display tier passes, i.e. the numbers on
-   screen were right and the exported .R was wrong, and a column headed
-   "Figura" alone says the opposite.
+   case USED to fail its exact tier while its display tier passed, i.e. the
+   numbers on screen were right and the exported .R was wrong, and a column
+   headed "Figura" alone says the opposite. (That case is green as of the
+   .script_data fix, issues/02; the distinction it taught this file is not, and
+   the next export-path finding will need the column just as badly.)
 2. findings.json only lists cases that were COMPARED. A case can be registered
    in the Makefile, run its Path A half, and still have no second opinion (no
    python.json). Those cases get their own visibly-incomplete rows here, from
@@ -933,47 +935,22 @@ SOURCE_GLOSS = {
 # exported script diverges. That is knowledge about a specific case, so it is
 # keyed by case id and rendered only for that case. Any other export-path case
 # gets the same structure WITHOUT a cause the page cannot know.
-CASE_CAUSE = {
-    "logistic-dirty": (
-        "<p>The case is an ordinary logistic regression on a deliberately "
-        "messy CSV: eight patients have the two letters <code>NA</code> typed "
-        "as text in the <code>stage</code> column, and two have a trailing "
-        "space in <code>age</code>. Figura's own CSV reader, which runs in "
-        "your browser, treats a typed <code>NA</code> as an ordinary value "
-        "&mdash; so the app fitted every patient and displayed a "
-        "<code>stage&nbsp;=&nbsp;NA</code> row in the table. The downloaded "
-        "script re-reads the same file with R's <code>read.csv</code>, which "
-        "converts that text into a real missing value, and the script's own "
-        "<code>complete.cases()</code> filter then drops those patients before "
-        "the model is fitted.</p>"
-    ),
-}
+#
+# EMPTY ON PURPOSE, and it must stay empty until a case publishes export-path
+# findings again. It carried a `logistic-dirty` entry until the .script_data fix
+# (issues/02) closed the divergence and that case went green. Both dicts are
+# keyed off a case HAVING findings, so a stale entry would never render — which
+# is exactly why it must be deleted rather than left sitting here: a dormant
+# paragraph describing behaviour the app no longer has is a paragraph nobody
+# will re-read before the day it renders again.
+CASE_CAUSE: dict[str, str] = {}
 
 # The disposition of a case's findings: open or fixed, tracked where, affecting
 # whom. Case-specific knowledge again, keyed by id, so a case this file has
 # never heard of cannot inherit another case's status. A case with findings and
-# no entry here says so plainly instead (see _web_narrative).
-CASE_STATUS = {
-    "logistic-dirty": (
-        "<div class=\"warn-box\">"
-        "<p><b>This is a known defect, and it is open.</b> It is tracked in "
-        "the repository as "
-        "<code>stats-validation/issues/02-app-vs-exported-script-missing-values.md</code>, "
-        "together with two siblings found the same way: a cell containing only "
-        "whitespace, and an untrimmed text cell that can add a phantom study "
-        "arm to a Group comparison. One change to the shared script preamble "
-        "in <code>R/script.R</code> &mdash; stop <code>read.csv</code> "
-        "inventing missing values, and trim text columns &mdash; closes all "
-        "three, and that fix is planned. It has not landed as of the evidence "
-        "on this page. When it does, this case turns green here and this "
-        "section changes with it.</p>"
-        "<p><b>Who this affects.</b> Only a downloaded script, and only for a "
-        "file that contains cells of that kind. Nothing about it changes the "
-        "numbers the app shows you. If your CSV has no <code>NA</code> text "
-        "and no padded values, the downloaded script reproduces the app "
-        "exactly.</p></div>"
-    ),
-}
+# no entry here says so plainly instead (see _web_narrative). Empty for the same
+# reason as CASE_CAUSE above.
+CASE_STATUS: dict[str, str] = {}
 
 
 def _case_figure(cases_dir: Path, case_id: str) -> str | None:

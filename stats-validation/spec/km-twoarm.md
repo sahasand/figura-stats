@@ -37,8 +37,17 @@ it is kept as an ordinary (non-matching, hence censored) status value.
 finding (`stats-validation/issues/02-app-vs-exported-script-missing-values.md`)
 — stated here so this spec's Population rule is never mistaken for a
 description of the script too:** the downloadable `.R` script's missing-value
-handling is NOT identical to the live app's `blank()` rule above, in two
-concrete ways:
+handling was NOT identical to the live app's `blank()` rule above, in two
+concrete ways.
+
+> **Both are CLOSED as of 2026-07-28** (`issues/02` resolved). `.script_data`
+> now emits `read.csv(..., na.strings = character(0))` plus a `trimws` pass
+> ahead of `df[df == ""] <- NA`, so the exported script reads a cell the way
+> `web/lib/csv.js` does. The two divergences below are kept in past tense
+> because they are what this spec's Population rule had to be distinguished
+> FROM, and because that agreement is now a contract on `R/script.R` rather
+> than something to re-derive. **`fit_km` is unaffected either way: this spec
+> models the live app, and the live app's rule never changed.**
 
 - **A literal `"NA"` text cell IS treated as missing by the script**, unlike
   the live app: the script's `read.csv(...)` call (`R/script.R`'s
@@ -58,12 +67,14 @@ concrete ways:
 
 Both divergences were verified empirically (not just read from source): a
 five-row fixture with `status` values `Death` / `NA` / `" "` (whitespace) /
-`""` (empty) / `Censored`, run through both paths, produces the SAME row
-COUNT after filtering (23 of 24 rows survive both the live app and the
+`""` (empty) / `Censored`, run through both paths, produced the SAME row
+COUNT after filtering (23 of 24 rows survived both the live app and the
 script, in one concrete regenerated repro) but a DIFFERENT SET of surviving
-rows — the app drops the whitespace row and keeps the literal-`"NA"` row;
-the script drops the literal-`"NA"` row and keeps the whitespace row. See
-the issue file for the full repro and line references.
+rows — the app dropped the whitespace row and kept the literal-`"NA"` row;
+the script dropped the literal-`"NA"` row and kept the whitespace row. See
+the issue file for the full repro and line references. Re-run on the fixed
+preamble both paths keep the literal-`"NA"` row and drop the whitespace one,
+which is the app's answer.
 
 Every non-blank time value must parse as a finite, non-negative number. This
 is a precondition the app itself enforces at the whole-analysis level (`if
@@ -107,6 +118,9 @@ verified app-vs-script divergence for a case whose event value IS numeric
 (e.g. `event_value = "1"` with a status column read.csv infers as numeric),
 documented alongside the other two exported-script divergences in
 `stats-validation/issues/02-app-vs-exported-script-missing-values.md`.
+**This one is still open.** The two cell-reading divergences above were fixed
+in `.script_data` on 2026-07-28; this branch lives in `R/km.R`'s own script
+builder, is a different mechanism, and was out of that fix's scope.
 
 ## Roles
 

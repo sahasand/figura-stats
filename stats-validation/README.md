@@ -34,10 +34,14 @@ both: that internal scorecard, and **`web/validation.html`, the page shipped
 inside the app** — see [The published page](#the-published-page).
 
 **`all` exits non-zero whenever a case publishes findings, and that is the
-designed outcome, not a broken run.** `logistic-dirty` exists to publish the
-app-vs-exported-script divergence of `issues/02`, so it fails on purpose. The
-scorecard is written BEFORE the failure is reported — a non-zero `all` means
-"findings exist, go read them", never "nothing was published".
+designed outcome, not a broken run.** The scorecard is written BEFORE the
+failure is reported — a non-zero `all` means "findings exist, go read them",
+never "nothing was published". `logistic-dirty` was built to exercise that
+path: it published the app-vs-exported-script divergence of `issues/02` on
+every run until that issue was fixed on 2026-07-28, and it is green today.
+It stays in the roster unchanged, as the standing regression test for the
+fix — a case designed to fail, passing only while `R/script.R`'s
+`.script_data` keeps parity with the browser's own CSV reader.
 
 ## The published page
 
@@ -79,17 +83,28 @@ Five properties are deliberate.
   reader's language: registered-but-uncompared cases, deferred targets, the
   webR tier's 2-of-8 coverage ratio, and both staleness digests.
 - **It publishes the findings before they are fixed.** The 30 export-path
-  findings of `issues/02` are explained on the page in clinical terms — which
+  findings of `issues/02` were explained on the page in clinical terms — which
   patients the downloaded script analysed, which numbers moved — and named as a
-  known open defect with a fix planned. A validation page that only ever shows
-  green is not evidence.
+  known open defect with a fix planned, for as long as they existed. A
+  validation page that only ever shows green is not evidence. Since the fix
+  landed (2026-07-28) the page publishes zero differences, and every one of
+  those paragraphs removed itself: the narrative block, the download caveat and
+  the tiles are all keyed to findings existing, so nothing had to be remembered
+  and deleted by hand. `CASE_CAUSE` and `CASE_STATUS` did need a human, and are
+  now empty dicts — see below.
 
 Two things in the generator are knowledge the artifacts do not contain, and
 both are keyed by case id so they cannot be inherited by a case they were never
 written for: `CASE_CAUSE` (*why* a case's exported script diverges) and
 `CASE_STATUS` (open/fixed, tracked where, affecting whom). Everything else on
 the page — every count, every value, every verdict — is read out of
-`results/findings.json` and `results/webr-tier.json`.
+`results/findings.json` and `results/webr-tier.json`. **Both dicts are empty
+today, and that is the maintained state, not neglect**: they held
+`logistic-dirty` entries until `issues/02` was fixed, and were emptied with it.
+Because they only render for a case that HAS findings, a stale entry would sit
+invisible until the day it rendered again — so an entry whose case has gone
+green gets deleted, never left dormant. Add one back when a case publishes
+export-path findings again.
 
 The plain-language narrative is also **gated on the shape of the evidence**.
 "The displayed numbers were right" renders only while every finding on the case
@@ -551,9 +566,10 @@ normalized away before the comparator ever saw it. See the comment on
 On the scorecard, read the **Compared** column before drawing a conclusion
 about a finding. "Figura" is the screen on the display tier and the harvest
 from re-running the exported `.R` on the exact tier, and on the script tier the
-"Python" column is the exported script rather than Path B. Every one of
-`logistic-dirty`'s findings is an *exported script* row: the numbers on screen
-were right.
+"Python" column is the exported script rather than Path B. That distinction was
+learned from `logistic-dirty`, every one of whose findings was an *exported
+script* row while the numbers on screen were right (they are all gone now — see
+`issues/02`), and it is worth as much for the next export-path finding.
 
 **If you are implementing Path B: do not read `R/*.R`.** A port that reproduces
 the same misreading of the spec proves nothing — which is exactly the limit
@@ -568,7 +584,11 @@ and data living under `stats-validation/`. **Phase 2 item 1 (this page's
 publication) is the first change that touches the shipped app**, and it is
 deliberately narrow: `web/validation.html` (generated), one link in
 `web/index.html`, a `CACHE` bump plus a precache entry in `web/sw.js`, the
-`test:unit` chain, CI, and the docs. `R/` is still untouched.
+`test:unit` chain, CI, and the docs. **Phase 2 item 2 is the first change to
+`R/`**, and narrower still: one function, `.script_data` in `R/script.R`, whose
+emitted preamble now reads a user's CSV the way the browser's own parser does
+(`issues/02`). It is the first time this harness moved the shipped statistical
+code rather than only measuring it — which is what the harness was built for.
 
 The Phase-1 rule that harness JS tests run only from this directory's
 `Makefile` is **retired with it**: `harness/build-spec.test.mjs`,

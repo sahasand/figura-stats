@@ -109,9 +109,19 @@ two values -> `n_small = 0`; so `n_dropped = 4` and `n = 146`, with
 
 The analysis requires at least two surviving groups.
 
-**Divergence from the exported script (this case is where it matters most).**
-The downloadable `.R` script reads the CSV with R's `read.csv(...)`, which does
-NOT trim whitespace from text columns. For THIS file the two paths still agree,
+**Divergence from the exported script (this case is where it mattered most).**
+
+> **CLOSED as of 2026-07-28** (`issues/02` resolved). `.script_data` now emits
+> `read.csv(..., na.strings = character(0))` plus a `trimws` pass ahead of
+> `df[df == ""] <- NA`, so the exported script reads a cell the way
+> `web/lib/csv.js` does and every divergence below is gone — including the
+> counterfactual that dictated this case's design. The paragraph is kept as
+> written because it explains why the padding sits where it does, and that
+> decision is not being revisited. `fit_groupcompare` is unaffected: this spec
+> models the live app, whose rule never changed.
+
+The downloadable `.R` script read the CSV with R's `read.csv(...)`, which did
+NOT trim whitespace from text columns. For THIS file the two paths still agreed,
 because the padding was injected only into the numeric `site_code` column and
 R's numeric conversion ignores surrounding whitespace (`" 01 "` -> 1 on both
 paths). Had the same padding been injected into the `arm` column instead, the

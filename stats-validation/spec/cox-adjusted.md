@@ -32,8 +32,9 @@ untrimmed text. Two consequences, both normative:
 
 This is the same rule `spec/groupcompare-numeric.md`, `spec/groupcompare-dirty.md`
 and `spec/summary-table1.md` state, for the same reason: one parser feeds all of
-them. The exported script does NOT trim (it re-reads the raw CSV with
-`read.csv`), which is divergence 3 of `stats-validation/issues/02`.
+them. The exported script used not to trim (it re-reads the raw CSV with
+`read.csv`), which was divergence 3 of `stats-validation/issues/02`; since
+2026-07-28 its preamble trims every character column, so the two agree.
 
 ## Population
 Complete cases on the time column and the covariates only. Drop any row
@@ -82,13 +83,20 @@ recorded here so no implementer assumes the KM rule transfers.
 ### Divergence from the exported script (informational)
 
 Not part of `fit_cox`'s contract — recorded so the split above is not read as
-arbitrary. The exported `.R` differs from the live app on: non-parseable times
+arbitrary. The exported `.R` differed from the live app on: non-parseable times
 (silent row drop vs whole-analysis error, above); untrimmed cells (`read.csv`
-does not trim, so a padded level becomes a phantom second level); and
-`read.csv`'s default `na.strings = "NA"`, which turns the literal text `NA`
-into a missing value where the live app keeps it as an ordinary string. All
-three are `stats-validation/issues/02`, and the third is measured on every run
-by the shipped `logistic-dirty` case.
+does not trim, so a padded level became a phantom second level); and
+`read.csv`'s default `na.strings = "NA"`, which turned the literal text `NA`
+into a missing value where the live app keeps it as an ordinary string.
+
+The last two were `stats-validation/issues/02`, and are **CLOSED as of
+2026-07-28**: `.script_data` now emits `read.csv(..., na.strings = character(0))`
+plus a `trimws` pass ahead of `df[df == ""] <- NA`, so the script reads a cell
+the way `web/lib/csv.js` does. `logistic-dirty`, the case that measured the
+third one on every run, publishes zero findings today and is the standing
+regression test for that parity. **The non-parseable-time divergence is a
+different mechanism (`R/cox.R`'s own prep, not the shared preamble) and is
+untouched.**
 
 ## Status coding
 The status column is `status`. A row is an event when its value equals the

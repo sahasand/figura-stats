@@ -87,11 +87,14 @@ it is an error, not a result.
 The literal text `"NA"` is an ordinary outcome or group level here, not missing.
 
 **Divergence from the exported script.** The downloadable `.R` script reads the
-CSV with R's `read.csv(...)`, whose behaviour differs from the live app's in
-three ways: it does not trim whitespace from text cells (so `"Yes "` becomes its
-own level there); it treats a literal `"NA"` cell as missing; and it keeps a
+CSV with R's `read.csv(...)`, whose behaviour differed from the live app's in
+three ways: it did not trim whitespace from text cells (so `"Yes "` became its
+own level there); it treated a literal `"NA"` cell as missing; and it kept a
 whitespace-only cell as a one-character string rather than dropping the row.
-This spec describes the live app.
+This spec describes the live app. All three are **CLOSED as of 2026-07-28**
+(`issues/02` resolved): the emitted preamble now overrides `na.strings` and
+trims every character column before its blank-to-missing step, so the script
+reads a cell the way `web/lib/csv.js` does.
 
 ## Roles
 

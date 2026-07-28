@@ -20,8 +20,8 @@
     "as a drive-by. A finding disappearing is a failure here for exactly that",
     "reason: when the Phase-2 export-path fix lands, that PR updates this file."
   ],
-  "total_compared": 325,
-  "total_findings": 30,
+  "total_compared": 331,
+  "total_findings": 0,
   "cases": [
     {
       "id": "cox-adjusted",
@@ -131,13 +131,13 @@
     {
       "id": "logistic-dirty",
       "kind": "ratio_table",
-      "compared": 46,
-      "passed": false,
+      "compared": 52,
+      "passed": true,
       "targets_met": true,
       "targets": {
-        "adjusted_ci": 12,
-        "adjusted_or": 4,
-        "adjusted_p": 4,
+        "adjusted_ci": 15,
+        "adjusted_or": 5,
+        "adjusted_p": 5,
         "c_statistic": 1,
         "cooks_note": 1,
         "epv_note": 1,
@@ -148,248 +148,7 @@
         "vif_note": 1
       },
       "deferred_targets": [],
-      "findings": [
-        {
-          "code": "COUNT_MISMATCH",
-          "term": "-",
-          "quantity": "n",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "the two paths analysed different rows"
-        },
-        {
-          "code": "COUNT_MISMATCH",
-          "term": "-",
-          "quantity": "n_dropped",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "the two paths analysed different rows"
-        },
-        {
-          "code": "COUNT_MISMATCH",
-          "term": "-",
-          "quantity": "n_event",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "the two paths analysed different rows"
-        },
-        {
-          "code": "DEFECT",
-          "term": "-",
-          "quantity": "c_statistic",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "age",
-          "quantity": "est",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "age",
-          "quantity": "hi",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "age",
-          "quantity": "lo",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "age",
-          "quantity": "p",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "age",
-          "quantity": "se",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "arm:New treatment",
-          "quantity": "est",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "arm:New treatment",
-          "quantity": "hi",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "arm:New treatment",
-          "quantity": "lo",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "arm:New treatment",
-          "quantity": "p",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "arm:New treatment",
-          "quantity": "se",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:II",
-          "quantity": "est",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:II",
-          "quantity": "hi",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:II",
-          "quantity": "lo",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:II",
-          "quantity": "p",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:II",
-          "quantity": "se",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:III",
-          "quantity": "est",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:III",
-          "quantity": "hi",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:III",
-          "quantity": "lo",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:III",
-          "quantity": "p",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "DEFECT",
-          "term": "stage:III",
-          "quantity": "se",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "beyond rel 1e-06 / abs 1e-09"
-        },
-        {
-          "code": "MISSING_QUANTITY",
-          "term": "stage:NA",
-          "quantity": "exact term",
-          "disposition": "defect",
-          "source": "exported script vs Python",
-          "note": "Path A has no full-precision term 'stageNA'"
-        },
-        {
-          "code": "SCRIPT_DIVERGENCE",
-          "term": "-",
-          "quantity": "exported script C-statistic",
-          "disposition": "defect",
-          "source": "screen vs exported script",
-          "note": "the exported .R's C-statistic does not reproduce the value the screen showed"
-        },
-        {
-          "code": "SCRIPT_DIVERGENCE",
-          "term": "age",
-          "quantity": "exported script cell",
-          "disposition": "defect",
-          "source": "screen vs exported script",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
-        },
-        {
-          "code": "SCRIPT_DIVERGENCE",
-          "term": "arm:New treatment",
-          "quantity": "exported script cell",
-          "disposition": "defect",
-          "source": "screen vs exported script",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
-        },
-        {
-          "code": "SCRIPT_DIVERGENCE",
-          "term": "stage:II",
-          "quantity": "exported script cell",
-          "disposition": "defect",
-          "source": "screen vs exported script",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
-        },
-        {
-          "code": "SCRIPT_DIVERGENCE",
-          "term": "stage:III",
-          "quantity": "exported script cell",
-          "disposition": "defect",
-          "source": "screen vs exported script",
-          "note": "the exported .R does not reproduce the adjusted cell the screen showed"
-        }
-      ]
+      "findings": []
     },
     {
       "id": "summary-table1",

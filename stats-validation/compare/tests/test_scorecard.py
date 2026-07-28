@@ -1193,12 +1193,47 @@ def test_web_case_analysis_names_come_from_the_case_files(tmp_path):
     assert "unknown (case.json unreadable)" in html
 
 
-def test_web_page_names_the_open_defect_as_open(tmp_path):
-    """The real shipped case. A page that publishes 30 findings and does not say
-    they are known, tracked and being fixed reads as an unattended failure."""
+def test_web_page_drops_the_defect_disclosure_once_the_real_case_is_green(tmp_path):
+    """The real shipped evidence, post-fix.
+
+    This test used to assert the opposite: while `logistic-dirty` published 30
+    findings, the page had to name the defect as known, tracked and being fixed,
+    or it read as an unattended failure. `issues/02` was fixed on 2026-07-28 and
+    that case now publishes nothing, so the assertion inverts — and the thing it
+    really pins is that the disclosure was written to REMOVE ITSELF. Every
+    paragraph of it (the narrative block, the download caveat, the unabridged
+    table) was keyed to findings existing, which is what made it safe to publish
+    prose about a defect in a generated page in the first place.
+
+    The `total_findings == 0` guard is deliberate: if the real evidence ever
+    publishes again, this test fails loudly with instructions rather than
+    silently checking the wrong branch.
+    """
     real = json.loads((STATS_VALIDATION / "results" / "findings.json").read_text())
+    assert real["total_findings"] == 0, (
+        "the real findings.json publishes again — restore a CASE_STATUS entry "
+        "for the failing case in build_scorecard.py and assert on it here, the "
+        "way this test did before issues/02 was fixed")
     html = _build_web(tmp_path, real, cases_dir=STATS_VALIDATION / "cases")
-    assert "This is a known defect, and it is open." in html
-    assert "02-app-vs-exported-script-missing-values.md" in html
-    assert "fix is planned" in html
+    assert "This is a known defect, and it is open." not in html
+    assert "One honest caveat on that first step" not in html
+    assert "Every difference, unabridged" not in html
+    # ...and the green page still refuses to read as "nothing can be wrong".
+    assert "No case currently publishes a difference" in html
+    assert "A validation page that only ever shows green is not evidence" in html
     assert "Logistic regression" in html
+
+
+def test_web_page_admits_when_a_failing_case_has_no_recorded_disposition(tmp_path):
+    """CASE_STATUS is empty today: its only entry was deleted with the fix that
+    made `logistic-dirty` green, rather than left dormant where nobody would
+    re-read it before the day it rendered again.
+
+    So a case that publishes export-path findings with no entry must SAY the
+    page cannot speak to whether they are being worked on — never inherit
+    another case's status, and never imply someone is on it. That sentence is
+    also the prompt to write the missing entry.
+    """
+    html = _build_web(tmp_path)
+    assert "no recorded disposition" in html
+    assert "This is a known defect, and it is open." not in html

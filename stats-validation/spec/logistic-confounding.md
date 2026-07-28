@@ -5,11 +5,16 @@ Input: `stats-validation/cases/logistic-confounding/data.csv`.
 **This spec, and `fit_logistic`, model the LIVE APP ONLY**
 (`web/guided/logistic/spec.js`'s `buildLogisticSpec` feeding `R/logistic.R`'s
 `fig_logistic` — what a user's browser session actually runs) — never the
-downloadable/exported `.R` script. The two are NOT interchangeable for
-missing-value and whitespace handling: `stats-validation/issues/02` is that
-divergence, and the shipped `logistic-dirty` case measures it on every run.
-Where this spec describes the export tier at all it says so explicitly and in
-its own section — see the Diagnostics section's export notes.
+downloadable/exported `.R` script. The two were NOT interchangeable for
+missing-value and whitespace handling: `stats-validation/issues/02` was that
+divergence, and the shipped `logistic-dirty` case measured it on every run.
+That issue is **resolved (2026-07-28)** — the exported preamble now reads a
+cell the way the browser parser does, and `logistic-dirty` publishes zero
+findings — but the modelling boundary stands regardless: this spec describes
+the live app, and the exported script is a separate artifact that has to be
+kept in parity, not assumed to be in it. Where this spec describes the export
+tier at all it says so explicitly and in its own section — see the Diagnostics
+section's export notes.
 
 ## Cell reading
 
@@ -30,9 +35,10 @@ untrimmed text. Two consequences, both normative:
 
 This is the same rule `spec/groupcompare-numeric.md`, `spec/groupcompare-dirty.md`,
 `spec/summary-table1.md` and `spec/cox-adjusted.md` state, for the same reason:
-one parser feeds all of them. The exported script does NOT trim (it re-reads the
-raw CSV with `read.csv`), which is divergence 3 of
-`stats-validation/issues/02`.
+one parser feeds all of them. The exported script used not to trim (it re-reads
+the raw CSV with `read.csv`), which was divergence 3 of
+`stats-validation/issues/02`; since 2026-07-28 its preamble trims every
+character column, so the two agree.
 
 ## Population
 Complete cases only. Drop any row where the outcome or any of the three
