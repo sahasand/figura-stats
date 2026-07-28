@@ -19,14 +19,15 @@ const REPO_ROOT = path.join(__dirname, "..", "..");
 
 module.exports = {
   testDir: __dirname,
-  // ONE test drives BOTH cases through ONE page, deliberately: a page reload
-  // throws away the Web Worker and therefore the booted webR runtime, so a
-  // per-case test would re-download the runtime and every package each time.
+  // ONE test drives ALL EIGHT cases through ONE page, deliberately: a page
+  // reload throws away the Web Worker and therefore the booted webR runtime, so
+  // a per-case test would re-download the runtime and every package each time.
   // The budget must therefore cover the whole chain — engine boot, the shared
-  // package set, the lazy `survival` install for Cox, and two real fits — not
-  // one fit. The root config's 240s covers a single-fit test; this is 20
-  // minutes for the lot, and it is a ceiling, not an expectation.
-  timeout: 1200000,
+  // package set, the lazy `survival` (Cox, KM) and `cowplot` (KM) installs, and
+  // eight real fits — not one fit. The root config's 240s covers a single-fit
+  // test; this is 40 minutes for the lot, and it is a ceiling, not an
+  // expectation (the two-case version ran in ~11s of fitting after boot).
+  timeout: 2400000,
   workers: 1,
   fullyParallel: false,
   // A release gate is read by a human at the terminal; `list` prints each step.

@@ -147,11 +147,12 @@ code { font:.85em "IBM Plex Mono", monospace; word-break:break-word; }
    the pass colour and normal weight; DRIFT is the fail colour and bold, same
    treatment the defect codes above get, and its rows carry the differing
    values so the reader sees the size of the drift, not just its existence.
-   ABORTED (a structural precondition failure — e.g. a row-count mismatch)
-   gets the same fail colour and weight as DRIFT — it is not a lesser
-   problem, it is the harness saying the two runtimes disagreed on the SHAPE
-   of the output before any cell was even compared — but italic, so it is
-   never mistaken for a DRIFT verdict at a glance. */
+   ABORTED (the case threw before it finished a comparison — a structural
+   precondition failure such as a row-count mismatch, but also any other
+   check `runCase` wraps) gets the same fail colour and weight as DRIFT — it
+   is not a lesser problem, it is the harness saying this case produced no
+   comparison at all — but italic, so it is never mistaken for a DRIFT
+   verdict at a glance. */
 .webr-identical { color:var(--pass); }
 .webr-drift { color:var(--fail); font-weight:600; }
 .webr-aborted { color:var(--fail); font-weight:600; font-style:italic; }
@@ -466,14 +467,32 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
     of the tier is that a wasm-vs-native difference in a shipped number is a
     finding, and a reader skimming the section must not mistake one for a pass.
 
-    An ABORTED case (a structural precondition failure — e.g. a row-count
-    mismatch, caught by e2e/compare-text.mjs's `runCase`) is rendered as its
-    own distinct verdict, never silently absent. Before this existed, a
-    precondition failure aborted the whole spec before webr-tier.json was ever
-    written, so the single most alarming drift class — the two runtimes
-    disagreeing on the SHAPE of the output — rendered identically to "never
-    run" (the empty-state branch above). Distinguishing the two is the entire
-    point of this branch.
+    An ABORTED case (anything `e2e/compare-text.mjs`'s `runCase` caught before
+    the case finished a comparison) is rendered as its own distinct verdict,
+    never silently absent. Before this existed, such a failure aborted the
+    whole spec before webr-tier.json was ever written, so the single most
+    alarming drift class — the two runtimes disagreeing on the SHAPE of the
+    output — rendered identically to "never run" (the empty-state branch
+    above). Distinguishing the two is the entire point of this branch.
+
+    THE DETAIL TEXT NAMES NO CAUSE, deliberately. It used to assert "the two
+    runtimes disagreed on the shape of the output before any cell was
+    compared", which was true when the only wrapped throw sites were the
+    structural preconditions. `runCase` now also wraps the driver's own
+    cross-checks (case.json's figure vs this file's driver, an unregistered
+    display kind, "cox has no increment control in the UI", "<column> is not
+    in the variable checklist"), so that sentence would now often be a
+    fabricated diagnosis printed over the top of a `reason` that says
+    otherwise. The reason is rendered verbatim; the framing around it is
+    neutral.
+
+    AN ABORTED CASE IS NOT COVERAGE. It is excluded from `covered` below, so
+    the coverage prose routes into its partial branch and NAMES it as
+    ungated. This matters because webr-tier.json is written BEFORE the run
+    fails loudly, and `make all` re-renders from whatever is on disk: without
+    the exclusion, a page could print "Coverage: 8 of 8 cases … every
+    registered case is driven through the shipped browser UI" directly above
+    an ABORTED row.
     """
     path = results_dir / "webr-tier.json"
     if not path.exists():
@@ -499,9 +518,8 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
                 f"<tr><td>{esc(c.get('id'))}</td>"
                 f"<td class='webr-aborted'>ABORTED</td>"
                 f"<td>&mdash;</td>"
-                f"<td>Structural precondition failure &mdash; the two "
-                f"runtimes disagreed on the shape of the output before any "
-                f"cell was compared: {esc(c.get('reason'))}</td></tr>")
+                f"<td>The run did not complete a comparison for this case: "
+                f"{esc(c.get('reason'))}</td></tr>")
             continue
         identical = bool(c.get("identical"))
         cls = "webr-identical" if identical else "webr-drift"
@@ -509,15 +527,24 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
         differing = c.get("differing_cells") or []
         compared = c.get("cells_compared")
         if identical:
-            detail = (f"{esc(compared)} displayed cells matched native R "
-                      "exactly")
+            # SAME VOCABULARY AS THE PUBLIC PAGE, and no count here. "Cells"
+            # was the ratio-table era's noun; five of the eight cases display
+            # sentences, not cells, so `groupcompare-categorical` read "1
+            # displayed cells matched" — the wrong noun AND a plural bug on
+            # the one case small enough to expose it. The count lives in the
+            # adjacent "Strings compared" column, so dropping it from the
+            # sentence removes the pluralisation problem rather than papering
+            # over it.
+            detail = "every displayed string matched native R exactly"
         else:
             items = "".join(
                 f"<li><b>{esc(d.get('term'))}</b> / {esc(d.get('column'))}: "
                 f"native <code>{esc(d.get('native'))}</code> &rarr; "
                 f"webR <code>{esc(d.get('webr'))}</code></li>"
                 for d in differing)
-            detail = (f"{len(differing)} of {esc(compared)} cells differ"
+            n = len(differing)
+            detail = (f"{n} of {esc(compared)} string"
+                      f"{'' if n == 1 else 's'} differ{'s' if n == 1 else ''}"
                       f"<ul>{items}</ul>")
         rows.append(
             f"<tr><td>{esc(c.get('id'))}</td>"
@@ -606,34 +633,48 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
             f"and webR.{note_html}</p>"
         )
 
-    # COVERAGE, ON THE PAGE AND NOT ONLY IN THE README. This tier runs on a
-    # SUBSET of the roster — the ratio-table cases with a full native-R display
-    # artifact — and a section that lists two green rows without saying "two of
-    # eight" reads as whole-roster parity. Both numbers are read off files on
-    # disk (the tier's own case list, and results/ for the registered roster),
-    # so this stays a pure function of its inputs like everything else here.
+    # COVERAGE, ON THE PAGE AND NOT ONLY IN THE README. A section that lists
+    # green rows without saying how much of the roster they are reads as
+    # whole-roster parity. Both numbers are read off files on disk (the tier's
+    # own case list, and results/ for the registered roster), so this stays a
+    # pure function of its inputs like everything else here — and the ratio
+    # keeps being stated even now that it is 8 of 8, because "all of them" is a
+    # claim a reader is entitled to see counted rather than asserted.
+    #
+    # AN ABORTED CASE IS NOT COVERED — it produced no comparison at all, so
+    # counting it here would let the section print "8 of 8 … every registered
+    # case is driven through the shipped browser UI" one line above an ABORTED
+    # row. Excluding it routes the prose into the partial branch, which names
+    # the case as ungated. Reachable in practice, not theoretically: the spec
+    # writes webr-tier.json BEFORE it fails loudly, and `make all` re-renders
+    # from whatever is on disk.
     registered = registered_cases(results_dir)
-    covered = [c.get("id") for c in cases]
+    covered = [c.get("id") for c in cases if not c.get("aborted")]
     coverage_html = ""
     if registered:
         uncovered = [c for c in registered if c not in covered]
-        uncovered_html = (
-            f" Not gated in this tier: <code>"
-            f"{esc(', '.join(uncovered))}</code>." if uncovered else "")
+        if uncovered:
+            body = (
+                f"This tier drives the shipped browser UI and does not reach "
+                f"the whole roster. The cases it misses are validated on the "
+                f"native-R tiers above and are <i>not</i> covered by any "
+                f"wasm-vs-native claim. Not gated in this tier: "
+                f"<code>{esc(', '.join(uncovered))}</code>.")
+        else:
+            body = (
+                "Every registered case is driven through the shipped browser "
+                "UI and compared against its own native-R display artifact "
+                "&mdash; the ratio tables and Table 1 cell by cell, and the "
+                "analyses that display a sentence rather than a table "
+                "(Kaplan&ndash;Meier, group comparison) sentence by sentence.")
         coverage_html = (
             f"<p class=\"webr-totals\"><b>Coverage: {len(covered)} of "
-            f"{len(registered)} cases.</b> This tier drives the shipped browser "
-            f"UI, so it covers only the cases with a full native-R display "
-            f"artifact to compare a rendered table against &mdash; the two "
-            f"ratio-table analyses. The remaining cases are validated on the "
-            f"native-R tiers above and are <i>not</i> covered by any "
-            f"wasm-vs-native claim.{uncovered_html} Extending the roster needs "
-            f"the shared-webR-boot refactor of the other suites (Phase 2).</p>")
+            f"{len(registered)} cases.</b> {body}</p>")
 
     return (
         f"{header_html}{staleness_html}{coverage_html}{totals_html}"
         "<div class=\"scroll\"><table><thead><tr><th>Case</th>"
-        "<th>Result</th><th>Cells compared</th><th>Detail</th></tr></thead>"
+        "<th>Result</th><th>Strings compared</th><th>Detail</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>")
 
 
@@ -1699,6 +1740,75 @@ def _web_differences_section(data: dict) -> str:
     return "".join(parts)
 
 
+def _undriftable_clause(cases: list, total, numeric) -> str:
+    """What the OTHER strings are — derived from the evidence, never asserted.
+
+    THE BUG THIS EXISTS FOR. The sentence used to read "The rest are column
+    headers, row labels and deliberately blank cells, which cannot drift."
+    That was true of the two-ratio-table roster it was written for. On the
+    eight-case roster it was wrong by 8 units: of the 55 non-numeric strings,
+    47 are headers/labels/blank cells and the other 8 are DISPLAYED SENTENCES
+    that happen to carry no number — a shape the sentence did not know
+    existed. So the split is now summed from each case's own `cell_kinds`
+    rather than written down, and it cannot go stale when the roster's mix of
+    shapes changes again.
+
+    IT REFUSES RATHER THAN GUESSES. The clause is only rendered when the
+    summed kinds actually reconcile with the two published totals
+    (value + methods_with_number == cells_with_numbers, and all five kinds
+    == cells_compared). A webr-tier.json written before `cell_kinds` existed,
+    or one whose per-case breakdowns do not add up to its own totals, gets a
+    sentence that claims no split at all instead of a fabricated arithmetic.
+
+    Aborted cases contribute nothing here — they compared nothing, and the
+    totals they are being reconciled against are sums over completed cases.
+    """
+    generic = ("The rest are labels and fixed wording, which cannot drift.")
+    keys = ("header", "term", "value", "empty", "methods",
+            "methods_with_number")
+    agg = {k: 0 for k in keys}
+    seen = False
+    for c in cases:
+        if c.get("aborted"):
+            continue
+        kinds = c.get("cell_kinds")
+        if not isinstance(kinds, dict):
+            continue
+        seen = True
+        for k in keys:
+            value = kinds.get(k)
+            if not isinstance(value, int) or isinstance(value, bool):
+                return generic
+            agg[k] += value
+    if not seen or not isinstance(total, int) or not isinstance(numeric, int):
+        return generic
+    static = agg["header"] + agg["term"] + agg["empty"]
+    prose = agg["methods"] - agg["methods_with_number"]
+    if prose < 0:
+        return generic
+    if agg["value"] + agg["methods_with_number"] != numeric:
+        return generic
+    if static + agg["methods"] + agg["value"] != total:
+        return generic
+    rest = total - numeric
+    if rest != static + prose:
+        return generic
+    if rest == 0:
+        return "Every compared string carries a number."
+    clauses = []
+    if static:
+        clauses.append(
+            f"<b>{static}</b> are column headers, row labels and deliberately "
+            f"blank cells")
+    if prose:
+        clauses.append(
+            f"<b>{prose}</b> {'is a' if prose == 1 else 'are'} displayed "
+            f"sentence{'' if prose == 1 else 's'} that carr"
+            f"{'ies' if prose == 1 else 'y'} no number")
+    return (f"The other <b>{rest}</b> string{'' if rest == 1 else 's'} cannot "
+            f"drift: " + ", and ".join(clauses) + ".")
+
+
 def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
     """The wasm-vs-native-R tier, for the reader who actually runs webR.
 
@@ -1706,6 +1816,10 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
     if the native numbers or the shipped app have moved since the gate was
     hand-run, this page says so instead of quietly presenting old evidence as
     current.
+
+    An ABORTED case is deliberately NOT counted as coverage — see the same
+    argument spelled out in `_webr_section`'s docstring. Both surfaces must
+    agree, because both are rendered from the same file by the same `make`.
     """
     path = Path(results_dir) / "webr-tier.json"
     if not path.exists():
@@ -1723,15 +1837,18 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
 
     cases = raw.get("cases") or []
     registered = registered_cases(Path(results_dir))
-    covered = [c.get("id") for c in cases]
+    # Aborted cases compared nothing, so they are not coverage. See
+    # _webr_section's docstring for why this is reachable rather than
+    # theoretical.
+    covered = [c.get("id") for c in cases if not c.get("aborted")]
     rows = []
     for c in cases:
         if c.get("aborted"):
             rows.append(
                 f"<tr><th scope=\"row\" class='case-id'>{esc(c.get('id'))}</th>"
                 f"<td class='v-fail'>ABORTED</td><td class='num'>&mdash;</td>"
-                f"<td>The two runtimes disagreed on the shape of the output "
-                f"before any value was compared: {esc(c.get('reason'))}</td>"
+                f"<td>The run did not complete a comparison for this case: "
+                f"{esc(c.get('reason'))}</td>"
                 f"</tr>")
             continue
         identical = bool(c.get("identical"))
@@ -1745,8 +1862,10 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
                 f"<li><b>{esc(d.get('term'))}</b> / {esc(d.get('column'))}: "
                 f"native R <code>{esc(d.get('native'))}</code>, webR "
                 f"<code>{esc(d.get('webr'))}</code></li>" for d in differing)
-            detail = (f"{len(differing)} of {esc(c.get('cells_compared'))} "
-                      f"strings differ<ul>{detail}</ul>")
+            n = len(differing)
+            detail = (f"{n} of {esc(c.get('cells_compared'))} "
+                      f"string{'' if n == 1 else 's'} "
+                      f"differ{'s' if n == 1 else ''}<ul>{detail}</ul>")
         rows.append(
             f"<tr><th scope=\"row\" class='case-id'>{esc(c.get('id'))}</th>"
             f"<td>{verdict}</td>"
@@ -1765,22 +1884,28 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
             f"<p>Every one of the <b>{esc(total)}</b> strings the app displays "
             f"across these cases was compared &mdash; <b>{esc(numeric)}</b> of "
             f"them carrying a number that could actually move between native R "
-            f"and WebAssembly. The rest are column headers, row labels and "
-            f"deliberately blank cells, which cannot drift.</p>"
+            f"and WebAssembly. {_undriftable_clause(cases, total, numeric)}</p>"
             + (f"<p class=\"aside\">{esc(note)}</p>" if note else ""))
 
     coverage = ""
     if registered:
         uncovered = [c for c in registered if c not in covered]
-        coverage = (
-            f"<p><b>Coverage: {len(covered)} of {len(registered)} cases.</b> "
-            f"This gate drives the real browser interface, so it covers only "
-            f"the cases with a full native-R display artifact to compare a "
-            f"rendered table against &mdash; the two ratio-table analyses. The "
-            f"remaining cases are validated on native R above and are "
-            f"<i>not</i> covered by any wasm-vs-native claim."
-            + (f" Not gated here: <code>{esc(', '.join(uncovered))}</code>."
-               if uncovered else "") + "</p>")
+        if uncovered:
+            body = (
+                f"This gate drives the real browser interface and does not "
+                f"reach the whole roster. The cases it misses are validated on "
+                f"native R above and are <i>not</i> covered by any "
+                f"wasm-vs-native claim. Not gated here: "
+                f"<code>{esc(', '.join(uncovered))}</code>.")
+        else:
+            body = (
+                "Every case on this page was also run through the real browser "
+                "interface and checked against native R &mdash; the tables cell "
+                "by cell, and the analyses that report a sentence rather than a "
+                "table (Kaplan&ndash;Meier, group comparison) sentence by "
+                "sentence.")
+        coverage = (f"<p><b>Coverage: {len(covered)} of {len(registered)} "
+                    f"cases.</b> {body}</p>")
 
     stale = ""
     stale_native = _stale_native_digest(
@@ -1974,8 +2099,9 @@ and the <code>.R</code> script the app offers <b>for download</b>, re-run in R.<
 {_web_coverage_table(data, cases_dir)}
 <p>Two boundaries this table does not draw on its own. <b>Explore</b>, the plot
 builder, has no case here: it reports no statistics of its own, only a figure.
-And the whole table above is <b>native R</b> &mdash; the runtime in your browser
-is checked separately and on fewer cases; see
+And the whole table above is <b>native R</b> &mdash; the runtime that actually
+runs in your browser is checked separately, and how much of the roster that
+check reaches is stated where it is reported; see
 <a href="#webr">webR against native R</a>.</p>
 
 <h3>Case by case</h3>
@@ -1992,10 +2118,11 @@ rather than the platform's tuned ones, so an iteratively fitted model &mdash;
 Cox's Newton-Raphson, logistic regression's IRLS &mdash; is where a difference
 would show up if there were one.</p>
 <p>A hand-run gate drives the real interface in a real browser (upload the file,
-map the columns, confirm the event value, set the reference levels, render) and
-compares every string the app displays against native R's output, cell by cell.
-It is run before a release rather than on every change, because it needs a
-browser and the network.</p>
+map the columns, confirm the event value, set the reference levels, tick the
+variables, render) and compares every string the app displays against native R's
+output: the tables cell by cell, and the analyses that report a sentence rather
+than a table sentence by sentence. It is run before a release rather than on
+every change, because it needs a browser and the network.</p>
 {_web_webr_section(results_dir, web_dir)}
 
 <h2 id="yourself">How to check this yourself</h2>

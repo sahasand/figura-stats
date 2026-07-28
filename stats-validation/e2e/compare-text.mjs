@@ -17,6 +17,32 @@
 // harness/parse-cells.mjs's `parseRatioTable` was kept for (see that file's
 // header comment), and a second parser in this module could disagree with the
 // real one and call that disagreement drift.
+//
+// THREE COMPARISON SHAPES, ONE VOCABULARY. The roster is not all ratio tables.
+// `parseRatioTable` understands the three-column cox/logistic TSV and nothing
+// else, so the other five cases would have to be either skipped or compared by
+// a shape that fits what they actually display:
+//
+//   ratio_table  cox, logistic     -> compareText   (parseRatioTable, unchanged)
+//   table1       summary           -> compareTable  (general N-column TSV)
+//   km_summary   km                -> compareProse  (no table at all: one
+//   gc_summary   group comparison  -> compareProse   displayed sentence block)
+//
+// `compareDisplay(kind, ...)` dispatches on the case's own `display.kind`, so
+// the shape is read off case.json rather than guessed from the text. All three
+// produce the SAME result object — `{compared, differing, cellKinds,
+// cellsWithNumbers}` over the same five cell kinds — because the honesty
+// property the evidence file depends on is that `cells_compared` counts
+// comparable UNITS and `cell_kinds` explains what those units are. A prose
+// case whose display is one sentence contributes one comparable unit, not
+// thirty-six imaginary ones.
+//
+// The general parser used by compareTable is applied IDENTICALLY to both sides,
+// so unlike a second ratio parser it cannot manufacture drift — a quirk in it
+// cancels out. It normalises nothing INSIDE THE TABLE (no cell trimming, no
+// padding a short row), which is stricter than parseRatioTable's value-cell
+// trim; it does trim the methods paragraph, exactly as parseRatioTable does.
+// See the note on `parseDisplayTable`.
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { parseRatioTable } from "../harness/parse-cells.mjs";
@@ -31,6 +57,53 @@ function assertPrecondition(condition, message) {
     throw new Error(`webR tier precondition failed: ${message}`);
   }
 }
+
+// RESIDUAL BLIND SPOTS — what this comparator provably CANNOT see.
+//
+// This file's comments are the tier's audit trail, so the honest limits live
+// here rather than only in a review thread. None of these is a bug being
+// deferred: each is a normalisation applied IDENTICALLY to both sides, so it
+// can never manufacture drift. What it can do is hide a difference, and that
+// is worth naming precisely, because the published claim is "every displayed
+// string was compared".
+//
+//   1. Trailing whitespace after the FINAL sentence of a prose line.
+//      `sentences()` splits on /(?<=\.)\s+/ and drops whitespace-only
+//      fragments, so "Alpha. Beta." and "Alpha. Beta.   " both yield
+//      ["Alpha.", "Beta."] and compare identical. (A final sentence NOT ending
+//      in "." keeps its trailing whitespace and is visible; leading whitespace
+//      at the START of a line is also visible, since nothing splits there.)
+//   2. Whitespace BETWEEN sentences, for the same reason: the separator is
+//      consumed by the split, so "Alpha. Beta." and "Alpha.   Beta." compare
+//      identical.
+//   3. A whitespace-only line inside a TSV block. Both parsers filter
+//      `l.trim() !== ""` before pairing rows, so a blank line one runtime
+//      printed and the other did not is removed rather than reported — and
+//      because it is removed on the side that has it, it does not even show up
+//      as a row-count precondition failure.
+//   4. Leading/trailing whitespace on a ratio table's `unadj`/`adj` cell.
+//      `parseRatioTable` trims those two columns (documented in
+//      parse-cells.mjs and in the classifyColumn note below); the `term`
+//      column is left untrimmed, so the asymmetry runs one way only.
+//   5. A FOURTH tab-separated field on a ratio-table data row. UNDOCUMENTED
+//      until now and pre-existing: `parseRatioTable` destructures
+//      `const [term, unadj, adj] = l.split("\t")`, so anything past the third
+//      field is discarded on both sides and an extra column webR emitted (or
+//      dropped) is invisible. The general `parseDisplayTable` used by
+//      `compareTable` does NOT have this hole — it keeps every field and
+//      asserts the per-row cell count — so it is specific to the three
+//      ratio_table cases.
+//
+// NEGATIVE CONTROL, AND ITS PROVENANCE. The direction that matters — would a
+// real drift actually be CAUGHT end to end — was exercised on 2026-07-28 by
+// the reviewer of the 8-case widening, read-only, by running the committed
+// comparator against MUTATED COPIES of the native display artifacts (the
+// artifacts in results/ were never touched). All three comparison paths
+// detected the injected drift: ratio_table (compareText), table1
+// (compareTable) and prose (compareProse), and the scorecard's DRIFT and
+// ABORTED renderers were confirmed to render the result. Recorded here
+// because the review report that established it is gitignored, and evidence
+// of a negative control is worth exactly as much as its provenance.
 
 // What KIND of displayed string a compared cell is. Only "value" cells and
 // "methods" cells that contain a digit can ever show wasm-vs-native drift —
@@ -51,7 +124,9 @@ function assertPrecondition(condition, message) {
 // `unadj`/`adj` cell would be silently normalized away before this comparator
 // ever sees it. Both behaviors are inherited, not decided here — this
 // comment exists so a future reader of a `term`-column drift (or the absence
-// of one on a value column) does not mistake it for a bug in this file.
+// of one on a value column) does not mistake it for a bug in this file. The
+// full list of what this comparator cannot see is in RESIDUAL BLIND SPOTS
+// above, of which that trim is item 4.
 export function classifyColumn(column, nativeValue) {
   if (column === "line") return "header";
   if (column === "characteristic") return "term";
@@ -65,6 +140,59 @@ export function classifyColumn(column, nativeValue) {
 // forcing the reader to diff two paragraphs by eye.
 export function sentences(paragraph) {
   return paragraph.split(/(?<=\.)\s+/).filter((s) => s.trim() !== "");
+}
+
+// The one accumulator every comparison shape below writes through, so the five
+// cell kinds partition every compared cell no matter which shape produced it —
+// the invariant webr-tier.json's published breakdown rests on. The KIND is
+// passed in explicitly rather than derived from the column label: only the
+// ratio shape has fixed column names, and inferring "value" from a label like
+// "Control (N=60)" would be guessing.
+function collector() {
+  const differing = [];
+  const cellKinds = { header: 0, term: 0, value: 0, empty: 0, methods: 0, methodsWithNumber: 0 };
+  let compared = 0;
+  return {
+    cell(term, column, kind, a, b) {
+      compared += 1;
+      cellKinds[kind] += 1;
+      if (kind === "methods" && /\d/.test(a)) cellKinds.methodsWithNumber += 1;
+      if (a !== b) differing.push({ term, column, native: a, webr: b });
+    },
+    result() {
+      return {
+        compared,
+        differing,
+        cellKinds,
+        cellsWithNumbers: cellKinds.value + cellKinds.methodsWithNumber,
+      };
+    },
+  };
+}
+
+// Sentence-by-sentence comparison of one paragraph, shared by all three shapes.
+// A SENTENCE-COUNT mismatch means a diagnostic fired on one runtime and not the
+// other; aligning by index would misattribute every later sentence, so the whole
+// paragraph is recorded as one difference instead.
+function compareParagraph(cells, term, nativePara, webrPara) {
+  const natS = sentences(nativePara);
+  const webS = sentences(webrPara);
+  // `sentences` drops whitespace-only fragments, so a line that is blank (or
+  // only whitespace) on BOTH sides would otherwise contribute zero comparable
+  // units — and a whitespace-only difference between the two would then be
+  // invisible rather than reported. Compare the raw line as one unit instead:
+  // "both runtimes printed nothing here" is itself a fact worth counting once.
+  if (natS.length === 0 && webS.length === 0) {
+    cells.cell(term, "line", "methods", nativePara, webrPara);
+    return;
+  }
+  if (natS.length !== webS.length) {
+    cells.cell(term, "whole paragraph", "methods", nativePara, webrPara);
+    return;
+  }
+  for (let i = 0; i < natS.length; i++) {
+    cells.cell(term, `sentence ${i + 1}`, "methods", natS[i], webS[i]);
+  }
 }
 
 // The webR tier's comparison, not assertion: differences are RECORDED, not
@@ -82,16 +210,9 @@ export function compareText(native, webr) {
     `webR table row count (${web.rows.length}) differs from native R (${nat.rows.length})`,
   );
 
-  const differing = [];
-  let compared = 0;
-  const cellKinds = { header: 0, term: 0, value: 0, empty: 0, methods: 0, methodsWithNumber: 0 };
-  const cell = (term, column, a, b) => {
-    compared += 1;
-    const kind = classifyColumn(column, a);
-    cellKinds[kind] += 1;
-    if (kind === "methods" && /\d/.test(a)) cellKinds.methodsWithNumber += 1;
-    if (a !== b) differing.push({ term, column, native: a, webr: b });
-  };
+  const cells = collector();
+  const cell = (term, column, a, b) =>
+    cells.cell(term, column, classifyColumn(column, a), a, b);
 
   // The TSV's first line is the static column-header row. parseRatioTable
   // deliberately drops it (it holds labels, not values) but it is still one
@@ -105,21 +226,137 @@ export function compareText(native, webr) {
     }
   }
 
-  const natS = sentences(nat.methods);
-  const webS = sentences(web.methods);
-  if (natS.length !== webS.length) {
-    // Different sentence counts mean a diagnostic fired on one runtime and not
-    // the other. Aligning by index would misattribute every later sentence,
-    // so the whole paragraph is recorded as one difference.
-    cell("(methods paragraph)", "whole paragraph", nat.methods, web.methods);
-  } else {
-    for (let i = 0; i < natS.length; i++) {
-      cell("(methods paragraph)", `sentence ${i + 1}`, natS[i], webS[i]);
+  compareParagraph(cells, "(methods paragraph)", nat.methods, web.methods);
+  return cells.result();
+}
+
+// A general "TSV table, blank line, methods paragraph" parse for the display
+// kinds parseRatioTable cannot read — today `table1`, whose column count is the
+// number of groups plus two and therefore varies per case.
+//
+// IT NORMALISES NO TABLE CELL. parseRatioTable trims its two value columns (and
+// defaults a missing field to ""); this trims nothing and pads nothing inside
+// the table, so a whitespace-only difference between the runtimes is reported
+// as the difference it is rather than silently absorbed. A short row is
+// therefore a structural precondition failure below, not a row quietly padded
+// to width.
+//
+// The one thing it DOES normalise is the methods paragraph, which is `.trim()`ed
+// on the way out — exactly as parseRatioTable trims its own, so the two shapes
+// agree. Whitespace around the whole paragraph is therefore invisible to both;
+// "normalises nothing at all" is the claim this comment used to make, and it
+// was wrong by that one call. See RESIDUAL BLIND SPOTS at the top of the file.
+export function parseDisplayTable(text) {
+  const [tsv, ...rest] = String(text).split("\n\n");
+  const lines = tsv.split("\n").filter((l) => l.trim() !== "");
+  return {
+    header: lines.length ? lines[0] : "",
+    columns: lines.length ? lines[0].split("\t") : [],
+    rows: lines.slice(1).map((l) => l.split("\t")),
+    methods: rest.join("\n\n").trim(),
+  };
+}
+
+// `table1`: an N-column TSV (Characteristic, one column per group, Missing)
+// plus a methods paragraph. Same vocabulary as compareText — column 0 is the
+// row label ("term"), every other cell is a "value" unless native prints it
+// blank, in which case it is an "empty" placeholder (a categorical variable's
+// own header row carries blank group cells, exactly as a ratio table's
+// reference row does).
+export function compareTable(native, webr) {
+  const nat = parseDisplayTable(native);
+  const web = parseDisplayTable(webr);
+
+  assertPrecondition(nat.rows.length > 0, "native artifact parsed no table rows");
+  assertPrecondition(web.rows.length > 0, "webR output parsed no table rows");
+  assertPrecondition(
+    web.rows.length === nat.rows.length,
+    `webR table row count (${web.rows.length}) differs from native R (${nat.rows.length})`,
+  );
+  assertPrecondition(
+    web.columns.length === nat.columns.length,
+    `webR table column count (${web.columns.length}) differs from native R ` +
+    `(${nat.columns.length})`,
+  );
+
+  const cells = collector();
+  cells.cell("(header row)", "line", "header", nat.header, web.header);
+
+  for (let i = 0; i < nat.rows.length; i++) {
+    const natRow = nat.rows[i];
+    const webRow = web.rows[i];
+    assertPrecondition(
+      natRow.length === webRow.length,
+      `row ${i + 1} ("${natRow[0]}"): webR emitted ${webRow.length} cells, ` +
+      `native R emitted ${natRow.length}`,
+    );
+    for (let j = 0; j < natRow.length; j++) {
+      // The column label is the header cell at this index, so a difference
+      // reads "Control (N=60)" rather than "column 2".
+      const column = j === 0 ? COLUMN_LABEL.term : (nat.columns[j] ?? `column ${j + 1}`);
+      const kind = j === 0 ? "term" : (natRow[j] === "" ? "empty" : "value");
+      cells.cell(natRow[0], column, kind, natRow[j], webRow[j]);
     }
   }
 
-  const cellsWithNumbers = cellKinds.value + cellKinds.methodsWithNumber;
-  return { compared, differing, cellKinds, cellsWithNumbers };
+  compareParagraph(cells, "(methods paragraph)", nat.methods, web.methods);
+  return cells.result();
+}
+
+// `km_summary` and `gc_summary`: no table at all. The whole display is the
+// copy-pasteable methods/results sentence block, so the comparable units are
+// its lines and, within a line, its sentences — "compare the displayed text,
+// cell-wise where it is tabular and line-wise otherwise". Every unit here is a
+// "methods" cell, and the ones carrying a digit are the ones that could drift.
+//
+// A LINE-COUNT mismatch is structural (one runtime printed a paragraph the
+// other did not) and is a precondition failure, exactly like a row-count
+// mismatch in the tabular shapes.
+export function compareProse(native, webr) {
+  const natLines = String(native).split("\n");
+  const webLines = String(webr).split("\n");
+
+  assertPrecondition(
+    String(native).trim() !== "", "native artifact displayed no text");
+  assertPrecondition(
+    String(webr).trim() !== "", "webR output displayed no text");
+  assertPrecondition(
+    webLines.length === natLines.length,
+    `webR output line count (${webLines.length}) differs from native R ` +
+    `(${natLines.length})`,
+  );
+
+  const cells = collector();
+  const multiline = natLines.length > 1;
+  for (let i = 0; i < natLines.length; i++) {
+    compareParagraph(
+      cells,
+      multiline ? `(displayed text, line ${i + 1})` : "(displayed text)",
+      natLines[i],
+      webLines[i],
+    );
+  }
+  return cells.result();
+}
+
+// The comparison shape for each display kind a case can declare. Read off
+// case.json's own `display.kind` rather than sniffed from the text, so a case
+// can never be compared through a shape it was not registered for — and an
+// unregistered kind is a loud failure, never a silent skip.
+export const COMPARATORS = {
+  ratio_table: compareText,
+  table1: compareTable,
+  km_summary: compareProse,
+  gc_summary: compareProse,
+};
+
+export function compareDisplay(kind, native, webr) {
+  const compare = COMPARATORS[kind];
+  assertPrecondition(
+    typeof compare === "function",
+    `no comparison shape registered for display kind "${kind}" — the webR ` +
+    `tier must not fall back to a shape the case did not declare`);
+  return compare(native, webr);
 }
 
 // Runs one case's driver + comparison, converting a thrown precondition (or

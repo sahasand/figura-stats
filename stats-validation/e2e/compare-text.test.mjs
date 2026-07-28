@@ -5,6 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import {
   compareText,
+  compareTable,
+  compareProse,
+  compareDisplay,
+  parseDisplayTable,
+  COMPARATORS,
   classifyColumn,
   runCase,
   nativeDigest,
@@ -128,6 +133,160 @@ const NATIVE =
   assert.equal(classifyColumn("adjusted", ""), "empty");
   assert.equal(classifyColumn("sentence 1", "n = 320, 91 events."), "methods");
   assert.equal(classifyColumn("whole paragraph", "..."), "methods");
+}
+
+// ---------------------------------------------------------------------------
+// THE OTHER TWO COMPARISON SHAPES. Five of the eight roster cases are not ratio
+// tables (`table1`, `km_summary`, `gc_summary`), so `parseRatioTable` cannot
+// read them. What matters for the published evidence is that these shapes obey
+// the SAME two properties compareText does: differences are recorded rather
+// than thrown, structural mismatches ARE thrown, and the cell kinds partition
+// every compared cell so `cells_compared` stays an honest count of comparable
+// units.
+
+// The real shape of results/summary-table1.figura.json's `text`: an N-column
+// TSV (Characteristic + one column per group + Missing), a blank line, then the
+// methods paragraph. Two rows here are a categorical variable's own header row,
+// whose group cells are blank by construction.
+const TABLE1 =
+  "Characteristic\tControl (N=60)\tTreatment (N=60)\tMissing\n" +
+  "age, mean ± SD\t59.6 ± 11.1\t60.2 ± 11.4\t0\n" +
+  "sex\t\t\t0\n" +
+  "Female\t32 (53%)\t28 (47%)\t\n" +
+  "Male\t28 (47%)\t32 (53%)\t\n" +
+  "\n" +
+  "Continuous variables are summarized as mean ± SD when approximately normal. " +
+  "Categorical variables are n (%). No hypothesis tests are reported.";
+
+{
+  const { compared, differing, cellKinds, cellsWithNumbers } =
+    compareTable(TABLE1, TABLE1);
+  assert.equal(differing.length, 0, "identical Table 1 text must record zero drift");
+  const kindTotal = cellKinds.header + cellKinds.term + cellKinds.value
+    + cellKinds.empty + cellKinds.methods;
+  assert.equal(kindTotal, compared, "cell kinds must partition every compared cell");
+  // 1 header line + 4 rows x 4 columns + 3 methods sentences.
+  assert.equal(cellKinds.header, 1);
+  assert.equal(cellKinds.term, 4);          // one row label per row
+  assert.equal(cellKinds.empty, 4);         // sex's two group cells, the two blank Missing cells
+  assert.equal(cellKinds.value, 8);
+  assert.equal(cellKinds.methods, 3);
+  assert.equal(cellKinds.methodsWithNumber, 0);
+  assert.equal(cellsWithNumbers, 8);
+  assert.equal(compared, 20);
+}
+{
+  // A single-cell difference is one drift record, labelled with the row and the
+  // real column HEADER (not "column 2") so it is readable on the scorecard.
+  const drifted = compareTable(
+    TABLE1, TABLE1.replace("60.2 ± 11.4", "60.3 ± 11.4"));
+  assert.equal(drifted.differing.length, 1);
+  assert.deepEqual(drifted.differing[0], {
+    term: "age, mean ± SD",
+    column: "Treatment (N=60)",
+    native: "60.2 ± 11.4",
+    webr: "60.3 ± 11.4",
+  });
+}
+{
+  // Structural mismatches throw — a row dropped, or a column dropped.
+  assert.throws(
+    () => compareTable(TABLE1, TABLE1.replace("Male\t28 (47%)\t32 (53%)\t\n", "")),
+    /row count/,
+    "a Table 1 row-count mismatch must throw, not be recorded as drift");
+  assert.throws(
+    () => compareTable(TABLE1, TABLE1.replace("\tMissing\n", "\n")),
+    /column count/,
+    "a Table 1 column-count mismatch must throw");
+  assert.throws(
+    () => compareTable(TABLE1, TABLE1.replace("sex\t\t\t0", "sex\t\t0")),
+    /webR emitted 3 cells/,
+    "a short row must throw rather than be silently padded");
+}
+{
+  // parseDisplayTable normalises NOTHING: a whitespace-only difference is a
+  // reported difference, not something quietly trimmed away.
+  const padded = compareTable(TABLE1, TABLE1.replace("\t0\n", "\t0 \n"));
+  assert.equal(padded.differing.length, 1,
+    "a trailing space on a value cell must be reported, not normalised");
+  const parsed = parseDisplayTable(TABLE1);
+  assert.equal(parsed.columns.length, 4);
+  assert.equal(parsed.rows.length, 4);
+  assert.equal(parsed.rows[1].join("|"), "sex|||0");
+}
+
+// The prose shapes: km_summary and gc_summary display no table at all, so the
+// comparable units are the sentences of the displayed text.
+const KM_TEXT =
+  "HR 1.56 (Standard care vs New treatment; 95% CI 0.90–2.71); log-rank p = 0.108. " +
+  "Median survival: New treatment not reached; Standard care 26.0 Time.";
+
+{
+  const { compared, differing, cellKinds, cellsWithNumbers } =
+    compareProse(KM_TEXT, KM_TEXT);
+  assert.equal(differing.length, 0);
+  assert.equal(compared, 2, "the KM sentence block is two comparable units");
+  assert.equal(cellKinds.methods, 2);
+  assert.equal(cellKinds.methodsWithNumber, 2);
+  assert.equal(cellsWithNumbers, 2);
+  // Nothing tabular was invented for a display that has no table.
+  assert.equal(cellKinds.header + cellKinds.term + cellKinds.value + cellKinds.empty, 0);
+  assert.equal(
+    cellKinds.header + cellKinds.term + cellKinds.value + cellKinds.empty
+      + cellKinds.methods,
+    compared);
+}
+{
+  const drifted = compareProse(KM_TEXT, KM_TEXT.replace("p = 0.108", "p = 0.109"));
+  assert.equal(drifted.differing.length, 1);
+  assert.equal(drifted.differing[0].term, "(displayed text)");
+  assert.equal(drifted.differing[0].column, "sentence 1");
+  assert.match(drifted.differing[0].webr, /p = 0\.109/);
+}
+{
+  // A sentence-count mismatch (a diagnostic firing on one runtime only) is
+  // recorded as ONE whole-paragraph difference rather than misaligned by index.
+  const extra = compareProse(KM_TEXT, KM_TEXT + " 4 rows were excluded.");
+  assert.equal(extra.differing.length, 1);
+  assert.equal(extra.differing[0].column, "whole paragraph");
+}
+{
+  assert.throws(() => compareProse(KM_TEXT, KM_TEXT + "\nsecond line"),
+    /line count/, "a line-count mismatch is structural and must throw");
+  assert.throws(() => compareProse("   ", "   "),
+    /displayed no text/, "an empty display must throw");
+}
+{
+  // A line that sentence-splits to NOTHING on both sides still counts as one
+  // comparable unit, so a whitespace-only difference inside it is reported
+  // rather than vanishing between two empty sentence lists.
+  const blankNative = KM_TEXT + "\n";
+  const blankWebr = KM_TEXT + "\n ";
+  const r = compareProse(blankNative, blankWebr);
+  assert.equal(r.compared, 3, "the blank trailing line is a comparable unit");
+  assert.equal(r.differing.length, 1,
+    "a whitespace-only difference on an otherwise empty line must be reported");
+  assert.equal(r.differing[0].column, "line");
+  assert.equal(r.differing[0].term, "(displayed text, line 2)");
+}
+
+// ---------------------------------------------------------------------------
+// compareDisplay: the dispatcher. The shape comes from case.json's declared
+// display kind, and an unregistered kind must fail loudly rather than fall back
+// to a shape the case never declared (which would compare the wrong thing and
+// publish the result as parity).
+{
+  assert.deepEqual(
+    Object.keys(COMPARATORS).sort(),
+    ["gc_summary", "km_summary", "ratio_table", "table1"],
+    "every display kind a case can declare needs a comparison shape");
+  assert.equal(compareDisplay("ratio_table", NATIVE, NATIVE).compared, 13);
+  assert.equal(compareDisplay("table1", TABLE1, TABLE1).compared, 20);
+  assert.equal(compareDisplay("km_summary", KM_TEXT, KM_TEXT).compared, 2);
+  assert.equal(compareDisplay("gc_summary", KM_TEXT, KM_TEXT).compared, 2);
+  assert.throws(() => compareDisplay("mystery_kind", "a", "a"),
+    /no comparison shape registered/,
+    "an unknown display kind must not silently pick a shape");
 }
 
 // ---------------------------------------------------------------------------

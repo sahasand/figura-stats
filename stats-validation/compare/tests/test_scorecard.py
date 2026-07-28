@@ -248,8 +248,13 @@ def test_webr_section_renders_the_real_file(tmp_path):
     assert "2026-07-26" in html
     assert "cox-adjusted" in html
     assert "IDENTICAL" in html
-    assert "13 displayed cells matched native R exactly" in html
-    assert "2 of 23 cells differ" in html
+    # "Strings", not "cells": five of the eight cases display sentences, not
+    # table cells, so the noun is the public page's. The count lives in the
+    # adjacent column, which is also what retires the "1 displayed cells"
+    # plural bug the ratio-era wording carried.
+    assert "every displayed string matched native R exactly" in html
+    assert "<th>Strings compared</th>" in html
+    assert "2 of 23 strings differ" in html
 
 
 def test_webr_drift_row_is_visually_distinct_from_an_identical_one(tmp_path):
@@ -271,6 +276,17 @@ def test_webr_drift_names_the_two_values(tmp_path):
     assert "0.51 (0.28-0.91, p=0.023)" in html
     assert "0.50 (0.28-0.91, p=0.023)" in html
     assert "sentence 3" in html
+
+
+def test_webr_one_differing_string_reads_as_one(tmp_path):
+    """The other half of the pluralisation fix: a single drifting string must
+    not render "1 of 23 strings differ". Both surfaces, same sentence."""
+    payload = json.loads(json.dumps(WEBR_TIER))
+    payload["cases"][1]["differing_cells"] = \
+        payload["cases"][1]["differing_cells"][:1]
+    assert "1 of 23 string differs" in _build_with_webr(tmp_path, payload)
+    (tmp_path / "webr-tier.json").write_text(json.dumps(payload))
+    assert "1 of 23 string differs" in _build_web(tmp_path)
 
 
 def test_webr_runtime_provenance_is_shown(tmp_path):
@@ -356,6 +372,39 @@ def test_webr_aborted_verdict_is_distinguishable_from_drift(tmp_path):
     html = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
     assert "class='webr-drift'" not in html
     assert "class='webr-aborted'" in html
+
+
+def test_webr_aborted_detail_names_no_cause_it_cannot_know(tmp_path):
+    """The ABORTED detail used to assert "the two runtimes disagreed on the
+    shape of the output before any cell was compared". `runCase` now also wraps
+    the driver's own cross-checks (an unregistered display kind, "cox has no
+    increment control in the UI", "<column> is not in the variable checklist"),
+    so that framing would print a fabricated diagnosis over a `reason` saying
+    something else. The reason is verbatim; the framing is neutral."""
+    payload = json.loads(json.dumps(WEBR_TIER_ABORTED))
+    payload["cases"][1]["reason"] = (
+        "cox has no increment control in the UI")
+    html = _build_with_webr(tmp_path, payload)
+    assert "disagreed on the shape of the output" not in html
+    assert "The run did not complete a comparison for this case" in html
+    assert "cox has no increment control in the UI" in html
+
+
+def test_webr_aborted_case_does_not_count_as_coverage(tmp_path):
+    """THE FIX FOR "8 of 8" ABOVE AN ABORTED ROW. webr-tier.json is written
+    BEFORE the spec fails loudly, and `make all` re-renders from whatever is on
+    disk — so a run that aborted one case would otherwise publish "Coverage: 2
+    of 2 cases. Every registered case is driven through the shipped browser UI"
+    one line above that case's ABORTED row. An aborted case compared nothing,
+    so it is not coverage: the partial branch must fire and NAME it."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    html = _build_with_webr(tmp_path, WEBR_TIER_ABORTED)
+    assert "Coverage: 1 of 2 cases." in html
+    assert "Every registered case is driven through" not in html
+    assert "Not gated in this tier: <code>logistic-confounding</code>." in html
+    # ...and the row is still there, so the reader sees both facts at once.
+    assert "class='webr-aborted'>ABORTED" in html
 
 
 def test_webr_commit_is_shown(tmp_path):
@@ -1251,6 +1300,161 @@ def test_web_webr_section_states_its_coverage_ratio(tmp_path):
     html = _build_web(tmp_path)
     assert "Coverage: 2 of 3 cases." in html
     assert "not</i> covered by any wasm-vs-native claim" in html
+    # The uncovered case is NAMED, not merely counted.
+    assert "km-twoarm" in html
+
+
+def test_web_webr_full_coverage_still_counts_itself(tmp_path):
+    """The tier now reaches the whole roster, and "all of them" is exactly the
+    claim a reader is entitled to see COUNTED rather than asserted — so the
+    ratio is still printed at 2 of 2, and the "some cases carry no
+    wasm-vs-native claim" caveat disappears because it is no longer true."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    (tmp_path / "webr-tier.json").write_text(json.dumps(WEBR_TIER))
+    html = _build_web(tmp_path)
+    assert "Coverage: 2 of 2 cases." in html
+    assert "not</i> covered by any wasm-vs-native claim" not in html
+    assert "Not gated here" not in html
+    # ...and the full-coverage wording says how the non-tabular analyses are
+    # compared, since "cell by cell" alone would be wrong for them.
+    assert "sentence by sentence" in html
+
+
+def test_web_webr_aborted_case_does_not_count_as_coverage(tmp_path):
+    """The public half of the same fix. This is the surface that mattered: the
+    page would have printed "Coverage: 2 of 2 cases. … Every case on this page
+    was also run through the real browser interface and checked against native
+    R" directly above an ABORTED row."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    (tmp_path / "webr-tier.json").write_text(json.dumps(WEBR_TIER_ABORTED))
+    html = _build_web(tmp_path)
+    assert "Coverage: 1 of 2 cases." in html
+    assert "Every case on this page was also run through the real browser" \
+        not in html
+    assert "Not gated here: <code>logistic-confounding</code>." in html
+    assert "ABORTED" in html
+
+
+def test_web_webr_aborted_detail_names_no_cause_it_cannot_know(tmp_path):
+    """Same neutral framing as the scorecard's ABORTED row: `runCase` wraps
+    many non-structural throw sites now, so a hardcoded "the two runtimes
+    disagreed on the shape of the output" would contradict the reason printed
+    beside it."""
+    payload = json.loads(json.dumps(WEBR_TIER_ABORTED))
+    payload["cases"][1]["reason"] = "age is not in the variable checklist"
+    (tmp_path / "webr-tier.json").write_text(json.dumps(payload))
+    html = _build_web(tmp_path)
+    assert "disagreed on the shape of the output" not in html
+    assert "The run did not complete a comparison for this case" in html
+    assert "age is not in the variable checklist" in html
+
+
+# The per-case `cell_kinds` breakdown the three comparison shapes all write
+# through (compare-text.mjs's single accumulator). Shape and numbers are the
+# published roster's, scaled down to the two-case fixture: value + methods
+# cells that carry a number make up cells_with_numbers, and header + term +
+# empty + the number-free sentences make up the rest.
+WEBR_TIER_KINDS = {
+    "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
+    "runtime_source": "read from the WebR instance's own version fields",
+    "date": "2026-07-28",
+    "cases": [
+        {
+            "id": "cox-adjusted", "identical": True, "cells_compared": 13,
+            "differing_cells": [],
+            "cell_kinds": {"header": 1, "term": 3, "value": 4, "empty": 2,
+                           "methods": 3, "methods_with_number": 2},
+            "cells_with_numbers": 6,
+        },
+        {
+            "id": "groupcompare-categorical", "identical": True,
+            "cells_compared": 3, "differing_cells": [],
+            "cell_kinds": {"header": 0, "term": 0, "value": 0, "empty": 0,
+                           "methods": 3, "methods_with_number": 1},
+            "cells_with_numbers": 1,
+        },
+    ],
+    "cells_compared": 16,
+    "cells_with_numbers": 7,
+    "cells_note": "16 = 4 table value cells + 6 displayed sentences (3 "
+                  "containing a number) + 3 row labels + 1 table header "
+                  "line(s) + 2 empty-vs-empty placeholder cells.",
+}
+
+
+def test_web_webr_totals_account_for_number_free_sentences(tmp_path):
+    """THE 8-UNIT INACCURACY. The sentence used to say the non-numeric
+    remainder was "column headers, row labels and deliberately blank cells,
+    which cannot drift" — true of the two-ratio-table roster it was written
+    for, wrong by 8 on the eight-case one, where 8 of the 55 are DISPLAYED
+    SENTENCES carrying no number. The split is summed from `cell_kinds`, so it
+    cannot go stale when the mix of display shapes changes again.
+
+    In this fixture: 16 compared, 7 numeric, so 9 remain — 6 static (1 header +
+    3 row labels + 2 blank) and 3 number-free sentences (6 methods cells minus
+    the 3 that carry a number)."""
+    (tmp_path / "webr-tier.json").write_text(json.dumps(WEBR_TIER_KINDS))
+    html = _build_web(tmp_path)
+    assert "The other <b>9</b> strings cannot drift" in html
+    assert "<b>6</b> are column headers, row labels and deliberately blank " \
+           "cells" in html
+    assert "<b>3</b> are displayed sentences that carry no number" in html
+    # The old, arithmetically wrong clause is gone.
+    assert "The rest are column headers, row labels and deliberately blank " \
+           "cells, which cannot drift." not in html
+
+
+def test_web_webr_totals_refuse_to_split_what_they_cannot_derive(tmp_path):
+    """A webr-tier.json written before `cell_kinds` existed — or one whose
+    per-case breakdowns do not reconcile with its own published totals — gets a
+    sentence that claims NO split, never a fabricated one. WEBR_TIER carries
+    no cell_kinds at all."""
+    payload = dict(WEBR_TIER)
+    payload["cells_compared"] = 36
+    payload["cells_with_numbers"] = 17
+    (tmp_path / "webr-tier.json").write_text(json.dumps(payload))
+    html = _build_web(tmp_path)
+    assert "<b>36</b>" in html
+    assert "The rest are labels and fixed wording, which cannot drift." in html
+    assert "cannot drift: <b>" not in html
+
+    # ...and the same refusal when the breakdown is present but does not add up
+    # to the totals beside it.
+    broken = json.loads(json.dumps(WEBR_TIER_KINDS))
+    broken["cases"][0]["cell_kinds"]["value"] = 99
+    (tmp_path / "webr-tier.json").write_text(json.dumps(broken))
+    html = _build_web(tmp_path)
+    assert "The rest are labels and fixed wording, which cannot drift." in html
+
+
+def test_web_webr_totals_ignore_an_aborted_case_in_the_split(tmp_path):
+    """An aborted case compared nothing, so it contributes no cells — and the
+    totals it would be reconciled against are sums over completed cases only.
+    A stray `cell_kinds`-less aborted entry must not knock the split out."""
+    payload = json.loads(json.dumps(WEBR_TIER_KINDS))
+    payload["cases"].append(
+        {"id": "km-twoarm", "aborted": True, "reason": "boom"})
+    (tmp_path / "webr-tier.json").write_text(json.dumps(payload))
+    html = _build_web(tmp_path)
+    assert "The other <b>9</b> strings cannot drift" in html
+
+
+def test_webr_scorecard_full_coverage_drops_the_uncovered_caveat(tmp_path):
+    """Same rule on the maintainer's scorecard: no uncovered cases means no
+    "not gated in this tier" list, and no claim that some cases are unchecked."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    full = _build_with_webr(tmp_path)
+    assert "Coverage: 2 of 2 cases." in full
+    assert "Not gated in this tier" not in full
+    assert "sentence by sentence" in full
+
+    (tmp_path / "km-twoarm.done").touch()
+    partial = _build_with_webr(tmp_path)
+    assert "Coverage: 2 of 3 cases." in partial
+    assert "Not gated in this tier: <code>km-twoarm</code>." in partial
 
 
 def test_web_webr_empty_state_is_not_a_pass(tmp_path):
