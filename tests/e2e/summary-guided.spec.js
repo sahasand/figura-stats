@@ -42,55 +42,124 @@ test("malformed CSV shows a styled error and keeps the form pre-upload", async (
   await expect(page.locator("#render")).toBeHidden();
 });
 
-test("Run Example computes the real Table 1 with the right decisions, plot, and legend", async ({ page }) => {
-  test.setTimeout(360000);
-  await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /summary statistics/i }).click();
-  await expect(page.getByText("Synthetic demonstration data")).toBeVisible();
-  await expect(page.locator("#preview table")).toHaveCount(0);
-  await page.getByRole("button", { name: "Run Example Analysis" }).click();
-  await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
-  const preview = page.locator("#preview");
-  await expect(preview).toContainText("Age, mean ± SD");                // normal -> mean±SD
-  await expect(preview).toContainText("Length of stay, median (IQR)"); // skewed -> median
-  await expect(preview).toContainText("Missing");
-  await expect(page.locator("#preview svg")).toHaveCount(2);            // histogram+density and box+jitter rows
-  await expect(page.locator("#preview .plot-legend")).toContainText("dashed = mean");
-  await expect(preview).not.toContainText("p-value");                  // Table 1 fallacy guardrail
-});
+// ---------------------------------------------------------------------------
+// THE HEAVY TESTS, ON ONE BOOTED webR RUNTIME.
+//
+// Same mechanism and the same reasoning as tests/e2e/km-guided.spec.js — read
+// the long comment there for why `describe.serial` + a `beforeAll` page beats a
+// worker-scoped fixture here, and for the isolation rule this block follows.
+// In short: the webR runtime lives in the page's Web Worker, so one page per
+// test is one cold runtime download per test; `beforeEach` re-establishes and
+// ASSERTS the starting state (remount from the nav, select the Example stage,
+// press the app's own Reset Example) instead of letting a test inherit
+// whatever the previous one left behind.
+//
+// As in the KM suite, exactly one test here renders into the guided shell's
+// `user` context — the one state a shared page cannot reset — and its
+// "user context empty" assertion is a property of this file rather than an
+// inheritance from a neighbour. A second user-rendering test added to this
+// block would break it loudly; give that test its own page.
+test.describe.serial("Summary example stage, on one booted webR runtime", () => {
+  let page;
 
-test("Force mean ± SD experiment rewrites the skewed row", async ({ page }) => {
-  test.setTimeout(360000);
-  await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /summary statistics/i }).click();
-  await page.getByRole("button", { name: "Run Example Analysis" }).click();
-  await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
-  await page.locator("#exp-forcemean").check();
-  await expect(page.locator("#preview")).toContainText("Length of stay, mean ± SD",
-    { timeout: 120000 });
-  await expect(page.locator("#preview")).toContainText("you selected mean ± SD");
-});
+  test.beforeAll(async ({ browser }) => {
+    page = await browser.newPage();
+    await page.goto("/");
+  });
 
-test("demo and user results are separate contexts; checklist controls the table", async ({ page }) => {
-  test.setTimeout(360000);
-  await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /summary statistics/i }).click();
-  await page.getByRole("button", { name: "Run Example Analysis" }).click();
-  await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
-  await page.getByRole("tab", { name: "Analyze Your Data" }).click();
-  await expect(page.locator("#preview table")).toHaveCount(0);   // user context empty
-  await page.locator("#csv").setInputFiles(
-    path.join(__dirname, "..", "testthat", "fixtures", "summary-demo.csv"));
-  await expect(page.locator("#summary-vars")).toBeVisible();     // progressive reveal
-  // Checklist a11y: each checkbox is described by its note.
-  await expect(page.locator("#var-age")).toHaveAttribute("aria-describedby", "var-age-note");
-  // Untick a variable -> its row must not render.
-  await page.locator("#var-crp").uncheck();
-  await page.locator("#render").click();
-  await expect(page.locator("#preview table")).toBeVisible({ timeout: 120000 });
-  await expect(page.locator("#preview")).not.toContainText("crp");
-  await page.getByRole("tab", { name: "Try an Example" }).click();
-  await expect(page.locator("#preview")).toContainText("Age, mean ± SD");  // demo restored
+  test.afterAll(async () => {
+    if (page) await page.close();
+  });
+
+  test.beforeEach(async () => {
+    await page.getByRole("button", { name: /summary statistics/i }).click();
+    await page.getByRole("tab", { name: "Try an Example" }).click();
+    await page.getByRole("button", { name: "Reset Example" }).click();
+    await expect(page.locator("#preview table")).toHaveCount(0);
+    await expect(page.locator("#stats")).toBeEmpty();
+    await expect(page.locator("#exp-forcemean")).not.toBeChecked();
+    await expect(page.locator("#exp-qq")).not.toBeChecked();
+  });
+
+  test("Run Example computes the real Table 1 with the right decisions, plot, and legend", async () => {
+    test.setTimeout(360000);
+    await expect(page.getByText("Synthetic demonstration data")).toBeVisible();
+    await expect(page.locator("#preview table")).toHaveCount(0);
+    await page.getByRole("button", { name: "Run Example Analysis" }).click();
+    await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
+    const preview = page.locator("#preview");
+    await expect(preview).toContainText("Age, mean ± SD");                // normal -> mean±SD
+    await expect(preview).toContainText("Length of stay, median (IQR)"); // skewed -> median
+    await expect(preview).toContainText("Missing");
+    await expect(page.locator("#preview svg")).toHaveCount(2);            // histogram+density and box+jitter rows
+    await expect(page.locator("#preview .plot-legend")).toContainText("dashed = mean");
+    await expect(preview).not.toContainText("p-value");                  // Table 1 fallacy guardrail
+  });
+
+  test("Force mean ± SD experiment rewrites the skewed row", async () => {
+    test.setTimeout(360000);
+    await page.getByRole("button", { name: "Run Example Analysis" }).click();
+    await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
+    await page.locator("#exp-forcemean").check();
+    await expect(page.locator("#preview")).toContainText("Length of stay, mean ± SD",
+      { timeout: 120000 });
+    await expect(page.locator("#preview")).toContainText("you selected mean ± SD");
+  });
+
+  test("Q–Q experiment adds a third distribution panel and its legend", async () => {
+    test.setTimeout(360000);
+    await page.getByRole("button", { name: "Run Example Analysis" }).click();
+    await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
+    await expect(page.locator("#preview svg")).toHaveCount(2);
+    await expect(page.locator("#exp-qq")).not.toBeChecked();       // default off
+    await page.locator("#exp-qq").check();
+    await expect(page.locator("#preview svg")).toHaveCount(3, { timeout: 120000 });
+    await expect(page.locator("#preview .plot-legend")).toContainText("curved tail");
+  });
+
+  test("example run enables the .R script download", async () => {
+    test.setTimeout(360000);
+    await page.getByRole("button", { name: "Run Example Analysis" }).click();
+    await expect(page.locator("#export-r")).toBeEnabled({ timeout: 330000 });
+    const code = await page.evaluate(
+      () => document.getElementById("stats").dataset.rCode);
+    expect(code).toContain("R script generated by Figura");
+    expect(code).toContain("Example data embedded");
+    // clicking the button performs a real download: journal filename, and the
+    // file's bytes are exactly the staged script
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.locator("#export-r").click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("summary-script.R");
+    const saved = fs.readFileSync(await download.path(), "utf8");
+    expect(saved).toBe(code);
+    // switching analyses clears the stale script
+    await page.getByRole("button", { name: "Kaplan-Meier" }).click();
+    await expect(page.locator("#export-r")).toBeDisabled();
+  });
+
+  // LAST IN THE BLOCK ON PURPOSE: the only test here that renders into the
+  // guided shell's `user` context. See the block comment above.
+  test("demo and user results are separate contexts; checklist controls the table", async () => {
+    test.setTimeout(360000);
+    await page.getByRole("button", { name: "Run Example Analysis" }).click();
+    await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
+    await page.getByRole("tab", { name: "Analyze Your Data" }).click();
+    await expect(page.locator("#preview table")).toHaveCount(0);   // user context empty
+    await page.locator("#csv").setInputFiles(
+      path.join(__dirname, "..", "testthat", "fixtures", "summary-demo.csv"));
+    await expect(page.locator("#summary-vars")).toBeVisible();     // progressive reveal
+    // Checklist a11y: each checkbox is described by its note.
+    await expect(page.locator("#var-age")).toHaveAttribute("aria-describedby", "var-age-note");
+    // Untick a variable -> its row must not render.
+    await page.locator("#var-crp").uncheck();
+    await page.locator("#render").click();
+    await expect(page.locator("#preview table")).toBeVisible({ timeout: 120000 });
+    await expect(page.locator("#preview")).not.toContainText("crp");
+    await page.getByRole("tab", { name: "Try an Example" }).click();
+    await expect(page.locator("#preview")).toContainText("Age, mean ± SD");  // demo restored
+  });
 });
 
 test("Analyze tab explains the expected CSV and offers an example download", async ({ page }) => {
@@ -102,19 +171,6 @@ test("Analyze tab explains the expected CSV and offers an example download", asy
   expect(href).toMatch(/^blob:/);                       // client-side Blob — no network egress
 });
 
-test("Q–Q experiment adds a third distribution panel and its legend", async ({ page }) => {
-  test.setTimeout(360000);
-  await page.goto("/#summary/example");
-  await page.getByRole("button", { name: /summary statistics/i }).click();
-  await page.getByRole("button", { name: "Run Example Analysis" }).click();
-  await expect(page.locator("#preview table")).toBeVisible({ timeout: 330000 });
-  await expect(page.locator("#preview svg")).toHaveCount(2);
-  await expect(page.locator("#exp-qq")).not.toBeChecked();       // default off
-  await page.locator("#exp-qq").check();
-  await expect(page.locator("#preview svg")).toHaveCount(3, { timeout: 120000 });
-  await expect(page.locator("#preview .plot-legend")).toContainText("curved tail");
-});
-
 test("upload form has the Q–Q toggle, default off", async ({ page }) => {
   await page.goto("/#summary/analyze");
   await page.getByRole("button", { name: /summary statistics/i }).click();
@@ -122,29 +178,4 @@ test("upload form has the Q–Q toggle, default off", async ({ page }) => {
     path.join(__dirname, "..", "testthat", "fixtures", "summary-demo.csv"));
   await expect(page.locator("#summary-vars")).toBeVisible();
   await expect(page.locator("#showqq")).not.toBeChecked();
-});
-
-test("example run enables the .R script download", async ({ page }) => {
-  test.setTimeout(360000);
-  await page.goto("/");
-  await page.getByRole("button", { name: /summary statistics/i }).click();
-  await page.getByRole("tab", { name: "Try an Example" }).click();
-  await page.getByRole("button", { name: "Run Example Analysis" }).click();
-  await expect(page.locator("#export-r")).toBeEnabled({ timeout: 330000 });
-  const code = await page.evaluate(
-    () => document.getElementById("stats").dataset.rCode);
-  expect(code).toContain("R script generated by Figura");
-  expect(code).toContain("Example data embedded");
-  // clicking the button performs a real download: journal filename, and the
-  // file's bytes are exactly the staged script
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    page.locator("#export-r").click(),
-  ]);
-  expect(download.suggestedFilename()).toBe("summary-script.R");
-  const saved = fs.readFileSync(await download.path(), "utf8");
-  expect(saved).toBe(code);
-  // switching analyses clears the stale script
-  await page.getByRole("button", { name: "Kaplan-Meier" }).click();
-  await expect(page.locator("#export-r")).toBeDisabled();
 });

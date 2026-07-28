@@ -19,7 +19,10 @@ statistics plan review).
 - **Depends on / blocked by:** A demand signal (user request/issue — the site has no
   analytics by design). Blocked by nothing technically.
 
-## Share one webR boot across e2e example-stage tests
+## Share one webR boot across e2e example-stage tests — DONE 2026-07-28
+
+Absorbed, not deleted, per this file's convention. Recorded here so the next reader
+knows what was actually done and what the constraint bought.
 
 - **What:** Restructure `tests/e2e/km-guided.spec.js` and
   `tests/e2e/summary-guided.spec.js` so the heavy example-stage tests share one booted
@@ -32,6 +35,18 @@ statistics plan review).
   regression-sensitive KM spec. Best done as a standalone change right after the
   summary feature lands, with both suites green before and after.
 - **Depends on / blocked by:** Guided summary statistics feature landing first.
+- **How it landed:** `test.describe.serial` plus a page created in `beforeAll`, not a
+  worker-scoped fixture — no extra file, the page stays beside the tests that use it,
+  and a test that leaves the app in an unexpected state skips the rest of the block
+  instead of producing cascading noise. Isolation is preserved by an asserted
+  `beforeEach` reset (remount from the nav, select the Example stage, press the app's
+  own Reset Example), not by letting a test inherit its neighbour's state. The one
+  state a shared page cannot reset is the guided shell's `user` context; exactly one
+  test per file renders into it and each is last in its block, with a comment saying
+  so. The regression evidence the entry asked for: **17 passed in 1.0m (62s wall)
+  before, 17 passed in 25.1s (26s wall) after** — same 17 tests, same assertions.
+- **What it unlocked:** the webR release gate (`make -C stats-validation webr`) now
+  drives all 8 validation cases in one booted session instead of 2.
 
 ## Write DESIGN.md via /design-consultation
 
