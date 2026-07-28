@@ -64,7 +64,15 @@ test.describe.serial("Summary example stage, on one booted webR runtime", () => 
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
-    await page.goto("/");
+    // Deep-linked, for the same reason the KM block is: this is the only
+    // direct navigation to "#summary/example" left in the suite now that the
+    // heavy tests share one page, and the hash → stage path deserves the same
+    // coverage the other two stages get from the light tests above and below.
+    // The nav click is what makes the shell read the hash.
+    await page.goto("/#summary/example");
+    await page.getByRole("button", { name: /summary statistics/i }).click();
+    await expect(page.getByRole("tab", { name: "Try an Example" }))
+      .toHaveAttribute("aria-selected", "true");
   });
 
   test.afterAll(async () => {
@@ -77,6 +85,14 @@ test.describe.serial("Summary example stage, on one booted webR runtime", () => 
     await page.getByRole("button", { name: "Reset Example" }).click();
     await expect(page.locator("#preview table")).toHaveCount(0);
     await expect(page.locator("#stats")).toBeEmpty();
+    // All four experiment controls, not only the two these tests flip — same
+    // rule as the KM block. Reset Example restores the whole
+    // defaultDemoOptions object (`web/guided/summary/guided-summary.js`:
+    // group by arm ON, plots ON, force-mean off, Q–Q off), so a reset that
+    // quietly stopped restoring one of them would change what the next test
+    // is actually running without failing anything.
+    await expect(page.locator("#exp-group")).toBeChecked();
+    await expect(page.locator("#exp-plots")).toBeChecked();
     await expect(page.locator("#exp-forcemean")).not.toBeChecked();
     await expect(page.locator("#exp-qq")).not.toBeChecked();
   });

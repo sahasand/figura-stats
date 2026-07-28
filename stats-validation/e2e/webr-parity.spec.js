@@ -648,10 +648,17 @@ test("webR renders the same numbers native R does", async ({ page }) => {
   // structural drift" from "never run" even though the run itself failed.
   const aborted = cases.filter((c) => c.aborted);
   if (aborted.length) {
+    // NAMES NO CAUSE. `runCase` wraps the structural preconditions AND every
+    // driver cross-check in this file (case.json's figure vs the driver here,
+    // an unregistered display kind, "cox has no increment control in the UI",
+    // "<column> is not in the variable checklist"), so "structural
+    // precondition failure" would often be a wrong diagnosis stapled to a
+    // `reason` that says otherwise. Same rule the scorecard's ABORTED row
+    // follows: state that no comparison completed, and let `reason` speak.
     throw new Error(
-      `webR tier hit a structural precondition failure on: ` +
+      `webR tier did not complete a comparison for: ` +
       `${aborted.map((c) => c.id).join(", ")}. ${OUT} was still written with ` +
       `an honest aborted record for each — see its "reason" field. This ` +
-      `failure is intentional: a precondition failure must be loud.`);
+      `failure is intentional: a case that compared nothing must be loud.`);
   }
 });

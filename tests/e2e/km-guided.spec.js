@@ -64,7 +64,17 @@ test.describe.serial("KM example stage, on one booted webR runtime", () => {
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
-    await page.goto("/");
+    // DEEP-LINKED ON PURPOSE, and it is the only direct navigation to
+    // "#km/example" left in the suite. Before these tests shared a page, each
+    // one loaded the app itself and the example stage got its hash → stage
+    // coverage incidentally; the light tests below still cover that path for
+    // "#km/understand" and "#km/analyze", so this restores the third rather
+    // than leaving it to a comment. The nav click is what makes the shell read
+    // the hash, so the assertion is here, not after `goto` alone.
+    await page.goto("/#km/example");
+    await page.getByRole("button", { name: /kaplan-meier/i }).click();
+    await expect(page.getByRole("tab", { name: "Try an Example" }))
+      .toHaveAttribute("aria-selected", "true");
   });
 
   test.afterAll(async () => {
@@ -76,10 +86,19 @@ test.describe.serial("KM example stage, on one booted webR runtime", () => {
     await page.getByRole("tab", { name: "Try an Example" }).click();
     await page.getByRole("button", { name: "Reset Example" }).click();
     // Asserted, not assumed: this is the precondition every test below starts
-    // from, so a failure to reach it must be a loud failure of its own.
+    // from, so a failure to reach it must be a loud failure of its own. ALL
+    // THREE experiment controls are checked, not just the one these tests
+    // happen to flip — Reset Example restores the whole defaultDemoOptions
+    // object, so a reset that silently stopped restoring `conf_int` or
+    // `horizon` would otherwise leave the next test running a different
+    // analysis from the one it claims to. Defaults are KM's own
+    // (`defaultDemoOptions` in web/guided/guided-analysis.js): confidence
+    // bands ON, landmarks off, full follow-up.
     await expect(page.locator("#preview svg")).toHaveCount(0);
     await expect(page.locator("#stats")).toBeEmpty();
+    await expect(page.locator("#exp-ci")).toBeChecked();
     await expect(page.locator("#exp-landmarks")).not.toBeChecked();
+    await expect(page.locator("#exp-horizon")).toHaveValue("");
   });
 
   test("Run Example Analysis computes the real pinned demo result", async () => {

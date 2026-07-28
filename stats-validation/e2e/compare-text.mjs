@@ -39,8 +39,10 @@
 //
 // The general parser used by compareTable is applied IDENTICALLY to both sides,
 // so unlike a second ratio parser it cannot manufacture drift — a quirk in it
-// cancels out. It normalises nothing at all (no trimming), which is stricter
-// than parseRatioTable's value-cell trim; see the note on `parseDisplayTable`.
+// cancels out. It normalises nothing INSIDE THE TABLE (no cell trimming, no
+// padding a short row), which is stricter than parseRatioTable's value-cell
+// trim; it does trim the methods paragraph, exactly as parseRatioTable does.
+// See the note on `parseDisplayTable`.
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { parseRatioTable } from "../harness/parse-cells.mjs";
@@ -55,6 +57,53 @@ function assertPrecondition(condition, message) {
     throw new Error(`webR tier precondition failed: ${message}`);
   }
 }
+
+// RESIDUAL BLIND SPOTS — what this comparator provably CANNOT see.
+//
+// This file's comments are the tier's audit trail, so the honest limits live
+// here rather than only in a review thread. None of these is a bug being
+// deferred: each is a normalisation applied IDENTICALLY to both sides, so it
+// can never manufacture drift. What it can do is hide a difference, and that
+// is worth naming precisely, because the published claim is "every displayed
+// string was compared".
+//
+//   1. Trailing whitespace after the FINAL sentence of a prose line.
+//      `sentences()` splits on /(?<=\.)\s+/ and drops whitespace-only
+//      fragments, so "Alpha. Beta." and "Alpha. Beta.   " both yield
+//      ["Alpha.", "Beta."] and compare identical. (A final sentence NOT ending
+//      in "." keeps its trailing whitespace and is visible; leading whitespace
+//      at the START of a line is also visible, since nothing splits there.)
+//   2. Whitespace BETWEEN sentences, for the same reason: the separator is
+//      consumed by the split, so "Alpha. Beta." and "Alpha.   Beta." compare
+//      identical.
+//   3. A whitespace-only line inside a TSV block. Both parsers filter
+//      `l.trim() !== ""` before pairing rows, so a blank line one runtime
+//      printed and the other did not is removed rather than reported — and
+//      because it is removed on the side that has it, it does not even show up
+//      as a row-count precondition failure.
+//   4. Leading/trailing whitespace on a ratio table's `unadj`/`adj` cell.
+//      `parseRatioTable` trims those two columns (documented in
+//      parse-cells.mjs and in the classifyColumn note below); the `term`
+//      column is left untrimmed, so the asymmetry runs one way only.
+//   5. A FOURTH tab-separated field on a ratio-table data row. UNDOCUMENTED
+//      until now and pre-existing: `parseRatioTable` destructures
+//      `const [term, unadj, adj] = l.split("\t")`, so anything past the third
+//      field is discarded on both sides and an extra column webR emitted (or
+//      dropped) is invisible. The general `parseDisplayTable` used by
+//      `compareTable` does NOT have this hole — it keeps every field and
+//      asserts the per-row cell count — so it is specific to the three
+//      ratio_table cases.
+//
+// NEGATIVE CONTROL, AND ITS PROVENANCE. The direction that matters — would a
+// real drift actually be CAUGHT end to end — was exercised on 2026-07-28 by
+// the reviewer of the 8-case widening, read-only, by running the committed
+// comparator against MUTATED COPIES of the native display artifacts (the
+// artifacts in results/ were never touched). All three comparison paths
+// detected the injected drift: ratio_table (compareText), table1
+// (compareTable) and prose (compareProse), and the scorecard's DRIFT and
+// ABORTED renderers were confirmed to render the result. Recorded here
+// because the review report that established it is gitignored, and evidence
+// of a negative control is worth exactly as much as its provenance.
 
 // What KIND of displayed string a compared cell is. Only "value" cells and
 // "methods" cells that contain a digit can ever show wasm-vs-native drift —
@@ -75,7 +124,9 @@ function assertPrecondition(condition, message) {
 // `unadj`/`adj` cell would be silently normalized away before this comparator
 // ever sees it. Both behaviors are inherited, not decided here — this
 // comment exists so a future reader of a `term`-column drift (or the absence
-// of one on a value column) does not mistake it for a bug in this file.
+// of one on a value column) does not mistake it for a bug in this file. The
+// full list of what this comparator cannot see is in RESIDUAL BLIND SPOTS
+// above, of which that trim is item 4.
 export function classifyColumn(column, nativeValue) {
   if (column === "line") return "header";
   if (column === "characteristic") return "term";
@@ -183,11 +234,18 @@ export function compareText(native, webr) {
 // kinds parseRatioTable cannot read — today `table1`, whose column count is the
 // number of groups plus two and therefore varies per case.
 //
-// IT NORMALISES NOTHING. parseRatioTable trims its two value columns (and
-// defaults a missing field to ""); this trims nothing and pads nothing, so a
-// whitespace-only difference between the runtimes is reported as the difference
-// it is rather than silently absorbed. A short row is therefore a structural
-// precondition failure below, not a row quietly padded to width.
+// IT NORMALISES NO TABLE CELL. parseRatioTable trims its two value columns (and
+// defaults a missing field to ""); this trims nothing and pads nothing inside
+// the table, so a whitespace-only difference between the runtimes is reported
+// as the difference it is rather than silently absorbed. A short row is
+// therefore a structural precondition failure below, not a row quietly padded
+// to width.
+//
+// The one thing it DOES normalise is the methods paragraph, which is `.trim()`ed
+// on the way out — exactly as parseRatioTable trims its own, so the two shapes
+// agree. Whitespace around the whole paragraph is therefore invisible to both;
+// "normalises nothing at all" is the claim this comment used to make, and it
+// was wrong by that one call. See RESIDUAL BLIND SPOTS at the top of the file.
 export function parseDisplayTable(text) {
   const [tsv, ...rest] = String(text).split("\n\n");
   const lines = tsv.split("\n").filter((l) => l.trim() !== "");

@@ -468,8 +468,24 @@ precondition failure, never a silent skip. The general TSV parser
 (`parseDisplayTable`) is applied *identically to both sides*, so — unlike a
 second ratio parser, which is exactly what `compareText`'s reuse of
 `parseRatioTable` avoids — a quirk in it cancels out and cannot manufacture
-drift. It normalises nothing at all (no trimming, no padding a short row), which
-is deliberately stricter than `parseRatioTable`'s value-cell trim.
+drift. It normalises nothing *inside the table* (no cell trimming, no padding a
+short row), which is deliberately stricter than `parseRatioTable`'s value-cell
+trim; the one thing it does trim is the methods paragraph, exactly as
+`parseRatioTable` trims its own.
+
+**What this comparator provably cannot see** is enumerated in
+`e2e/compare-text.mjs` under `RESIDUAL BLIND SPOTS` — every item a normalisation
+applied identically to both sides, so none can manufacture drift, but each can
+hide one. In short: trailing whitespace after a prose line's final sentence,
+whitespace *between* sentences, a whitespace-only line inside a TSV block,
+leading/trailing whitespace on a ratio table's `unadj`/`adj` cell, and a fourth
+tab-separated field on a ratio-table data row (`parseRatioTable` destructures
+three and discards the rest — `compareTable`'s parser does not have this hole,
+it asserts the per-row cell count). The same block records the provenance of the
+end-to-end negative control: on 2026-07-28 the committed comparator was run
+read-only against mutated copies of the native display artifacts and detected
+the injected drift on all three paths (`ratio_table`, `table1`, prose), with the
+scorecard's DRIFT and ABORTED renderers confirmed to render the result.
 
 **One field this tier types that `case.json` does not declare**, and it is a
 harness-correctness fix rather than a nudge toward parity: `km-twoarm` declares
@@ -537,6 +553,20 @@ Playwright test still fails loudly afterward, so a partial/aborted run can
 never be mistaken for a passing one. Before this, a precondition failure
 aborted the whole spec before anything was written, so the single most
 alarming class of drift rendered identically to "never run".
+
+Two rules follow from that, both on the rendering side. **The ABORTED detail
+names no cause**: `runCase` wraps the structural preconditions *and* the
+driver's own cross-checks (case.json's figure vs the spec's driver table, an
+unregistered display kind, "cox has no increment control in the UI",
+"`<column>` is not in the variable checklist"), so both surfaces say only that
+the run did not complete a comparison for that case and print `reason`
+verbatim. And **an aborted case is not coverage** — it compared nothing, so it
+is excluded from the covered set and the coverage prose routes into its partial
+branch and names it. That is reachable, not theoretical: `webr-tier.json` is
+written *before* the loud failure and `make all` re-renders from whatever is on
+disk, so without the exclusion a page could print "Coverage: 8 of 8 cases …
+every registered case is driven through the shipped browser UI" one line above
+an ABORTED row.
 
 The spec deletes `results/webr-tier.json` before it runs: a run that dies
 *before writing anything at all* (e.g. it crashes before the per-case loop even
@@ -632,7 +662,9 @@ but `term` is left exactly as split from the tab. A stray whitespace
 difference on a `term` cell would therefore show up as a genuine `WEBR_DRIFT`
 finding, while the same whitespace on a value cell would already have been
 normalized away before the comparator ever saw it. See the comment on
-`classifyColumn` in `e2e/compare-text.mjs` for where this matters.
+`classifyColumn` in `e2e/compare-text.mjs` for where this matters, and
+`RESIDUAL BLIND SPOTS` at the top of the same file for the full list of what
+the comparator cannot see (that trim is one of five).
 
 On the scorecard, read the **Compared** column before drawing a conclusion
 about a finding. "Figura" is the screen on the display tier and the harvest
