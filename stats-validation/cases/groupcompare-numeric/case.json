@@ -1,0 +1,9 @@
+{
+  "id": "groupcompare-numeric",
+  "figure": "groupcompare",
+  "spec": "groupcompare-numeric",
+  "roles": { "outcome": "biomarker_normal", "group": "arm" },
+  "options": { "plot": "box", "test": "auto" },
+  "display": { "kind": "gc_summary" },
+  "exact_targets": ["test_p", "test_statistic", "n", "n_dropped"]
+}

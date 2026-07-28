@@ -7,7 +7,7 @@
 // copy of its logic — so the routing they pin is the routing that ships.
 import assert from "node:assert/strict";
 import vm from "node:vm";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const SW_SRC = readFileSync(
@@ -84,6 +84,13 @@ const body = (text) => ({ ok: true, text, clone: () => body(text) });
   assert.equal(route(get(SCOPE + "R/README.md")), "same-origin",
     "living under R/ is not enough — only .R files are statistical source");
 
+  // The published evidence page has its own branch, at the root and under a
+  // Pages subpath — see the validation.html block below for why.
+  assert.equal(route(get(ORIGIN + "/validation.html")), "evidence");
+  assert.equal(route(get(SCOPE + "validation.html")), "evidence");
+  assert.equal(route(get(SCOPE + "guided/validation.htmlx")), "same-origin",
+    "only the evidence page itself, not anything whose path starts like it");
+
   // Cross-origin: webR's static runtime stays cache-first, comms pass through.
   assert.equal(route(get("https://webr.r-wasm.org/latest/R.bin.wasm")), "webr-static");
   assert.equal(route(get("https://repo.r-wasm.org/survival.tgz")), "webr-static");
@@ -93,6 +100,86 @@ const body = (text) => ({ ok: true, text, clone: () => body(text) });
   // Non-GET is never intercepted, whatever the path.
   assert.equal(route({ method: "POST", url: SCOPE + "R/cox.R" }), "pass");
   console.log("ok - routeFor sends R sources to their own branch");
+}
+
+// ---- Install: the precached shell ----------------------------------------
+
+{
+  // The precache is ALL-OR-NOTHING: `cache.addAll` rejects if a single entry
+  // 404s, which rejects install and leaves the app with NO service worker at
+  // all. So the list the install handler really passes to addAll is worth
+  // pinning — both its membership (validation.html is a second entry point,
+  // linked from the rail, and precaching it is the difference between reading
+  // the evidence offline and a dead link) and the scope-relative resolution
+  // every entry depends on: a root-absolute path 404s under a GitHub Pages
+  // PROJECT subpath, taking the whole install down with it.
+  let precached = null;
+  const cache = makeCache();
+  cache.addAll = async (urls) => { precached = urls; };
+  const { listeners } = loadSw({ cache });
+  const waits = [];
+  await listeners.install({ waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+
+  assert.ok(Array.isArray(precached), "install must precache the shell");
+  assert.ok(precached.includes(SCOPE + "index.html"), "the app shell is precached");
+  assert.ok(precached.includes(SCOPE + "validation.html"),
+    "the validation page is precached with the shell");
+  assert.ok(precached.includes(SCOPE + "styles.css"),
+    "validation.html renders through styles.css, so it must be cached too");
+  for (const url of precached) {
+    assert.ok(url.startsWith(SCOPE),
+      `every precache entry must resolve under the SW scope, not the origin root: ${url}`);
+  }
+  console.log("ok - install precaches the shell and the validation page, scope-relative");
+}
+
+{
+  // THE VALIDATION PAGE IS EVIDENCE, NOT CHROME. It is regenerated from
+  // findings.json on every push, byte-diffed in CI, and says so in its own
+  // text; its whole purpose is to be the CURRENT comparison. Under
+  // stale-while-revalidate a returning user's first load after a deploy reads
+  // the PREVIOUS evidence — a fixed defect still listed as open, a new
+  // difference still absent — which is the failure the R/*.R routing exists to
+  // prevent, on the page whose subject is whether to trust the numbers. So it
+  // is network-first, with the precached copy kept as an offline fallback only.
+  const url = SCOPE + "validation.html";
+  const cache = makeCache({ [url]: body("<p>last release's evidence") });
+  const { ctx, requests } = loadSw({
+    cache, fetchImpl: async () => body("<p>this release's evidence"),
+  });
+
+  assert.equal(ctx.routeFor(get(url)), "evidence");
+  const res = await ctx.networkFirst(get(url));
+  assert.equal(res.text, "<p>this release's evidence",
+    "a returning visitor must not read the previous deploy's evidence");
+  assert.equal(requests.find((r) => r.url === url).cache, "reload",
+    "the HTTP cache sits in front of this fetch too");
+  console.log("ok - the validation page is network-first published evidence");
+}
+
+{
+  // THE PRECACHE MUST NAME FILES THAT EXIST. `cache.addAll` is all-or-nothing:
+  // one 404 rejects install, so a first-time visitor gets NO service worker —
+  // and with it none of the network-first guard on R/*.R that this file exists
+  // for. `make -C stats-validation all` DELETES web/validation.html before
+  // regenerating it, so this is a live failure mode, not a theoretical one.
+  // Entries are scope-relative, so they are resolved here relative to sw.js.
+  let precached = null;
+  const cache = makeCache();
+  cache.addAll = async (urls) => { precached = urls; };
+  const { listeners } = loadSw({ cache });
+  const waits = [];
+  await listeners.install({ waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+
+  for (const url of precached) {
+    const rel = url.slice(SCOPE.length);
+    assert.ok(existsSync(new URL(rel, import.meta.url)),
+      `precache entry ${rel} does not exist on disk — cache.addAll would ` +
+      `reject, install would fail, and the app would ship with no SW at all`);
+  }
+  console.log("ok - every precache entry exists on disk");
 }
 
 // ---- Network-first for R sources ----------------------------------------

@@ -34,16 +34,40 @@
 # NAME travels, never the contents); otherwise — demo runs — the used columns
 # are embedded as a data.frame literal so the script runs as-is.
 # Returns list(lines = <character>, source_label = <character(1)>).
+#
+# THE THREE READ LINES ARE A PARITY CONTRACT, not a convenience. The app never
+# calls read.csv: it parses the CSV in the browser with parseCsv (web/lib/csv.js),
+# which trims every cell and calls a cell missing only when it is empty AFTER
+# trimming — so the two-character text "NA" is an ordinary value there. Plain
+# read.csv disagrees three ways (na.strings = "NA" eats the literal; whitespace-
+# only cells survive; padded text becomes a second, phantom factor level), and a
+# script that disagrees analyses a different study than the table on screen. Each
+# emitted line closes one of those, and they must stay in this order: read
+# without na.strings, THEN trim, THEN call what is left empty missing — trimming
+# after the blank check would leave " " behind as a value.
+# See stats-validation/issues/02-app-vs-exported-script-missing-values.md.
+# Numeric columns need no trimming: read.table always strips whitespace from a
+# numeric field and reads a blank one as NA, which is parseCsv's answer too.
 .script_data <- function(spec, cols) {
   fn <- as.character(spec$options$source_filename %||% "")
   if (nzchar(fn)) {
     return(list(
-      lines = c("# Place this script in the same folder as your CSV:",
-                sprintf('df <- read.csv("%s", check.names = FALSE)',
+      lines = c("# Place this script in the same folder as your CSV. These three lines",
+                "# read it exactly the way the app read it: text that reads \"NA\" is kept",
+                "# as the value \"NA\", spaces around a cell are trimmed off, and a cell",
+                "# that is empty after trimming counts as missing.",
+                sprintf('df <- read.csv("%s", check.names = FALSE, na.strings = character(0))',
                         gsub('"', '\\\\"', fn)),
-                'df[df == ""] <- NA   # blank cells are missing values', ""),
+                "df[] <- lapply(df, function(x) if (is.character(x)) trimws(x) else x)",
+                'df[df == ""] <- NA', ""),
       source_label = fn))
   }
+  # The embedded branch needs no parity lines and must not grow any: its cells
+  # are spec$data, which ALREADY came through parseCsv (trimmed, blank-is-empty),
+  # so it re-emits exactly what the app analysed. Re-trimming would be a no-op;
+  # a literal "NA" fails the as.numeric test below, stays character, and deparses
+  # back out as the quoted string "NA" — while a real NA deparses bare — so the
+  # embedded literal round-trips the distinction the file branch had to restore.
   vecs <- lapply(cols, function(cl) {
     raw <- .char_col(spec$data, cl)
     raw[!is.na(raw) & raw == ""] <- NA

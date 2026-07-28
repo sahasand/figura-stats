@@ -1,0 +1,31 @@
+arm,stage,score,complication,age
+Drug,I,12.1,Yes,61
+Drug,II,10.4,No,58
+Drug,NA,13.2,Yes,64
+Drug,I,9.8,No,55
+Drug,II,11.7,Yes,70
+Drug,I,12.9,Yes,62
+Drug,NA,10.1,No,59
+Drug, ,11.2,No,66
+Drug,I,13.5,Yes,57
+Drug,II,12.3,No,68
+Drug,I, ,Yes,63
+Drug,II,11.9,No,60
+Drug,NA,12.6,Yes,65
+Drug,I,10.9,No,54
+Drug,I,12.2,Yes,67
+Placebo,I,9.1,No,61
+Placebo,II,8.7, ,58
+Placebo,NA,9.9,Yes,63
+Placebo,I,8.4,No,56
+Placebo,II,10.2,No,69
+Placebo,I,9.6,Yes,62
+Placebo,II,8.9,No,64
+Placebo,I, 11.5,No,59
+Placebo,II,9.3,Yes,66
+Placebo,I,8.1,No,53
+Placebo,II,9.7,No,68
+Placebo,I,10.5,Yes,60
+Placebo ,I,8.6,No,57
+Placebo ,II,9.2,No,65
+Placebo ,I,9.5,Yes,61

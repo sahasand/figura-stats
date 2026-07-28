@@ -1,0 +1,44 @@
+{
+  "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
+  "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.",
+  "date": "2026-07-26",
+  "commit": "0f808cb6a2e25405778942cd2487fc1b743e5278",
+  "native_digest": "sha256:84ff81841c6f40f96b50315501610c8cd0607122f042b6cf7af5053026305038",
+  "web_digest": "sha256:24146932d1a734e632d29259366cf17d4e5bce8c47d279e3a22510dc72248edd",
+  "web_files": 50,
+  "cases": [
+    {
+      "id": "logistic-confounding",
+      "identical": true,
+      "cells_compared": 23,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 1,
+        "term": 6,
+        "value": 8,
+        "empty": 4,
+        "methods": 4,
+        "methods_with_number": 3
+      },
+      "cells_with_numbers": 11
+    },
+    {
+      "id": "cox-adjusted",
+      "identical": true,
+      "cells_compared": 13,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 1,
+        "term": 3,
+        "value": 4,
+        "empty": 2,
+        "methods": 3,
+        "methods_with_number": 2
+      },
+      "cells_with_numbers": 6
+    }
+  ],
+  "cells_compared": 36,
+  "cells_with_numbers": 17,
+  "cells_note": "36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate's own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank."
+}

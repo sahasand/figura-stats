@@ -1,0 +1,13 @@
+{
+  "id": "summary-table1",
+  "figure": "summary",
+  "spec": "summary-table1",
+  "roles": {
+    "group": "arm",
+    "continuous": ["age", "length_of_stay", "crp"],
+    "categorical": ["sex", "diabetes"]
+  },
+  "options": { "show_plots": false, "show_qq": false },
+  "display": { "kind": "table1" },
+  "exact_targets": ["n", "n_dropped", "decisions"]
+}

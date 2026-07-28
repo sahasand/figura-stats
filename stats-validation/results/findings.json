@@ -1,0 +1,148 @@
+{
+  "_published_precision": "Measured values (`figura`, `python`) are published rounded to 9 significant digits. The COMPARISON ran at full double precision (rel 1e-06 / abs 1e-09); the unrounded numbers live in the gitignored results/*.figura-exact.json and results/*.python.json. Rounding exists because this file is tracked evidence a CI rebuild must reproduce, and digits past the ~9th are BLAS/toolchain noise rather than statistics.",
+  "cases": [
+    {
+      "id": "logistic-confounding",
+      "kind": "ratio_table",
+      "compared": 44,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_or": 4,
+        "adjusted_ci": 12,
+        "adjusted_p": 4,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1,
+        "c_statistic": 1,
+        "vif_note": 1,
+        "epv_note": 1,
+        "cooks_note": 1,
+        "separation_note": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "cox-adjusted",
+      "kind": "ratio_table",
+      "compared": 28,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_hr": 2,
+        "adjusted_ci": 6,
+        "adjusted_p": 2,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1,
+        "zph": 1,
+        "ph_note": 2,
+        "epv_note": 1,
+        "separation_note": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "km-twoarm",
+      "kind": "km_summary",
+      "compared": 106,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "median_survival": 2,
+        "logrank_p": 1,
+        "curve": 94,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "groupcompare-numeric",
+      "kind": "gc_summary",
+      "compared": 14,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "test_p": 1,
+        "test_statistic": 1,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "groupcompare-categorical",
+      "kind": "gc_summary",
+      "compared": 12,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "test_p": 1,
+        "test_statistic": 1,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "groupcompare-dirty",
+      "kind": "gc_summary",
+      "compared": 14,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "test_p": 1,
+        "test_statistic": 1,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "logistic-dirty",
+      "kind": "ratio_table",
+      "compared": 52,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_or": 5,
+        "adjusted_ci": 15,
+        "adjusted_p": 5,
+        "n": 1,
+        "n_event": 1,
+        "n_dropped": 1,
+        "c_statistic": 1,
+        "vif_note": 1,
+        "epv_note": 1,
+        "cooks_note": 1,
+        "separation_note": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "summary-table1",
+      "kind": "table1",
+      "compared": 61,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "n": 1,
+        "n_dropped": 1,
+        "decisions": 5
+      },
+      "deferred_targets": [],
+      "findings": []
+    }
+  ],
+  "total_compared": 331,
+  "total_findings": 0
+}

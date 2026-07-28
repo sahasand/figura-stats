@@ -1,0 +1,168 @@
+{
+  "_note": [
+    "The accepted-findings baseline for stats-validation. Generated — do not",
+    "hand-edit. `make -C stats-validation gate` fails when the pipeline's",
+    "findings no longer match this file.",
+    "",
+    "It records each finding's IDENTITY (case + code + term + quantity) and",
+    "KIND (disposition, source, note), plus each case's coverage counts. It",
+    "records NO measured values: those are floats and float-derived strings",
+    "that legitimately move in their last digits, and a build must not go red",
+    "for that. Findings are sorted by identity and cases by id, so array order",
+    "is never a difference either.",
+    "",
+    "Every finding listed here has been read and dispositioned. `logistic-dirty`",
+    "is the only case with any: 30 export-path findings from the documented",
+    "issues/02 divergence, which is why `make all` exits non-zero by design.",
+    "",
+    "Regenerate with `make -C stats-validation gate-update`, and commit the",
+    "result IN THE SAME COMMIT as the change that moved the evidence — never",
+    "as a drive-by. A finding disappearing is a failure here for exactly that",
+    "reason: when the Phase-2 export-path fix lands, that PR updates this file."
+  ],
+  "total_compared": 331,
+  "total_findings": 0,
+  "cases": [
+    {
+      "id": "cox-adjusted",
+      "kind": "ratio_table",
+      "compared": 28,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_ci": 6,
+        "adjusted_hr": 2,
+        "adjusted_p": 2,
+        "epv_note": 1,
+        "n": 1,
+        "n_dropped": 1,
+        "n_event": 1,
+        "ph_note": 2,
+        "separation_note": 1,
+        "zph": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "groupcompare-categorical",
+      "kind": "gc_summary",
+      "compared": 12,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "n": 1,
+        "n_dropped": 1,
+        "test_p": 1,
+        "test_statistic": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "groupcompare-dirty",
+      "kind": "gc_summary",
+      "compared": 14,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "n": 1,
+        "n_dropped": 1,
+        "test_p": 1,
+        "test_statistic": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "groupcompare-numeric",
+      "kind": "gc_summary",
+      "compared": 14,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "n": 1,
+        "n_dropped": 1,
+        "test_p": 1,
+        "test_statistic": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "km-twoarm",
+      "kind": "km_summary",
+      "compared": 106,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "curve": 94,
+        "logrank_p": 1,
+        "median_survival": 2,
+        "n": 1,
+        "n_dropped": 1,
+        "n_event": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "logistic-confounding",
+      "kind": "ratio_table",
+      "compared": 44,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_ci": 12,
+        "adjusted_or": 4,
+        "adjusted_p": 4,
+        "c_statistic": 1,
+        "cooks_note": 1,
+        "epv_note": 1,
+        "n": 1,
+        "n_dropped": 1,
+        "n_event": 1,
+        "separation_note": 1,
+        "vif_note": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "logistic-dirty",
+      "kind": "ratio_table",
+      "compared": 52,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_ci": 15,
+        "adjusted_or": 5,
+        "adjusted_p": 5,
+        "c_statistic": 1,
+        "cooks_note": 1,
+        "epv_note": 1,
+        "n": 1,
+        "n_dropped": 1,
+        "n_event": 1,
+        "separation_note": 1,
+        "vif_note": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "summary-table1",
+      "kind": "table1",
+      "compared": 61,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "decisions": 5,
+        "n": 1,
+        "n_dropped": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    }
+  ]
+}
