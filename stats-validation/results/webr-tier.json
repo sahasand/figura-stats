@@ -1,9 +1,9 @@
 {
   "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
-  "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 12 webr.r-wasm.org request(s) during this run.",
-  "date": "2026-07-26",
-  "commit": "0f808cb6a2e25405778942cd2487fc1b743e5278",
-  "native_digest": "sha256:84ff81841c6f40f96b50315501610c8cd0607122f042b6cf7af5053026305038",
+  "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 17 webr.r-wasm.org request(s) during this run.",
+  "date": "2026-07-28",
+  "commit": "103c90bc960001c67295f318d43d78a957b9febc",
+  "native_digest": "sha256:30f9857d2e3098786d91ef597c65671ef6bfeda693af29310c4f2ec2b4e89862",
   "web_digest": "sha256:24146932d1a734e632d29259366cf17d4e5bce8c47d279e3a22510dc72248edd",
   "web_files": 50,
   "cases": [
@@ -23,6 +23,21 @@
       "cells_with_numbers": 11
     },
     {
+      "id": "logistic-dirty",
+      "identical": true,
+      "cells_compared": 26,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 1,
+        "term": 7,
+        "value": 10,
+        "empty": 4,
+        "methods": 4,
+        "methods_with_number": 3
+      },
+      "cells_with_numbers": 13
+    },
+    {
       "id": "cox-adjusted",
       "identical": true,
       "cells_compared": 13,
@@ -36,9 +51,84 @@
         "methods_with_number": 2
       },
       "cells_with_numbers": 6
+    },
+    {
+      "id": "km-twoarm",
+      "identical": true,
+      "cells_compared": 2,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 2,
+        "methods_with_number": 2
+      },
+      "cells_with_numbers": 2
+    },
+    {
+      "id": "groupcompare-numeric",
+      "identical": true,
+      "cells_compared": 3,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 3,
+        "methods_with_number": 2
+      },
+      "cells_with_numbers": 2
+    },
+    {
+      "id": "groupcompare-categorical",
+      "identical": true,
+      "cells_compared": 1,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 1,
+        "methods_with_number": 1
+      },
+      "cells_with_numbers": 1
+    },
+    {
+      "id": "groupcompare-dirty",
+      "identical": true,
+      "cells_compared": 4,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 4,
+        "methods_with_number": 3
+      },
+      "cells_with_numbers": 3
+    },
+    {
+      "id": "summary-table1",
+      "identical": true,
+      "cells_compared": 41,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 1,
+        "term": 9,
+        "value": 19,
+        "empty": 8,
+        "methods": 4,
+        "methods_with_number": 1
+      },
+      "cells_with_numbers": 20
     }
   ],
-  "cells_compared": 36,
-  "cells_with_numbers": 17,
-  "cells_note": "36 = 12 numeric value cells + 7 methods sentences (5 containing a number) + 9 term labels + 2 header line(s) + 6 empty-vs-empty placeholder cells (a categorical covariate's own reference-level row). Only the 17 numeric cells (the value cells plus the numeric-bearing methods sentences) can actually show wasm-vs-native drift — the term labels, header line(s), and empty cells are static or intentionally blank."
+  "cells_compared": 113,
+  "cells_with_numbers": 58,
+  "cells_note": "113 = 41 table value cells + 25 displayed sentences (17 containing a number) + 25 row labels + 4 table header line(s) + 18 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 58 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
 }

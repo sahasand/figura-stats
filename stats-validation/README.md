@@ -81,7 +81,8 @@ Five properties are deliberate.
   `git rev-parse`.
 - **Every honesty guard the scorecard grew is rendered here too**, in the
   reader's language: registered-but-uncompared cases, deferred targets, the
-  webR tier's 2-of-8 coverage ratio, and both staleness digests.
+  webR tier's coverage ratio (8 of 8 since 2026-07-28, and still counted rather
+  than asserted), and both staleness digests.
 - **It publishes the findings before they are fixed.** The 30 export-path
   findings of `issues/02` were explained on the page in clinical terms — which
   patients the downloaded script analysed, which numbers moved — and named as a
@@ -435,17 +436,52 @@ is where a difference would show.
 
 `stats-validation/e2e/webr-parity.spec.js` drives the **shipped UI** in a real
 browser (upload, map roles, confirm the event value, set reference levels and
-increments, render, read `#stats`) and compares the displayed table against the
-native-R `text` in `results/<id>.figura.json`, cell by cell. It adds no test
-hook to `web/`, and it lives here with its own Playwright config so `tests/`
-and the repo-root `playwright.config.js` stay untouched. The comparator itself
-(`compareText`) and its cell-kind classification live in the sibling
-`e2e/compare-text.mjs` — a plain-Node module, exported specifically so it can
-be pinned by a plain node test (`e2e/compare-text.test.mjs`) that `make -C
-stats-validation test` runs on every build, even though the Playwright spec
-that is its only other caller stays excluded from CI. Before that split,
-`compareText` had no test anywhere reachable from CI; an edit that made the
-comparison always report "identical" would have failed nothing.
+increments, tick the variable checklist, render, read `#stats`) and compares
+what the app displays against the native-R `text` in
+`results/<id>.figura.json`. It adds no test hook to `web/`, and it lives here
+with its own Playwright config so `tests/` and the repo-root
+`playwright.config.js` stay untouched. The comparators and their cell-kind
+classification live in the sibling `e2e/compare-text.mjs` — a plain-Node
+module, exported specifically so it can be pinned by a plain node test
+(`e2e/compare-text.test.mjs`) that `make -C stats-validation test` runs on
+every build, even though the Playwright spec that is its only other caller
+stays excluded from CI. Before that split, `compareText` had no test anywhere
+reachable from CI; an edit that made the comparison always report "identical"
+would have failed nothing.
+
+**Three comparison shapes, one vocabulary.** Only three of the eight cases are
+ratio tables, so "compare the rendered table cell by cell" is not a shape the
+roster shares. `compareDisplay(kind, native, webr)` dispatches on the case's own
+`display.kind` — never on a guess from the text — into:
+
+| `display.kind` | analyses | shape |
+| --- | --- | --- |
+| `ratio_table` | cox, logistic | `compareText`, on `harness/parse-cells.mjs`'s `parseRatioTable` (unchanged) |
+| `table1` | summary | `compareTable`, a general N-column TSV (the column count is the number of groups plus two) |
+| `km_summary`, `gc_summary` | KM, group comparison | `compareProse` — these display no table at all, so the comparable units are the lines of the displayed sentence block and, within a line, its sentences |
+
+All three return the same result object over the same five cell kinds, which is
+what keeps the published `cells_compared` an honest count of comparable *units*:
+a case whose whole display is one sentence contributes one unit, not a table's
+worth of imaginary ones. A kind with no registered comparator is a loud
+precondition failure, never a silent skip. The general TSV parser
+(`parseDisplayTable`) is applied *identically to both sides*, so — unlike a
+second ratio parser, which is exactly what `compareText`'s reuse of
+`parseRatioTable` avoids — a quirk in it cancels out and cannot manufacture
+drift. It normalises nothing at all (no trimming, no padding a short row), which
+is deliberately stricter than `parseRatioTable`'s value-cell trim.
+
+**One field this tier types that `case.json` does not declare**, and it is a
+harness-correctness fix rather than a nudge toward parity: `km-twoarm` declares
+no `time_label`, so the native run's spec carries none and R falls back to
+`opts$time_label %||% "Time"` — which is *printed in the displayed sentence*
+("Standard care 26.0 Time."). The UI cannot send "no label": `#tlabel` always
+submits its contents and ships pre-filled `Months`. Accepting the default would
+feed the browser a **different spec** from the one native R ran and then report
+the inevitable `Time` vs `Months` difference as wasm drift — a harness bug
+wearing a finding's clothes. So the driver fills the box with whatever the case
+declares, or with R's own documented default when it declares nothing. Same
+spec, two runtimes, which is the only comparison this tier is entitled to make.
 
 Run it **from the repo root**:
 
@@ -473,20 +509,22 @@ becomes a `WEBR_DRIFT` entry in `results/webr-tier.json`, so a first run
 produces a measured number rather than a red X of unknown size.
 
 **Not every compared cell is a number.** "N cells compared" sounds like N
-measurements, but most of a rendered ratio table is static text: column
-headers, row/term labels (including ones that look numeric, like the level
-name "II" or "III"), and the deliberately-blank unadj/adj cells a categorical
-covariate's own reference-level row carries. `webr-tier.json` publishes a
-breakdown — top-level `cells_compared`, `cells_with_numbers`, and a
-`cells_note` explaining the split (e.g. `36 = 12 numeric value cells + 7
-methods sentences (5 containing a number) + 9 term labels + 2 header lines + 6
-empty-vs-empty placeholder cells` — only the numeric-bearing cells can ever
-show wasm-vs-native drift) — and the scorecard renders the honest phrasing:
-"compared every one of the N strings the app displays … M of them carrying a
-number." Per-case entries also carry `cell_kinds` and `cells_with_numbers` for
-the same reason. This breakdown is derived from the same `compareText` call
-that does the real comparison (not a second, independent classifier), so it
-can never disagree with what was actually compared.
+measurements, but most of a rendered table is static text: column headers,
+row/term labels (including ones that look numeric, like the level name "II" or
+"III"), and the deliberately-blank cells a categorical variable's own header
+row carries — a covariate's reference-level row in a ratio table, a variable
+name row in Table 1. `webr-tier.json` publishes a breakdown — top-level
+`cells_compared`, `cells_with_numbers`, and a `cells_note` explaining the split
+(e.g. `113 = 41 table value cells + 25 displayed sentences (17 containing a
+number) + 25 row labels + 4 table header lines + 18 empty-vs-empty placeholder
+cells` — only the numeric-bearing cells can ever show wasm-vs-native drift) —
+and the scorecard renders the honest phrasing: "compared every one of the N
+strings the app displays … M of them carrying a number." Per-case entries also
+carry `cell_kinds` and `cells_with_numbers` for the same reason. This breakdown
+is derived from the same comparison call that does the real work (not a second,
+independent classifier), so it can never disagree with what was actually
+compared — and because all three shapes write through one accumulator, the
+kinds still partition every compared cell no matter which shape produced it.
 
 **Hard preconditions — the page rendered, the table parsed, the row count
 matched — are asserted**, so a harness failure stays loud and never masquerades
@@ -562,13 +600,24 @@ state whatsoever: it is a function of files in the checked-out tree (`results/`
 and `web/`), never of the clock, the environment, or `HEAD`.
 `test_scorecard_is_a_pure_function_of_its_inputs` pins that.
 
-Coverage is **2 of the 8 cases** — the two ratio-table analyses with a full
-native-R display artifact to compare a rendered table against,
-`logistic-confounding` and `cox-adjusted`. The other six are validated on the
-native-R tiers above and are covered by **no** wasm-vs-native claim at all. The
-scorecard states the same ratio in the rendered WebR tier section, so the page
-cannot be read as whole-roster parity. The rest of the roster is Phase 2 — it
-needs the shared-boot refactor of the existing suites.
+Coverage is **8 of the 8 cases** since 2026-07-28 — the whole registered
+roster, driven through the shipped UI in **one booted webR session** (a page
+reload throws away the Web Worker and therefore the runtime, so the eight cases
+share one page and the wall clock stays around 15 seconds). It was 2 of 8 until
+then; widening it needed the shared-webR-boot refactor of `tests/e2e/`
+(`TODOS.md`, absorbed in the same change) and the two extra comparison shapes
+above. The spec asserts that its own case list is exactly the set of cases
+`results/` registers, so a case added to the roster without a driver fails the
+gate instead of quietly shrinking the coverage the page keeps advertising. The
+scorecard and the public page both state the ratio in the rendered WebR tier
+section, at 8 of 8 as much as at 2 of 8: "all of them" is a claim a reader is
+entitled to see counted rather than asserted.
+
+**The first whole-roster result: 113 displayed strings compared across the eight
+cases, 58 of them carrying a number, zero differences.** Nothing drifted — not
+the iteratively fitted models the tier was built to suspect (Cox's
+Newton-Raphson, logistic's IRLS), and not the five non-ratio analyses that had
+never been checked in a browser at all.
 
 **The scorecard's headline tiles (values compared / differences / defects /
 cases meeting targets) come from `findings.json` only.** A webR drift or

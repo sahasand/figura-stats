@@ -1251,6 +1251,41 @@ def test_web_webr_section_states_its_coverage_ratio(tmp_path):
     html = _build_web(tmp_path)
     assert "Coverage: 2 of 3 cases." in html
     assert "not</i> covered by any wasm-vs-native claim" in html
+    # The uncovered case is NAMED, not merely counted.
+    assert "km-twoarm" in html
+
+
+def test_web_webr_full_coverage_still_counts_itself(tmp_path):
+    """The tier now reaches the whole roster, and "all of them" is exactly the
+    claim a reader is entitled to see COUNTED rather than asserted — so the
+    ratio is still printed at 2 of 2, and the "some cases carry no
+    wasm-vs-native claim" caveat disappears because it is no longer true."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    (tmp_path / "webr-tier.json").write_text(json.dumps(WEBR_TIER))
+    html = _build_web(tmp_path)
+    assert "Coverage: 2 of 2 cases." in html
+    assert "not</i> covered by any wasm-vs-native claim" not in html
+    assert "Not gated here" not in html
+    # ...and the full-coverage wording says how the non-tabular analyses are
+    # compared, since "cell by cell" alone would be wrong for them.
+    assert "sentence by sentence" in html
+
+
+def test_webr_scorecard_full_coverage_drops_the_uncovered_caveat(tmp_path):
+    """Same rule on the maintainer's scorecard: no uncovered cases means no
+    "not gated in this tier" list, and no claim that some cases are unchecked."""
+    (tmp_path / "cox-adjusted.done").touch()
+    (tmp_path / "logistic-confounding.done").touch()
+    full = _build_with_webr(tmp_path)
+    assert "Coverage: 2 of 2 cases." in full
+    assert "Not gated in this tier" not in full
+    assert "sentence by sentence" in full
+
+    (tmp_path / "km-twoarm.done").touch()
+    partial = _build_with_webr(tmp_path)
+    assert "Coverage: 2 of 3 cases." in partial
+    assert "Not gated in this tier: <code>km-twoarm</code>." in partial
 
 
 def test_web_webr_empty_state_is_not_a_pass(tmp_path):

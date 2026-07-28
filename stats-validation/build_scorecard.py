@@ -606,29 +606,35 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
             f"and webR.{note_html}</p>"
         )
 
-    # COVERAGE, ON THE PAGE AND NOT ONLY IN THE README. This tier runs on a
-    # SUBSET of the roster — the ratio-table cases with a full native-R display
-    # artifact — and a section that lists two green rows without saying "two of
-    # eight" reads as whole-roster parity. Both numbers are read off files on
-    # disk (the tier's own case list, and results/ for the registered roster),
-    # so this stays a pure function of its inputs like everything else here.
+    # COVERAGE, ON THE PAGE AND NOT ONLY IN THE README. A section that lists
+    # green rows without saying how much of the roster they are reads as
+    # whole-roster parity. Both numbers are read off files on disk (the tier's
+    # own case list, and results/ for the registered roster), so this stays a
+    # pure function of its inputs like everything else here — and the ratio
+    # keeps being stated even now that it is 8 of 8, because "all of them" is a
+    # claim a reader is entitled to see counted rather than asserted.
     registered = registered_cases(results_dir)
     covered = [c.get("id") for c in cases]
     coverage_html = ""
     if registered:
         uncovered = [c for c in registered if c not in covered]
-        uncovered_html = (
-            f" Not gated in this tier: <code>"
-            f"{esc(', '.join(uncovered))}</code>." if uncovered else "")
+        if uncovered:
+            body = (
+                f"This tier drives the shipped browser UI and does not reach "
+                f"the whole roster. The cases it misses are validated on the "
+                f"native-R tiers above and are <i>not</i> covered by any "
+                f"wasm-vs-native claim. Not gated in this tier: "
+                f"<code>{esc(', '.join(uncovered))}</code>.")
+        else:
+            body = (
+                "Every registered case is driven through the shipped browser "
+                "UI and compared against its own native-R display artifact "
+                "&mdash; the ratio tables and Table 1 cell by cell, and the "
+                "analyses that display a sentence rather than a table "
+                "(Kaplan&ndash;Meier, group comparison) sentence by sentence.")
         coverage_html = (
             f"<p class=\"webr-totals\"><b>Coverage: {len(covered)} of "
-            f"{len(registered)} cases.</b> This tier drives the shipped browser "
-            f"UI, so it covers only the cases with a full native-R display "
-            f"artifact to compare a rendered table against &mdash; the two "
-            f"ratio-table analyses. The remaining cases are validated on the "
-            f"native-R tiers above and are <i>not</i> covered by any "
-            f"wasm-vs-native claim.{uncovered_html} Extending the roster needs "
-            f"the shared-webR-boot refactor of the other suites (Phase 2).</p>")
+            f"{len(registered)} cases.</b> {body}</p>")
 
     return (
         f"{header_html}{staleness_html}{coverage_html}{totals_html}"
@@ -1772,15 +1778,22 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
     coverage = ""
     if registered:
         uncovered = [c for c in registered if c not in covered]
-        coverage = (
-            f"<p><b>Coverage: {len(covered)} of {len(registered)} cases.</b> "
-            f"This gate drives the real browser interface, so it covers only "
-            f"the cases with a full native-R display artifact to compare a "
-            f"rendered table against &mdash; the two ratio-table analyses. The "
-            f"remaining cases are validated on native R above and are "
-            f"<i>not</i> covered by any wasm-vs-native claim."
-            + (f" Not gated here: <code>{esc(', '.join(uncovered))}</code>."
-               if uncovered else "") + "</p>")
+        if uncovered:
+            body = (
+                f"This gate drives the real browser interface and does not "
+                f"reach the whole roster. The cases it misses are validated on "
+                f"native R above and are <i>not</i> covered by any "
+                f"wasm-vs-native claim. Not gated here: "
+                f"<code>{esc(', '.join(uncovered))}</code>.")
+        else:
+            body = (
+                "Every case on this page was also run through the real browser "
+                "interface and checked against native R &mdash; the tables cell "
+                "by cell, and the analyses that report a sentence rather than a "
+                "table (Kaplan&ndash;Meier, group comparison) sentence by "
+                "sentence.")
+        coverage = (f"<p><b>Coverage: {len(covered)} of {len(registered)} "
+                    f"cases.</b> {body}</p>")
 
     stale = ""
     stale_native = _stale_native_digest(
@@ -1974,8 +1987,9 @@ and the <code>.R</code> script the app offers <b>for download</b>, re-run in R.<
 {_web_coverage_table(data, cases_dir)}
 <p>Two boundaries this table does not draw on its own. <b>Explore</b>, the plot
 builder, has no case here: it reports no statistics of its own, only a figure.
-And the whole table above is <b>native R</b> &mdash; the runtime in your browser
-is checked separately and on fewer cases; see
+And the whole table above is <b>native R</b> &mdash; the runtime that actually
+runs in your browser is checked separately, and how much of the roster that
+check reaches is stated where it is reported; see
 <a href="#webr">webR against native R</a>.</p>
 
 <h3>Case by case</h3>
@@ -1992,10 +2006,11 @@ rather than the platform's tuned ones, so an iteratively fitted model &mdash;
 Cox's Newton-Raphson, logistic regression's IRLS &mdash; is where a difference
 would show up if there were one.</p>
 <p>A hand-run gate drives the real interface in a real browser (upload the file,
-map the columns, confirm the event value, set the reference levels, render) and
-compares every string the app displays against native R's output, cell by cell.
-It is run before a release rather than on every change, because it needs a
-browser and the network.</p>
+map the columns, confirm the event value, set the reference levels, tick the
+variables, render) and compares every string the app displays against native R's
+output: the tables cell by cell, and the analyses that report a sentence rather
+than a table sentence by sentence. It is run before a release rather than on
+every change, because it needs a browser and the network.</p>
 {_web_webr_section(results_dir, web_dir)}
 
 <h2 id="yourself">How to check this yourself</h2>
