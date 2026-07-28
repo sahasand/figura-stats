@@ -120,7 +120,11 @@ documented alongside the other two exported-script divergences in
 `stats-validation/issues/02-app-vs-exported-script-missing-values.md`.
 **This one is still open.** The two cell-reading divergences above were fixed
 in `.script_data` on 2026-07-28; this branch lives in `R/km.R`'s own script
-builder, is a different mechanism, and was out of that fix's scope.
+builder, is a different mechanism, and was out of that fix's scope. Because no
+registered case can measure it, the public validation page discloses it in
+prose instead — an unconditional sentence in "How to check this yourself"
+(`build_scorecard.py`), which is not gated on findings precisely because this
+divergence produces none.
 
 ## Roles
 

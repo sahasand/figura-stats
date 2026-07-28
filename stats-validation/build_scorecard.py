@@ -1007,6 +1007,20 @@ def _export_path_only(case: dict) -> bool:
         f.get("source") in (SRC_EXACT, SRC_SCRIPT) for f in findings)
 
 
+def _export_path_findings(case: dict) -> list[dict]:
+    """This case's findings that are about the exported script, whichever tier.
+
+    Deliberately NOT `_export_path_only`, which asks whether ALL of a case's
+    findings are export-path (the precondition for the "the numbers on screen
+    were right" story, which one display finding falsifies). A case carrying
+    one display finding and one export finding still hands the user a download
+    that does not reproduce the app, and the download caveat must still fire
+    for it — the reassurance is what has to be withheld, not the warning.
+    """
+    return [f for f in (case.get("findings") or [])
+            if f.get("source") in (SRC_EXACT, SRC_SCRIPT)]
+
+
 def _count_pairs(case: dict) -> dict:
     """{quantity: (exported script value, app value)} from COUNT_MISMATCH."""
     return {f["quantity"]: (f["figura"], f["python"])
@@ -1800,30 +1814,45 @@ def _web_webr_section(results_dir: Path, web_dir: Path) -> str:
 
 
 def _web_download_caveat(data: dict) -> str:
-    """The honest caveat on "run the exported script yourself".
+    """The caveat on "run the exported script yourself", while one is owed.
 
-    Rendered ONLY while a case actually publishes export-path findings, and
-    written from those findings — so when the fix lands and the findings go
-    away, the caveat goes with them instead of warning about a defect that no
-    longer exists.
+    DEFECT-NEUTRAL ON PURPOSE, and this is the whole design of the function.
+    Unlike CASE_CAUSE and CASE_STATUS it is *not* keyed by case id: it fires
+    for any export-path finding on any case, so any sentence here describing a
+    particular mechanism ("cells `read.csv` reads as missing", "a fix is
+    planned") would be republished, unreviewed, the first time an unrelated
+    export-path finding appears on an unrelated case. It carried exactly such a
+    paragraph until 2026-07-28 — written for `issues/02`, left behind when that
+    defect was fixed, and by then describing behaviour the app no longer had.
+
+    So it says only what findings.json can prove: how many differences, on
+    which cases, and where to read them. WHAT diverges and WHY belongs in the
+    case's own narrative block, where CASE_CAUSE and CASE_STATUS are keyed by
+    id and cannot leak onto a case they were not written for.
+
+    The standing fact that a download *can* differ from the screen is not here
+    either: it is unconditional prose in the same section, because it is true
+    on a green page too and must not vanish with the last finding.
     """
-    export_cases = [c for c in data["cases"]
-                    if c["findings"] and _export_path_only(c)]
+    export_cases = [(c, _export_path_findings(c)) for c in data["cases"]]
+    export_cases = [(c, f) for c, f in export_cases if f]
     if not export_cases:
         return ""
-    ids = ", ".join(c["id"] for c in export_cases)
+    ids = ", ".join(c["id"] for c, _ in export_cases)
+    n = sum(len(f) for _, f in export_cases)
+    where = ("one of the datasets on this page" if len(export_cases) == 1
+             else f"{len(export_cases)} of the datasets on this page")
     return (
         "<div class=\"warn-box\">"
-        "<p><b>One honest caveat on that first step</b>, and it is the open "
-        "defect above. If your CSV contains cells R's <code>read.csv</code> "
-        "reads as missing &mdash; most commonly the two letters "
-        "<code>NA</code> typed as text &mdash; or values padded with spaces, "
-        "the downloaded script will analyse a different set of rows than the "
-        "app did, and the numbers will not match. That is Figura's defect, not "
-        "your data's, it is <a href=\"#differences\">measured on every run</a> "
-        f"(case <code>{esc(ids)}</code>), and a fix is planned. If your file "
-        "has none of those, the downloaded script reproduces the app exactly "
-        "&mdash; which is what the other cases measure.</p></div>")
+        f"<p><b>Right now, that first step has a caveat.</b> On {where} "
+        f"(<code>{esc(ids)}</code>) the downloaded <code>.R</code> does not "
+        f"reproduce the app it came from: "
+        f"{n} difference{'s' if n != 1 else ''} "
+        f"{'are' if n != 1 else 'is'} <a href=\"#differences\">published "
+        f"above</a>, quantity by quantity, each with whatever this page knows "
+        f"about that case. Read them before treating a downloaded script for "
+        f"the same analysis as a confirmation of what you saw on screen. Every "
+        f"other case's script reproduces the app exactly.</p></div>")
 
 
 def build_web(findings_path: Path | str | None = None,
@@ -1982,6 +2011,18 @@ statistician, and compare it against what the app showed you.</li>
 from the raw CSVs and rewrites the evidence files. It needs R, Python and
 Node.</li>
 </ul>
+<p class="aside">A standing note on that first step, true whether or not this
+page is publishing a difference today. Figura parses your CSV in the browser and
+never calls R's <code>read.csv</code>, so the downloaded script is
+<i>generated</i> to read the file the same way the app read it &mdash; the same
+trimming, the same treatment of a blank cell and of the two letters
+<code>NA</code> typed as text. That is a parity that has to be maintained rather
+than a property that holds by construction, which is why it is checked here on
+all {case_word} datasets. One narrow divergence is known and still open: a
+Kaplan&ndash;Meier script recodes a numeric status column slightly more
+permissively than the app does, and no case on this page exercises it. It is
+written up in
+<code>stats-validation/issues/02-app-vs-exported-script-missing-values.md</code>.</p>
 {_web_download_caveat(data)}
 
 <h2 id="howmade">How this page is produced</h2>

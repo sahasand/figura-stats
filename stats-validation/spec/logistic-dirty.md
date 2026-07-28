@@ -124,8 +124,29 @@ export path —
 coverage contract was discharged and the comparison found real disagreements. The
 comparator exited 1, which was the correct pipeline outcome; `findings.json` and
 the scorecard were still written, because the failing evidence WAS the
-deliverable. (The compared count rose 46 -> 52 with the fix: `stageNA`'s five
-quantities and the C-statistic pair became comparable instead of missing.)
+deliverable.
+
+**Why the compared count rose 46 -> 52** (corrected 2026-07-28; an earlier draft
+credited the C-statistic pair, which is wrong — see the two C-statistic findings
+listed under Diagnostics below, which are pre-fix and which *are* comparisons).
+All six are the `stageNA` term's: its **five** full-precision quantities
+(`est`/`se`/`lo`/`hi`/`p`, previously a single `MISSING_QUANTITY` for the whole
+absent term, recorded before the per-quantity loop was ever reached) and the
+**one** script-tier "exported script cell" it adds, because that tier iterates
+the harvested term set and that set grew from four terms to five. Tier by tier:
+
+| tier | before | after |
+| --- | --- | --- |
+| counts | 3 | 3 |
+| display (5 rows x 2 columns) | 10 | 10 |
+| exact (terms x 5 quantities) | 20 | 25 |
+| script (1 cell per harvested term) | 4 | 5 |
+| diagnostics | 9 | 9 |
+| **total** | **46** | **52** |
+
+Every component held or grew. A published finding is emitted *after* the
+comparison that produced it is counted, so anything with a pre-fix finding —
+the C-statistic included — was already being compared.
 
 **Do not suppress, special-case, or "fix" this case in either direction.** Its
 findings were the mechanical catch of issue 02 divergence 1, which until it

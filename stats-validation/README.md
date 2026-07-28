@@ -110,10 +110,32 @@ The plain-language narrative is also **gated on the shape of the evidence**.
 "The displayed numbers were right" renders only while every finding on the case
 is Figura-vs-its-own-exported-script; a single `screen vs Python` finding
 switches the block to a generic one that says the export-path explanation does
-not cover it. The same rule governs the "run the exported script yourself"
-caveat: it is written from the export-path findings, so when the fix lands and
-they disappear, the caveat disappears with them instead of warning about a
-defect that no longer exists.
+not cover it.
+
+The "run the exported script yourself" step carries **two** sentences, and the
+split between them is deliberate:
+
+- **The generated caveat** (`_web_download_caveat`) renders only while a case
+  is publishing export-path findings, and is written from those findings alone
+  — how many, on which cases, where to read them. It is **defect-neutral by
+  construction**: unlike `CASE_CAUSE`/`CASE_STATUS` it is not keyed by case id,
+  so it fires for any export-path finding on any case, and anything it said
+  about a particular mechanism would be republished unreviewed the next time an
+  unrelated case published one. It carried exactly such a paragraph (written
+  for `issues/02`) until 2026-07-28; the paragraph survived the fix that made
+  it false, because nothing rendered it and nobody re-read it. Note it fires on
+  a case with *any* export-path finding, not only an export-path-**only** one:
+  a mixed case still hands the user a download that does not reproduce the app.
+  What is withheld from a mixed case is the reassurance, not the warning.
+- **The standing note** beside it is unconditional prose, and must stay that
+  way. The exported script's parity with `web/lib/csv.js` is maintained rather
+  than structural, and one export-path divergence is open by design (`R/km.R`'s
+  numeric-equality branch — residual 1 in `issues/02`, inert for every
+  registered case, so it can never produce a finding). A page that said nothing
+  about the download whenever it was green would be telling the reader by
+  silence that screen and download cannot differ. `test_web_page_always_says_a_
+  download_can_differ_from_the_screen` pins it on a green page, a red one, and
+  the real shipped evidence.
 
 ## How Path B was produced
 

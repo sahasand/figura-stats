@@ -1079,7 +1079,10 @@ def test_web_download_caveat_is_tied_to_the_findings_that_justify_it(tmp_path):
     they go, the warning goes with them rather than warning about a defect that
     no longer exists."""
     with_findings = _build_web(tmp_path)
-    assert "One honest caveat on that first step" in with_findings
+    assert "Right now, that first step has a caveat" in with_findings
+    # ...and it is written FROM the findings: which cases, how many.
+    assert "case-defect, case-missing-quantity" in with_findings
+    assert "3 differences are" in with_findings   # 2 + 1 export-path findings
 
     clean = json.loads(json.dumps(FIXTURE))
     for case in clean["cases"]:
@@ -1087,10 +1090,101 @@ def test_web_download_caveat_is_tied_to_the_findings_that_justify_it(tmp_path):
         case["passed"] = True
     clean["total_findings"] = 0
     html = _build_web(tmp_path, clean)
-    assert "One honest caveat on that first step" not in html
+    assert "Right now, that first step has a caveat" not in html
     assert "Every difference, unabridged" not in html
     # ...and a green page must still refuse to read as "nothing can be wrong".
     assert "A validation page that only ever shows green is not evidence" in html
+
+
+def test_web_download_caveat_describes_the_findings_it_actually_has(tmp_path):
+    """THE DORMANT-PROSE GUARD, and the reason this function is not keyed by
+    case id the way CASE_CAUSE and CASE_STATUS are.
+
+    Until 2026-07-28 the caveat carried a paragraph written for `issues/02`:
+    R's `read.csv` eating a literal `NA`, "the open defect above", "a fix is
+    planned". Its trigger is any export-path finding on ANY case, so that
+    paragraph would have republished itself — describing a defect that no
+    longer exists, naming a fix that already shipped — the first time an
+    unrelated case published an unrelated export-path finding.
+
+    So this test builds exactly that future: one export-path finding, on a
+    different case, with a different mechanism. The page must describe THAT
+    case and claim nothing about its cause.
+    """
+    future = json.loads(json.dumps(FIXTURE))
+    for case in future["cases"]:
+        case["findings"] = []
+        case["passed"] = True
+    future["cases"].append({
+        "id": "km-twoarm",
+        "kind": "km_curve",
+        "compared": 106,
+        "passed": False,
+        "targets_met": True,
+        "targets": {"median_survival": 2},
+        "findings": [{
+            "code": "SCRIPT_DIVERGENCE",
+            "disposition": "defect",
+            "term": "-",
+            "quantity": "exported script median",
+            "figura": "18.4",
+            "python": "18.9",
+            "note": "a mechanism that has nothing to do with issues/02",
+            "source": SRC_SCRIPT,
+        }],
+    })
+    future["total_findings"] = 1
+    html = _build_web(tmp_path, future)
+
+    assert "Right now, that first step has a caveat" in html
+    assert "<code>km-twoarm</code>" in html
+    assert "1 difference is" in html          # singular, from the count itself
+    # The caveat itself, isolated from the standing note beside it (which does
+    # legitimately mention read.csv, unconditionally and in the present tense).
+    caveat = html.split("Right now, that first step has a caveat")[1]
+    caveat = caveat.split("</div>")[0]
+    for stale in ("read.csv", "defect", "a fix is planned", "padded",
+                  "typed as text", "your data"):
+        assert stale not in caveat, (
+            f"the caveat claims something findings.json cannot prove: {stale}")
+    # ...and no case that is green may be named as carrying a divergence.
+    assert "<code>case-defect" not in html
+
+
+def test_web_page_always_says_a_download_can_differ_from_the_screen(tmp_path):
+    """UNCONDITIONAL, and that is the entire point of it.
+
+    The caveat above is generated from findings and disappears with them. But
+    the exported script's parity with the app's own parser is maintained, not
+    structural, and one export-path divergence is known and open by design
+    (`R/km.R`'s numeric-equality branch, which no case here exercises). A page
+    that says nothing at all about the download whenever it is green would be
+    telling the reader, by silence, that the two cannot differ.
+
+    So the standing sentence must render on a green page, on a red one, and on
+    the real shipped evidence — and it must name where the open one is written
+    up, since a reader cannot check a claim they cannot find.
+    """
+    marker = "A standing note on that first step"
+    issue = "stats-validation/issues/02-app-vs-exported-script-missing-values.md"
+
+    red = _build_web(tmp_path)
+    clean = json.loads(json.dumps(FIXTURE))
+    for case in clean["cases"]:
+        case["findings"] = []
+        case["passed"] = True
+    clean["total_findings"] = 0
+    green = _build_web(tmp_path, clean)
+    real = json.loads((STATS_VALIDATION / "results" / "findings.json").read_text())
+    shipped = _build_web(tmp_path, real, cases_dir=STATS_VALIDATION / "cases")
+
+    for name, html in (("red", red), ("green", green), ("shipped", shipped)):
+        assert marker in html, f"the standing note is missing on the {name} page"
+        assert "Kaplan&ndash;Meier script recodes a numeric status column" in html
+        assert issue in html, f"the open divergence is unfindable on {name}"
+    # The count it quotes is the page's own case count, not a written-down one.
+    assert "all four datasets" in green
+    assert "all eight datasets" in shipped
 
 
 def test_web_page_shows_a_registered_but_uncompared_case(tmp_path):
@@ -1216,7 +1310,7 @@ def test_web_page_drops_the_defect_disclosure_once_the_real_case_is_green(tmp_pa
         "way this test did before issues/02 was fixed")
     html = _build_web(tmp_path, real, cases_dir=STATS_VALIDATION / "cases")
     assert "This is a known defect, and it is open." not in html
-    assert "One honest caveat on that first step" not in html
+    assert "Right now, that first step has a caveat" not in html
     assert "Every difference, unabridged" not in html
     # ...and the green page still refuses to read as "nothing can be wrong".
     assert "No case currently publishes a difference" in html

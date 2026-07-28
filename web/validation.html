@@ -425,6 +425,18 @@ statistician, and compare it against what the app showed you.</li>
 from the raw CSVs and rewrites the evidence files. It needs R, Python and
 Node.</li>
 </ul>
+<p class="aside">A standing note on that first step, true whether or not this
+page is publishing a difference today. Figura parses your CSV in the browser and
+never calls R's <code>read.csv</code>, so the downloaded script is
+<i>generated</i> to read the file the same way the app read it &mdash; the same
+trimming, the same treatment of a blank cell and of the two letters
+<code>NA</code> typed as text. That is a parity that has to be maintained rather
+than a property that holds by construction, which is why it is checked here on
+all eight datasets. One narrow divergence is known and still open: a
+Kaplan&ndash;Meier script recodes a numeric status column slightly more
+permissively than the app does, and no case on this page exercises it. It is
+written up in
+<code>stats-validation/issues/02-app-vs-exported-script-missing-values.md</code>.</p>
 
 
 <h2 id="howmade">How this page is produced</h2>

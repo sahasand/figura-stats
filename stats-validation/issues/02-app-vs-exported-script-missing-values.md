@@ -391,12 +391,44 @@ every other case            unchanged                  unchanged
 total                       325 compared, 30 findings  331 compared, 0 findings
 ```
 
-`make all` exits 0 for the first time. The comparison count rose by 6 because the
-`stage = NA` term now exists on both sides, so its five quantities plus the C-statistic
-pair became comparable instead of being a `MISSING_QUANTITY`. `expected-findings.json`
-was rewritten by `make gate-update` in the same commit; `web/validation.html` and
-`results/scorecard.html` regenerated; two consecutive `make clean all` runs are
-byte-identical.
+`make all` exits 0 for the first time.
+
+**Where the +6 comes from** (corrected 2026-07-28 — an earlier draft of this section, of
+`spec/logistic-dirty.md` and of the task report all credited the C-statistic pair, which
+is wrong). All six are the `stageNA` term's:
+
+- **five** in the exact tier — `est`, `se`, `lo`, `hi`, `p` for a term that previously
+  produced one `MISSING_QUANTITY` for the whole absent term and then `continue`d before
+  the per-quantity loop, so none of the five was ever counted as compared;
+- **one** in the script tier — its "exported script cell". That loop iterates
+  `sorted(exact_terms)` (`compare/compare.py:1340-1364`), and the harvested term set grew
+  from four terms to five, so it performs one more comparison.
+
+**The C-statistic pair was already compared before the fix,** in both the exact and the
+script tier. That is precisely why the pre-fix evidence carries a `DEFECT` on
+`c_statistic` and a `SCRIPT_DIVERGENCE` on the exported script's C-statistic sentence: a
+finding of either kind is emitted *after* `compared += 1`, so a published disagreement is
+proof the comparison ran. Nothing about the C-statistic changed the count; the fix changed
+its verdict from disagree to agree.
+
+Tier by tier, which is the only form of this claim that can be checked:
+
+| tier | before | after |
+| --- | --- | --- |
+| counts (`n`, `n_event`, `n_dropped`) | 3 | 3 |
+| display (5 displayed rows x unadjusted + adjusted) | 10 | 10 |
+| exact (harvested terms x est/se/lo/hi/p) | 20 (4 terms) | 25 (5 terms) |
+| script (one cell per harvested term) | 4 | 5 |
+| diagnostics (the advisory block) | 9 | 9 |
+| **total** | **46** | **52** |
+
+Every component held or grew and nothing was lost, which is the property that matters: a
+fix that raised the total while quietly dropping a tier would look identical in the
+headline number.
+
+`expected-findings.json` was rewritten by `make gate-update` in the same commit;
+`web/validation.html` and `results/scorecard.html` regenerated; two consecutive
+`make clean all` runs are byte-identical.
 
 **`logistic-dirty` stays in the roster and stays exactly as it is.** It was never a case
 to "fix"; it is now the standing regression test for this issue on the published page —
@@ -407,10 +439,41 @@ must reproduce `parseCsv` (`web/lib/csv.js`), not `read.csv`'s defaults. The app
 CSVs in the browser and never calls `read.csv` at all, so any divergence between the two
 readers is a divergence between the screen and the download.
 
-**Not fixed here, and still open:** the KM-specific numeric-equality branch described
-above (`R/km.R:219-224` adds an OR term the live app's JS event coding has no counterpart
-for). It is a different mechanism in a different file, out of this task's scope, and
-remains inert for a non-numeric event value.
+### Residuals — known, tracked, not fixed here
+
+**1. The KM numeric-equality branch** (`R/km.R:219-224`). The exported KM script recodes
+status with an extra numeric-equality OR term that the live app's JS event coding has no
+counterpart for, so a numeric status column can count events in the download that the app
+censored. A different mechanism in a different file, out of this task's scope. It is inert
+for a non-numeric event value, which is why `km-twoarm` (event value `dead`) cannot
+measure it — no case on the published page exercises it today. This is the one divergence
+the public page's standing download note points at
+(`build_scorecard.py`, the "How to check this yourself" section).
+
+**2. `type.convert` can still type a column differently from `parseCsv`.** Recorded
+2026-07-28 during the review of this fix; **pre-existing, and narrowed rather than widened
+by it.** `read.csv` runs `type.convert` on every column; `parseCsv` calls a column numeric
+iff every non-blank cell satisfies `Number.isFinite(Number(v))`, and categorical
+otherwise. Two shapes disagree:
+
+- **A `T`/`F` column reads LOGICAL in R.** Its factor levels are then `FALSE`/`TRUE`,
+  where the app's are `F`/`T` — so the exported script's model produces differently
+  *named* terms (`groupTRUE` vs `groupT`) for the same data. Verified in R 4.6.
+- **`Inf`, `NaN` (and `Infinity`) read NUMERIC in R** when the rest of the column parses,
+  while `Number.isFinite` rejects them, so the app calls the same column categorical. The
+  two readers then fit different models, not just different level names.
+
+Both are pre-existing and unreachable on any shipped case. Note the direction the
+`.script_data` fix moved them: under `na.strings = character(0)` a column that *also*
+carries a literal `NA` now fails `type.convert` and comes back **character**, matching
+`parseCsv` — so the fix strictly shrank this class rather than adding to it.
+
+**Suggested fix, if it is ever worth one:** emit a per-column type assertion in the
+preamble (the app already knows each column's inferred type at export time and could
+deparse it), rather than reaching for `colClasses = "character"`, which is rejected above
+for a reason that has not changed. **Why not now:** no shipped case or analysis role
+reaches it, and any change here moves the preamble that eight cases' published numbers now
+depend on.
 
 ## Comments
 
