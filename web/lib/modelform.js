@@ -40,9 +40,11 @@ export const READINESS_MESSAGES = {
 
 // Whether Render may fire, plus a plain-language reason when it may not.
 // `outcomeRole` names the role key holding the outcome column; `checkOverlap`
-// rejects an outcome that is also selected as a covariate.
+// rejects an outcome that is also selected as a covariate; `requireEventValue`
+// gates on the event value (false for continuous-outcome forms like linear regression).
 export function renderReadiness({ roles, eventValue },
-  { outcomeRole = "outcome", checkOverlap = true, messages = {} } = {}) {
+  { outcomeRole = "outcome", checkOverlap = true, requireEventValue = true,
+    messages = {} } = {}) {
   const m = { ...READINESS_MESSAGES, ...messages };
   // The column picker collapses its whole role map to null when any role is
   // unset, so "no roles yet" can mean either half is missing — say both.
@@ -52,7 +54,8 @@ export function renderReadiness({ roles, eventValue },
   if (checkOverlap && covs.includes(roles[outcomeRole])) {
     return { ready: false, reason: m.overlap };
   }
-  if (!eventValue) return { ready: false, reason: m.eventValue };
+  // A continuous-outcome form (linear regression) has no event value to pick.
+  if (requireEventValue && !eventValue) return { ready: false, reason: m.eventValue };
   return { ready: true, reason: "" };
 }
 

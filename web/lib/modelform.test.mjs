@@ -164,4 +164,31 @@ import assert from "node:assert/strict";
     "a column absent from every row drops every row");
 }
 
+// --- requireEventValue: false — a continuous-outcome form has no event value --
+{
+  const r = renderReadiness(
+    { roles: { outcome: "los", covariates: ["arm"] }, eventValue: "" },
+    { requireEventValue: false });
+  assert.equal(r.ready, true, "no event value needed when the option is off");
+  assert.equal(r.reason, "");
+}
+{
+  const r = renderReadiness(
+    { roles: { outcome: "los", covariates: ["arm", "los"] }, eventValue: "" },
+    { requireEventValue: false });
+  assert.equal(r.ready, false, "overlap is still rejected");
+  assert.match(r.reason, /outcome/i);
+}
+{
+  const r = renderReadiness(
+    { roles: { outcome: "los", covariates: ["arm"] }, eventValue: "" },
+    { requireEventValue: false, messages: { roles: "Choose a numeric outcome." } });
+  assert.equal(r.ready, true, "custom messages do not change the decision");
+}
+{
+  // The default is unchanged: logistic/cox still require the event value.
+  const r = renderReadiness({ roles: { outcome: "y", covariates: ["arm"] }, eventValue: "" });
+  assert.equal(r.ready, false);
+}
+
 console.log("ok - modelform: retainedSelection + reconcileRefLevels + renderReadiness + countDroppedRows");
