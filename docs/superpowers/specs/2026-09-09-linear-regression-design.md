@@ -146,10 +146,9 @@ styling applies with no CSS change. The `text` field's TSV uses the same three h
 
 1. Lead sentence. Multivariable: "Multivariable linear regression (n = %d) of %s adjusted
    for %s. Unadjusted coefficients are from single-covariate models; adjusted coefficients
-   are from the joint model, which explained %.1f%% of the variance in %s (R² = %.3f,
-   adjusted R² = %.3f)." Single covariate: the univariable wording logistic uses ("No
-   adjustment was made … the unadjusted and adjusted columns report the same model"), with
-   the R² clause.
+   are from the joint model (R² = %.3f, adjusted R² = %.3f)." Single covariate: the
+   univariable wording logistic uses ("No adjustment was made … the unadjusted and
+   adjusted columns report the same model"), with the same R² clause.
 2. **Aliased / collinear CAUTION** — fires when any joint-model coefficient is `NA`:
    " CAUTION: one or more covariates were dropped from the adjusted model because they are
    linear combinations of others (their cells read \"not reliably estimated\"); remove a
@@ -268,20 +267,30 @@ unchanged (no new network calls).
 ## Statistical validation (`stats-validation/`)
 
 One case, **`linear-confounding`**, sharing the demo's data (`cases/linear-confounding/
-data.csv` + `case.json` with `"figure": "linear"`, the demo's roles/options, and
-`"display": { "kind": "ratio_table" }` — the parser is column-agnostic, and the display tier
-compares whatever three cells arrive). `exact_targets`: `adjusted_beta`, `adjusted_ci`,
-`adjusted_p`, `n`, `n_dropped`, `r_squared`, `adj_r_squared`, `shapiro_note`, `bp_note`,
-`vif_note`, `cooks_note`, `aliased_note`.
+data.csv` + `case.json` with `"figure": "linear"`, the demo's roles/options, and a **new
+display kind `"display": { "kind": "coef_table" }`**. The existing `ratio_table` branch is
+bound to the ratio scale end to end — the harvest exponentiates, the cell format uses an
+en dash, reportability is the [1e-6, 1e6] window, and it compares an `n_event` count — so
+a coefficient table is a sibling kind, not a reuse. It shares the ratio branch's
+machinery through keyword parameters (count keys, cell formatter, reportability rule,
+cell parser) with the ratio defaults untouched, so cox and logistic cannot move.)
+`exact_targets`: `adjusted_beta`, `adjusted_ci`, `adjusted_p`, `n`, `n_dropped`,
+`r_squared`, `adj_r_squared`, `shapiro_p`, `bp_p`, `shapiro_note`, `bp_note`,
+`obs_per_term_note`, `vif_note`, `cooks_note`, `aliased_note`. R², adjusted R², the
+Shapiro–Wilk p and the Breusch–Pagan p have an exact tier because the exported script
+computes and prints each of them; VIF, Cook's, observations-per-term and the aliased
+caution are judged on the display tier, as logistic's VIF/Cook's/EPV are.
 
-Touch points, each of which currently enumerates figures by name:
+Touch points, each of which currently enumerates figures or kinds by name:
 
 - `Makefile` `CASES`; `harness/build-spec.mjs` (a `linear` builder over
-  `buildLinearSpec`); `harness/run-figura.R` / `run-script.R` if they special-case
-  figures; `python/validate/cli.py` `FITTERS`; `build_scorecard.py`'s analysis label list
-  and any per-figure prose; `compare/compare.py` — a `linear` handler in the
-  `ratio_table` dispatch (β formatter with " to ", the new advisory sentences, and the
-  `0 (reference)` cell), never a change to the cox/logistic handlers.
+  `buildLinearSpec`); `harness/run-script.R` (`harvest_linear`, registered in
+  `HARVESTERS`); `python/validate/cli.py` (a `linear` branch — no event value);
+  `build_scorecard.py`'s `ANALYSES`, `KIND_TIERS`, `KIND_NOT_COMPARED`;
+  `compare/compare.py` — `coef_table` in `KIND_HANDLERS`, `linear` in
+  `DIAGNOSTIC_HANDLERS` and `DIAGNOSTIC_TARGETS`, the new targets in `TARGET_QUANTITIES`;
+  `e2e/compare-text.mjs` and `e2e/webr-parity.spec.js` (`coef_table` → the same
+  three-column text comparison, a `table` readiness element).
 - `spec/linear-confounding.md` — transcribed from `R/linear.R` **by an agent with source
   access**, in the section shape of `spec/logistic-confounding.md` (cell reading,
   population, covariates, models, reported quantities, reportability, display, citation
