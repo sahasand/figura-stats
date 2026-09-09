@@ -117,6 +117,16 @@ finite and the interval lies within [1e-6, 1e6]. Otherwise the cell reads
 `%.2f (%.2f–%.2f, p=%.3f)` with an en-dash separator; when p < 0.001 the
 p-part reads `p<0.001`.
 
+### Citation paragraph (not compared)
+
+The `text` field ends with one extra paragraph, separated from everything
+above it by a blank line: a fixed attribution sentence beginning
+`Analyses were performed with Figura (` and ending `in the browser.`. It
+names the tool, a URL, a year, and the R packages the analysis used. It
+carries no statistical content and is excluded from every comparison: the
+comparator removes exactly one such trailing paragraph before parsing. An
+implementer of this spec must not emit it and must not parse it.
+
 ## Diagnostics (advisory)
 
 Figura appends advisory sentences to the methods text. **Not one of them gates

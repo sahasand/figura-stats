@@ -11,6 +11,16 @@ the reported quantities, the reportability rule, and the display rule. Nothing
 about the model changes here. `fit_logistic` needs no new behaviour for this
 case; it is the same call on a dirtier file.
 
+### Citation paragraph (not compared)
+
+The `text` field ends with one extra paragraph, separated from everything
+above it by a blank line: a fixed attribution sentence beginning
+`Analyses were performed with Figura (` and ending `in the browser.`. It
+names the tool, a URL, a year, and the R packages the analysis used. It
+carries no statistical content and is excluded from every comparison: the
+comparator removes exactly one such trailing paragraph before parsing. An
+implementer of this spec must not emit it and must not parse it.
+
 What changes is the **input**, and the purpose of the case is the divergence
 that dirt exposes between the live app and the `.R` script the app exports.
 

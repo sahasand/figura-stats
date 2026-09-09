@@ -367,6 +367,16 @@ clause: `normality was assessed within groups with the Shapiro-Wilk test
 (n <= 300) and skewness.` when a group role exists, and the same sentence without
 `within groups` when there is none.
 
+### Citation paragraph (not compared)
+
+The `text` field ends with one extra paragraph, separated from everything
+above it by a blank line: a fixed attribution sentence beginning
+`Analyses were performed with Figura (` and ending `in the browser.`. It
+names the tool, a URL, a year, and the R packages the analysis used. It
+carries no statistical content and is excluded from every comparison: the
+comparator removes exactly one such trailing paragraph before parsing. An
+implementer of this spec must not emit it and must not parse it.
+
 ## Reported quantities
 
 `summarize` reports, as the exact displayed string wherever the display is the

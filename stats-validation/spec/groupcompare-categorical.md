@@ -310,3 +310,13 @@ Real example, generated from this exact case's data:
 
 > `responder by group (n = 150): Pearson chi-square test: p < 0.001, Cramér's
 > V = 0.421.`
+
+### Citation paragraph (not compared)
+
+The `text` field ends with one extra paragraph, separated from everything
+above it by a blank line: a fixed attribution sentence beginning
+`Analyses were performed with Figura (` and ending `in the browser.`. It
+names the tool, a URL, a year, and the R packages the analysis used. It
+carries no statistical content and is excluded from every comparison: the
+comparator removes exactly one such trailing paragraph before parsing. An
+implementer of this spec must not emit it and must not parse it.

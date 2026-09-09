@@ -532,7 +532,7 @@ def parse_ratio_tsv(text: str, case: dict):
     rows = []
     seen_keys = {}
 
-    tsv = text.split("\n\n")[0]
+    tsv = strip_citation(text).split("\n\n")[0]
     lines = [ln for ln in tsv.split("\n") if ln.strip() != ""]
     if not lines:
         findings.append(finding("DEFECT", "-", "displayed table", "", None,
@@ -780,8 +780,32 @@ OTHER_WARN_CLAUSE = "CAUTION: fitting reported a numerical warning"
 DIAG_1DP_HALF_ULP = KM_DISPLAY_HALF_ULP
 
 
+# ---------------------------------------------------------------------------
+# THE CITATION PARAGRAPH. Every fig_* appends one attribution sentence as the
+# FINAL paragraph of its text (R/script.R `.with_citation`; documented in each
+# spec/*.md under "Display"). It carries no statistical content, but it does
+# contain a number (the year), so it is stripped BEFORE any parser sees the
+# text. Anchored to the end: a citation-shaped sentence anywhere else would be
+# a display defect and must stay visible to the comparison.
+# The grammar is exactly R/script.R `.citation_sentence`: a parenthetical with
+# no nested parens, then "which runs R", an optional package clause with no
+# period inside it, then "in the browser." and END OF TEXT. Anything after the
+# final period — a second sentence on the same line, say — means this is not
+# the bare citation paragraph, and nothing is stripped.
+CITATION_RE = re.compile(
+    r"\n\nAnalyses were performed with Figura \([^()\n]*\), which runs R"
+    r"(?: with the [^.\n]+ packages?)? in the browser\.\Z")
+
+
+def strip_citation(text):
+    """`text` without its trailing citation paragraph; non-strings pass through."""
+    if not isinstance(text, str):
+        return text
+    return CITATION_RE.sub("", text)
+
+
 def methods_text(text: str) -> str:
-    """The methods paragraph of a ratio_table `text` field.
+    """The methods paragraph of a ratio_table `text` field, citation removed.
 
     fig_logistic/fig_cox emit `"<TSV>\\n\\n<methods sentence>"`. The diagnostics
     live only in the sentence, and a TSV cell could in principle contain a
@@ -790,7 +814,7 @@ def methods_text(text: str) -> str:
     """
     if not isinstance(text, str):
         return ""
-    parts = text.split("\n\n", 1)
+    parts = strip_citation(text).split("\n\n", 1)
     return parts[1] if len(parts) == 2 else parts[0]
 
 
@@ -1234,7 +1258,7 @@ def compare_ratio_table(case, figura, exact, python):
 
     # -- display tier, BOTH columns.
     mark = len(findings)
-    text = figura.get("text")
+    text = strip_citation(figura.get("text"))
     if not isinstance(text, str):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed table", text, None,
@@ -1627,7 +1651,7 @@ def compare_km_summary(case, figura, exact, python):
     # exactly as compare_ratio_table's display loop independently flags it
     # alongside its own exact-tier MISSING_QUANTITY.
     mark = len(findings)
-    text = figura.get("text")
+    text = strip_citation(figura.get("text"))
     if not isinstance(text, str):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed text", text, None,
@@ -2185,7 +2209,7 @@ def compare_gc_summary(case, figura, exact, python):
 
     # -- display tier.
     mark = len(findings)
-    text = figura.get("text")
+    text = strip_citation(figura.get("text"))
     if not isinstance(text, str):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed text", text, None,
@@ -2463,7 +2487,7 @@ def parse_table1_tsv(text: str, case: dict):
     headers = []
     group_n = {}
 
-    tsv = text.split("\n\n")[0]
+    tsv = strip_citation(text).split("\n\n")[0]
     lines = [ln for ln in tsv.split("\n") if ln.strip() != ""]
     if not lines:
         findings.append(finding("DEFECT", "-", "displayed table", "", None,
@@ -2633,7 +2657,7 @@ def compare_table1(case, figura, exact, python):
     _source(findings[mark:], SRC_EXACT)
 
     mark = len(findings)
-    text = figura.get("text")
+    text = strip_citation(figura.get("text"))
     if not isinstance(text, str):
         findings.append(finding(
             "MISSING_QUANTITY", "-", "displayed table", text, None,

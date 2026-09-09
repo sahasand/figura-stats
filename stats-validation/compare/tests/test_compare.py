@@ -66,6 +66,7 @@ from compare import (
     parse_ratio_tsv,
     parse_table1_tsv,
     reportable,
+    strip_citation,
 )
 
 EN = "–"  # en dash U+2013, the character R's sprintf writes
@@ -2856,3 +2857,41 @@ def test_the_c_statistic_target_is_credited_by_the_exact_tier_only(tmp_path):
     assert report["targets_met"] is False
     quantities = {f["quantity"] for f in report["findings"]}
     assert "c_statistic" in quantities
+
+
+CITE = ("Analyses were performed with Figura (Saha, 2026; https://figurastats.org), "
+        "which runs R with the survival and ggplot2 packages in the browser.")
+
+
+def test_strip_citation_removes_exactly_the_trailing_paragraph():
+    text = "a\tb\n\nMethods sentence. Another.\n\n" + CITE
+    assert strip_citation(text) == "a\tb\n\nMethods sentence. Another."
+
+
+def test_strip_citation_leaves_text_without_a_citation_alone():
+    assert strip_citation("HR 1.2; log-rank p = 0.3.") == "HR 1.2; log-rank p = 0.3."
+    assert strip_citation(None) is None
+
+
+def test_strip_citation_does_not_touch_a_citation_like_sentence_mid_text():
+    text = CITE + "\n\nReal methods."
+    assert strip_citation(text) == text
+
+
+def test_methods_text_is_citation_free():
+    assert methods_text("tsv\n\nMethods.\n\n" + CITE) == "Methods."
+
+
+def test_strip_citation_keeps_a_paragraph_that_carries_more_than_the_citation():
+    # A statistical sentence sharing the citation's line is NOT swallowed: the
+    # paragraph no longer matches the grammar, so it survives whole and the
+    # comparator sees the extra sentence (which is the point).
+    extra = "tsv\n\nMethods.\n\n" + CITE + " Median survival 12.0 months."
+    assert strip_citation(extra) == extra
+    # Nor is a citation whose parenthetical hides a nested paren or a second line.
+    odd = "tsv\n\nMethods.\n\nAnalyses were performed with Figura (Saha (2026); x), which runs R in the browser."
+    assert strip_citation(odd) == odd
+    # The no-package and single-package forms are stripped like the multi-package one.
+    for pk in ("", " with the survival package", " with the survival, ggplot2, and cowplot packages"):
+        t = "a\n\nb.\n\nAnalyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R" + pk + " in the browser."
+        assert strip_citation(t) == "a\n\nb."
