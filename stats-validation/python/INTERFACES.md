@@ -113,6 +113,51 @@ tier's comparator gate (`compare.py`'s `REL_TOL`) enforces. Converge well
 past whatever your solver's defaults are before returning — tightening the
 convergence criteria closed the same gap to ~1e-8 in the same check.
 
+## validate/linear.py
+
+- `fit_linear(df, outcome, covariates, ref_levels, increments) -> dict` with keys:
+  - `terms`: `{term: {est, se, lo, hi, p}}` — adjusted (joint-model) coefficients on
+    the outcome's own scale (never exponentiated). `se` is REQUIRED. Term naming as
+    `fit_logistic`: continuous covariate → the column name; categorical level →
+    column name immediately followed by the level string. An aliased term is
+    present with every value `float("nan")`, so the comparator sees an
+    unreportable cell rather than a missing one.
+  - `unadjusted`: same shape, one univariable model per covariate.
+  - `n`, `n_dropped`: integers. There is NO `n_event`.
+  - `r_squared`, `adj_r_squared`: floats.
+  - `diagnostics`: exactly these keys — `shapiro_p` (`float | None`),
+    `shapiro_triggered` (bool), `bp_p` (float), `bp_triggered` (bool),
+    `obs_per_term` (float), `obs_per_term_triggered` (bool), `vif`
+    (`{covariate: float} | None`), `vif_triggered` (bool), `cooks_influential`
+    (int), `cooks_triggered` (bool), `aliased_caution` (bool).
+- `reportable(cell) -> bool` — finiteness of est/lo/hi per the spec's Reportability rule.
+
+Report all floats at full precision — never round inside the module.
+
+**Key placement is a contract, not a convenience.** The comparator reads
+`terms`, `unadjusted`, `n`, `n_dropped`, `r_squared` and `adj_r_squared` at the
+**TOP LEVEL** of the returned dict, and reads `shapiro_p` and `bp_p` **INSIDE
+`diagnostics`** — the R² pair is deliberately NOT in the diagnostics block even
+though it is compared alongside the advisory sentences, and the two p-values are
+deliberately NOT at the top level even though they are exact-tier quantities.
+Moving either set breaks the comparison silently, as a missing quantity rather
+than a mismatch. `diagnostics` carries the eleven keys listed above and no
+others.
+
+`vif` follows `fit_logistic`'s rule exactly: `None`, not `{}`, when there are
+fewer than two continuous covariates, keyed by the bare column name, and
+`float("inf")` for an exactly duplicated covariate — which must survive to JSON
+as a number, not a string. `shapiro_p` is `None` (and `shapiro_triggered`
+`False`) whenever the test did not run, per the spec's size window.
+
+**The confidence interval is t-based, not Wald.** Unlike `fit_logistic` and
+`fit_cox`, which pin the literal constant 1.96, `fit_linear`'s interval is
+`est ± t(0.975, n - p) * se` with `p` the number of estimated coefficients
+INCLUDING the intercept, and its p-value is the two-sided Student t tail on the
+same degrees of freedom. `tests/test_linear.py` asserts the half-width is NOT
+`1.96 * se`, so a normal-quantile implementation fails there rather than
+surfacing later as a whole-table finding.
+
 ## validate/km.py
 
 - `fit_km(df, time, status, event_value, group) -> dict` with keys:
