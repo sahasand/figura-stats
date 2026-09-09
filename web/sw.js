@@ -11,7 +11,7 @@
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
-const CACHE = "figura-v15";  // v14 -> v15: version the main app's shared stylesheet too.
+const CACHE = "figura-v16";  // v15 -> v16: linear regression analysis.
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath
