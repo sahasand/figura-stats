@@ -13,3 +13,4 @@ web/R/
 # Scraped third-party sources (journal pages) kept for research provenance —
 # never publish: the captures are someone else's copyrighted content.
 .firecrawl/
+scripts/pages/.build/
