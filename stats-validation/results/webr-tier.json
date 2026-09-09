@@ -1,104 +1,59 @@
 {
   "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
   "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 17 webr.r-wasm.org request(s) during this run.",
-  "date": "2026-07-28",
-  "commit": "103c90bc960001c67295f318d43d78a957b9febc",
-  "native_digest": "sha256:30f9857d2e3098786d91ef597c65671ef6bfeda693af29310c4f2ec2b4e89862",
-  "web_digest": "sha256:24146932d1a734e632d29259366cf17d4e5bce8c47d279e3a22510dc72248edd",
-  "web_files": 50,
+  "date": "2026-09-09",
+  "commit": "2a774a0fef8da5b59e11e5519f583cb6518555ba",
+  "native_digest": "sha256:85e694f248d1b0dab60b98924d7aa44d37110c9c4fa0a0b6fcdaddc3a0d44665",
+  "web_digest": "sha256:aa01dc023fb74c94d0d1faf834b518efa62165794f393bd1d46717be7b18ee8e",
+  "web_files": 51,
   "cases": [
     {
       "id": "logistic-confounding",
       "identical": true,
-      "cells_compared": 23,
+      "cells_compared": 24,
       "differing_cells": [],
       "cell_kinds": {
         "header": 1,
         "term": 6,
         "value": 8,
         "empty": 4,
-        "methods": 4,
-        "methods_with_number": 3
+        "methods": 5,
+        "methods_with_number": 4
       },
-      "cells_with_numbers": 11
+      "cells_with_numbers": 12
     },
     {
       "id": "logistic-dirty",
       "identical": true,
-      "cells_compared": 26,
+      "cells_compared": 27,
       "differing_cells": [],
       "cell_kinds": {
         "header": 1,
         "term": 7,
         "value": 10,
         "empty": 4,
-        "methods": 4,
-        "methods_with_number": 3
+        "methods": 5,
+        "methods_with_number": 4
       },
-      "cells_with_numbers": 13
+      "cells_with_numbers": 14
     },
     {
       "id": "cox-adjusted",
       "identical": true,
-      "cells_compared": 13,
+      "cells_compared": 14,
       "differing_cells": [],
       "cell_kinds": {
         "header": 1,
         "term": 3,
         "value": 4,
         "empty": 2,
-        "methods": 3,
-        "methods_with_number": 2
+        "methods": 4,
+        "methods_with_number": 3
       },
-      "cells_with_numbers": 6
+      "cells_with_numbers": 7
     },
     {
       "id": "km-twoarm",
-      "identical": true,
-      "cells_compared": 2,
-      "differing_cells": [],
-      "cell_kinds": {
-        "header": 0,
-        "term": 0,
-        "value": 0,
-        "empty": 0,
-        "methods": 2,
-        "methods_with_number": 2
-      },
-      "cells_with_numbers": 2
-    },
-    {
-      "id": "groupcompare-numeric",
-      "identical": true,
-      "cells_compared": 3,
-      "differing_cells": [],
-      "cell_kinds": {
-        "header": 0,
-        "term": 0,
-        "value": 0,
-        "empty": 0,
-        "methods": 3,
-        "methods_with_number": 2
-      },
-      "cells_with_numbers": 2
-    },
-    {
-      "id": "groupcompare-categorical",
-      "identical": true,
-      "cells_compared": 1,
-      "differing_cells": [],
-      "cell_kinds": {
-        "header": 0,
-        "term": 0,
-        "value": 0,
-        "empty": 0,
-        "methods": 1,
-        "methods_with_number": 1
-      },
-      "cells_with_numbers": 1
-    },
-    {
-      "id": "groupcompare-dirty",
       "identical": true,
       "cells_compared": 4,
       "differing_cells": [],
@@ -113,22 +68,67 @@
       "cells_with_numbers": 3
     },
     {
+      "id": "groupcompare-numeric",
+      "identical": true,
+      "cells_compared": 5,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 5,
+        "methods_with_number": 3
+      },
+      "cells_with_numbers": 3
+    },
+    {
+      "id": "groupcompare-categorical",
+      "identical": true,
+      "cells_compared": 3,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 3,
+        "methods_with_number": 2
+      },
+      "cells_with_numbers": 2
+    },
+    {
+      "id": "groupcompare-dirty",
+      "identical": true,
+      "cells_compared": 6,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 0,
+        "term": 0,
+        "value": 0,
+        "empty": 0,
+        "methods": 6,
+        "methods_with_number": 4
+      },
+      "cells_with_numbers": 4
+    },
+    {
       "id": "summary-table1",
       "identical": true,
-      "cells_compared": 41,
+      "cells_compared": 42,
       "differing_cells": [],
       "cell_kinds": {
         "header": 1,
         "term": 9,
         "value": 19,
         "empty": 8,
-        "methods": 4,
-        "methods_with_number": 1
+        "methods": 5,
+        "methods_with_number": 2
       },
-      "cells_with_numbers": 20
+      "cells_with_numbers": 21
     }
   ],
-  "cells_compared": 113,
-  "cells_with_numbers": 58,
-  "cells_note": "113 = 41 table value cells + 25 displayed sentences (17 containing a number) + 25 row labels + 4 table header line(s) + 18 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 58 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
+  "cells_compared": 125,
+  "cells_with_numbers": 66,
+  "cells_note": "125 = 41 table value cells + 37 displayed sentences (25 containing a number) + 25 row labels + 4 table header line(s) + 18 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 66 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
 }
