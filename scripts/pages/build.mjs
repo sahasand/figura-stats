@@ -28,7 +28,7 @@ export async function buildAll({ webDir }) {
     out.set(`${p.slug}/sample.csv`, toCsv(p.demo.rows, p.demo.columns));
   }
   out.set("about/index.html", renderAboutPage(navFor("about")));
-  out.set("sample-size/index.html", renderPlannerPage());
+  out.set("sample-size/index.html", renderPlannerPage(await readFile(path.join(webDir, "index.html"), "utf8")));
   out.set("sitemap.xml", renderSitemap([
     `${SITE}/`, `${SITE}/validation.html`, `${SITE}/about/`, `${SITE}/sample-size/`,
     ...PAGES.map((p) => `${SITE}/${p.slug}/`)]));

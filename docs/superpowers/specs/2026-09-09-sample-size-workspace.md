@@ -5,9 +5,11 @@ User request: a comprehensive, high-quality build, not a single calculator.
 
 ## Product contract
 
-A standalone `/sample-size/` planning workspace uses Figura's existing typography
-and warm-paper design. Its signature is a live sensitivity curve next to a fully
-specified calculation, with named scenarios that can be compared and reopened.
+The `/sample-size/` module uses Figura's existing workbench: the shared toolbar,
+analysis navigation, Configuration pane and paper-styled output. Its header and
+navigation are derived from the main app during page generation. Study design
+is selected within Configuration; results, sensitivity curves and saved scenarios
+live in the output pane. It has no independent theme or landing-page header.
 No dataset, account, cloud compute or language model is needed. Assumptions and
 saved plans stay in the tab unless the user explicitly downloads them.
 

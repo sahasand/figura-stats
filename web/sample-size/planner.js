@@ -10,16 +10,16 @@ function getWorker() {
   if(worker) return worker;
   worker = new Worker(new URL('./worker.js', import.meta.url), {type:'module'});
   worker.onmessage = ({data}) => {
-    if(data.status) { $('engine-status').textContent=data.status; return; }
+    if(data.status) { $('engine-status').textContent='R: loading…'; $('engine-status').className='chip busy'; return; }
     const request=pending.get(data.id);
     if(!request) return;
     pending.delete(data.id);
-    if(data.ok) { $('engine-status').textContent=`Local R ${data.result.engine.R} · Ready`; request.resolve(data.result); }
+    if(data.ok) { $('engine-status').textContent=`R ${data.result.engine.R}: ready`; $('engine-status').className='chip ready'; request.resolve(data.result); }
     else request.reject(new Error(data.error || 'The calculation could not be completed.'));
   };
   worker.onerror = event => {
     event.preventDefault();
-    $('engine-status').textContent='R engine unavailable';
+    $('engine-status').textContent='R: unavailable'; $('engine-status').className='chip error';
     for(const request of pending.values()) request.reject(new Error('The local R engine could not load. Check your connection, then choose Calculate plan to retry.'));
     pending.clear(); worker.terminate(); worker=null;
   };
@@ -93,7 +93,7 @@ function field(key, descriptor, value) {
 function renderForm() {
   const m=methodById(spec.method);
   $('design-title').textContent=m.title; $('design-description').textContent=m.description;
-  for(const b of document.querySelectorAll('[data-method]')) b.toggleAttribute('aria-current', b.dataset.method===m.id);
+  $('design-select').value=m.id;
   const solvers=m.precision ? [['n','Sample size'],['precision','Interval width']] : [['n','Sample size'],['power','Power'],...(m.effect?[['effect','Detectable effect']]:[])];
   $('solve-controls').innerHTML=solvers.map(([key,label])=>`<button type="button" data-solve="${key}" aria-pressed="${spec.solve===key}">${label}</button>`).join('');
   $('design-fields').innerHTML=m.fields.map(k=>{
@@ -127,14 +127,11 @@ $('planning-form').addEventListener('submit',e=>{e.preventDefault(); invalidate(
 $('solve-controls').addEventListener('click',e=>{
   const b=e.target.closest('[data-solve]'); if(b) choose({...spec,solve:b.dataset.solve});
 });
-$('design-list').addEventListener('click',e=>{
-  const b=e.target.closest('[data-method]'); if(b) choose(defaultsFor(b.dataset.method));
-});
+$('design-select').addEventListener('change',e=>choose(defaultsFor(e.target.value)));
 for(const b of document.querySelectorAll('[data-preset]')) b.addEventListener('click',()=>choose(PRESETS[Number(b.dataset.preset)].spec));
-$('design-search').addEventListener('input',e=>{
-  const q=e.target.value.trim().toLowerCase();
-  for(const b of document.querySelectorAll('[data-method]')) b.hidden=!b.textContent.toLowerCase().includes(q);
-  for(const category of document.querySelectorAll('.design-category')) category.hidden=![...category.querySelectorAll('button')].some(b=>!b.hidden);
+$('feedback-copy')?.addEventListener('click',async()=>{
+  try { await navigator.clipboard.writeText('feedback@figurastats.org'); $('feedback-copy').querySelector('.fb-copy-hint').textContent='Copied'; }
+  catch { $('feedback-copy').querySelector('.fb-copy-hint').textContent='Select to copy'; }
 });
 function helpers() {
   const r2=Number($('helper-r2').value), sd=Number($('helper-sd').value), r=Number($('helper-r').value);
@@ -145,7 +142,7 @@ for(const id of ['helper-r2','helper-sd','helper-r']) $(id).addEventListener('in
 helpers();
 
 function renderScenarios() {
-  $('comparison').innerHTML=scenarios.length ? `<div class="table-scroll"><table><thead><tr><th scope="col">Scenario / design</th><th scope="col">Analyzable</th><th scope="col">Recruit</th><th scope="col">Power / half-width</th><th scope="col">Actions</th></tr></thead><tbody>${scenarios.map((s,i)=>`<tr><th scope="row">${escape(s.name)}<small>${escape(methodById(s.spec.method).title)}</small></th><td>${number(s.result.counts.analyzable)} ${escape(s.result.counts.unit)}<small>${array(s.result.counts.per_group).map(number).join(' / ')}</small></td><td>${number(s.result.counts.recruit)}</td><td>${metric(s.result)}<small>${s.result.metric_kind==='precision'?'Interval half-width':'Power'}</small></td><td><button type="button" data-load="${i}" aria-label="Load ${escape(s.name)}">Load</button><button type="button" data-remove="${i}" aria-label="Remove ${escape(s.name)}">Remove</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty-scenarios">Start with one plausible design, then keep alternatives for the assumptions you are least certain about.</p>';
+  $('comparison').innerHTML=scenarios.length ? `<div class="table-scroll"><table><thead><tr><th scope="col">Scenario / design</th><th scope="col">Analyzable</th><th scope="col">Recruit</th><th scope="col">Power / half-width</th><th scope="col">Actions</th></tr></thead><tbody>${scenarios.map((s,i)=>`<tr><th scope="row">${escape(s.name)}<small>${escape(methodById(s.spec.method).title)}</small></th><td>${number(s.result.counts.analyzable)} ${escape(s.result.counts.unit)}<small>${array(s.result.counts.per_group).map(number).join(' / ')}</small></td><td>${number(s.result.counts.recruit)}</td><td>${metric(s.result)}<small>${s.result.metric_kind==='precision'?'Interval half-width':'Power'}</small></td><td><button type="button" data-load="${i}" aria-label="Load ${escape(s.name)}">Load</button><button type="button" data-remove="${i}" aria-label="Remove ${escape(s.name)}">Remove</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty-scenarios">Keep a scenario to compare alternative assumptions.</p>';
   exportsState();
 }
 $('save-scenario').addEventListener('click',()=>{

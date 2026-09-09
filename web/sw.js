@@ -11,7 +11,7 @@
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
-const CACHE = "figura-v13";  // v12 -> v13: sample-size planning workspace.
+const CACHE = "figura-v14";  // v13 -> v14: planning uses the shared workbench chrome.
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath

@@ -85,6 +85,14 @@ for (const p of PAGES) {
   assert.equal(table.rows.length, p.demo.rows.length, `${p.slug}: sample.csv rows`);
 }
 
+// The planner is part of the same workbench, including its cross-analysis routes.
+const planner = built.get("sample-size/index.html");
+assert.ok(planner.includes('<header class="toolbar">'));
+assert.ok(planner.includes('class="workbench planner-workbench"'));
+assert.ok(planner.includes('id="design-select"'));
+for (const p of PAGES) assert.ok(planner.includes(`href="../#${p.key}"`));
+assert.ok(planner.includes('aria-current="page" href="../sample-size/"'));
+
 // 4. About, sitemap, robots.
 const about = built.get("about/index.html");
 assert.ok(about.includes("Web Analytics"), "About discloses the Cloudflare beacon");
