@@ -11,7 +11,7 @@
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
-const CACHE = "figura-v14";  // v13 -> v14: planning uses the shared workbench chrome.
+const CACHE = "figura-v15";  // v14 -> v15: version the main app's shared stylesheet too.
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath
@@ -34,6 +34,7 @@ const scoped = (p) => new URL(p, self.registration.scope).toString();
 // below, for the same reason R sources are.
 const PRECACHE = [
   "index.html", "validation.html", "app.js", "worker.js", "styles.css",
+  "styles.css?v=workbench-1",
   "export-ui.js",
   "fonts/ibm-plex-sans-latin-400-normal.woff2",
   "fonts/ibm-plex-sans-latin-600-normal.woff2",
