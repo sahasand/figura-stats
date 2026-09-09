@@ -11,9 +11,7 @@
 // SAFETY: only same-origin GETs and webR-origin STATIC assets are intercepted;
 // everything else (non-GET, other origins, webR channel comms) passes straight
 // through, so the SW can never disturb how webR loads or communicates.
-const CACHE = "figura-v11";  // v10 -> v11 covers this whole unreleased branch:
-// one bump per deploy, not per shell edit. A second bump inside the same
-// unshipped branch would make returning users re-download the webR runtime twice.
+const CACHE = "figura-v12";  // v11 -> v12: landing pages, About link, hash deep-link.
 
 // Resolve a scope-relative path against the SW's registration scope, so the
 // precache/match paths are correct under a GitHub Pages PROJECT subpath

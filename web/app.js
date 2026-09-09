@@ -135,6 +135,15 @@ document.querySelectorAll("[data-figure]").forEach((btn) => {
   });
 });
 
+import { analysisFromHash } from "./lib/route.js";
+// Deep link from a landing page (web/<slug>/index.html → "/#km/example"):
+// select the analysis the hash names; the guided shell then reads the stage
+// from the same hash exactly as it does for an in-app tab click.
+{
+  const fromHash = analysisFromHash(location.hash, Object.keys(forms));
+  if (fromHash) document.querySelector(`[data-figure="${fromHash}"]`)?.click();
+}
+
 initExportUI(() => currentFigure);
 
 // ---- Feedback address ----------------------------------------------------

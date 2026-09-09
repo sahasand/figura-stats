@@ -3,8 +3,9 @@
    slim toolbar, layered cream surfaces, graphite ink, a docked console strip.
    The rendered artifact (Table 1 / Table 3) is typeset like a journal galley:
    serif row labels, monospace numerals, three rules, no zebra.
-   Fonts are SELF-HOSTED (web/fonts/): this site makes no network calls
-   beyond webR — never link a font CDN here.
+   Fonts are SELF-HOSTED (web/fonts/): the app's own code makes no network
+   call beyond webR and its own files — never link a font CDN here. (Cloudflare
+   injects its Web Analytics beacon at the edge; that is disclosed in /about/.)
 --------------------------------------------------------------------------- */
 
 @font-face {
