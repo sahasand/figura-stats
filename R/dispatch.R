@@ -11,6 +11,7 @@ render_figure <- function(json_string) {
       groupcompare = fig_groupcompare(spec),
       cox     = fig_cox(spec),
       logistic = fig_logistic(spec),
+      linear  = fig_linear(spec),
       stop(sprintf("Unknown figure: %s", fig))
     )
     res <- list(ok = TRUE, svg = out$svg, text = out$text)
