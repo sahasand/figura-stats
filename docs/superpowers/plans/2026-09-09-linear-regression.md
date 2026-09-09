@@ -48,7 +48,7 @@
 - `R/dispatch.R` — `linear = fig_linear(spec),` in the switch.
 - `web/lib/modelform.js` (+ `modelform.test.mjs`) — `requireEventValue` option on `renderReadiness`.
 - `web/worker.js` — `"linear.R"` in the boot fetch loop.
-- `web/app.js`, `web/index.html`, `web/sw.js` (`CACHE` v12 → v13), `scripts/pages/html.mjs` lede, `web/guided/understand-sections.test.mjs`, `tests/e2e/smoke.spec.js`, `package.json`.
+- `web/app.js`, `web/index.html`, `web/sw.js` (`CACHE` v13 → v14), `scripts/pages/html.mjs` lede, `web/guided/understand-sections.test.mjs`, `tests/e2e/smoke.spec.js`, `package.json`.
 - `scripts/pages/registry.mjs` — `linear-regression` entry; then `npm run build:examples && npm run build:pages`.
 - `stats-validation/Makefile`, `harness/build-spec.mjs` (+ test), `harness/run-script.R`, `python/validate/cli.py`, `python/INTERFACES.md`, `compare/compare.py` (+ `compare/tests/test_compare.py`), `build_scorecard.py`, `e2e/compare-text.mjs`, `e2e/webr-parity.spec.js`, `expected-findings.json`.
 - `CLAUDE.md`.
@@ -1947,7 +1947,7 @@ test("analyze stage fits an uploaded linear model with adjusted coefficients", a
 ```
 
   and in the `<meta name="description">` change "Cox regression, logistic regression, Table 1" to "Cox, logistic and linear regression, Table 1".
-- `web/sw.js:14`: `const CACHE = "figura-v13";  // v12 -> v13: linear regression analysis.`
+- `web/sw.js:14`: `const CACHE = "figura-v14";  // v13 -> v14: linear regression analysis.`
 
 - [ ] **Step 4: Run e2e**
 
