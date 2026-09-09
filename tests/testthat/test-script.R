@@ -177,3 +177,35 @@ test_that("header lists package versions and .script_fun embeds source", {
   eval(parse(text = paste(f, collapse = "\n")), env)
   expect_equal(env$.fmt_num(1.125), .fmt_num(1.125))
 })
+
+test_that(".citation_sentence names the tool, the URL, and the packages", {
+  expect_equal(.citation_sentence(),
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R in the browser.")
+  expect_equal(.citation_sentence("survival"),
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R with the survival package in the browser.")
+  expect_equal(.citation_sentence(c("survival", "ggplot2")),
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R with the survival and ggplot2 packages in the browser.")
+  expect_equal(.citation_sentence(c("survival", "ggplot2", "cowplot")),
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R with the survival, ggplot2, and cowplot packages in the browser.")
+})
+
+test_that(".citation_sentence carries no R version and no date", {
+  s <- .citation_sentence(c("survival", "ggplot2"))
+  expect_no_match(s, "R version")
+  expect_no_match(s, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
+  expect_no_match(s, "\n", fixed = TRUE)
+})
+
+test_that(".with_citation appends the sentence as a final paragraph", {
+  out <- .with_citation("HR 1.2.", "survival")
+  expect_equal(out, paste0("HR 1.2.\n\n", .citation_sentence("survival")))
+})
+
+test_that("the script header carries a # Cite: line", {
+  code <- .script_assemble("Test analysis", script_spec(), c("a", "b"),
+                           c("ggplot2"), c("m <- mean(df$a)"))
+  expect_match(code, paste0("# Cite: ", .citation_sentence("ggplot2")), fixed = TRUE)
+  env <- new.env(parent = globalenv())
+  eval(parse(text = code), env)       # the header line is a comment: still runs
+  expect_equal(env$m, 2.5)
+})
