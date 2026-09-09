@@ -5,7 +5,7 @@
     "R": "4.6.0",
     "pwr": "1.3.0"
   },
-  "sources_sha256": "bdf24dadc476529bffff4d7e8e7f1ee67dc1fb54fdd5c46eec5fdb34e1c6726e",
+  "sources_sha256": "28c49857218d93aec0137f99944c49de3a5abdc18599bcf968acaa1e169b97c9",
   "source_paths": [
     "R/sample-size.R",
     "scripts/pages/planner.mjs",
@@ -135,7 +135,8 @@
     "report": "Printable HTML visibly contains result, curve, assumptions, limits and R/pwr versions. PDF save itself not exercised.",
     "phone": "390px viewport, 375px content with no horizontal overflow. Paired design selection and edited-effect calculation completed.",
     "desktop": "Shared Figura toolbar, analysis rail, Configuration and output panes inspected at 1280px; standard paper palette, no independent dark theme.",
-    "scenario_restore": "Saved independent-means scenario restored the design selector from paired measurements to two independent means."
+    "scenario_restore": "Saved independent-means scenario restored the design selector from paired measurements to two independent means.",
+    "shared_stylesheet": "Versioned shared stylesheet URL verified locally; navigation links render as flex blocks with the shared active state."
   },
   "limits": "Numerical/browser parity within these models, not independent validation of their statistical appropriateness. The eight-case Python harness is separate.",
   "previous_layout_sources_sha256": "582f51f0ff5d3eaa397f21a85e1572b1f764cf866cfa1697bc09d839a1cf5759"
