@@ -152,3 +152,83 @@ test_that("fig_linear ends with the citation paragraph", {
   out <- fig_linear(sc_lin(mk_lin_rows()))
   expect_match(out$text, "\n\nAnalyses were performed with Figura \\(.*ggplot2 package in the browser\\.$")
 })
+
+test_that("an aliased covariate is unreportable in the adjusted column and flagged", {
+  rows <- lapply(mk_lin_rows(), function(r) { r$age2 <- r$age * 2; r })
+  out <- fig_linear(sc_lin(rows, covariates = c("arm", "age", "age2")))
+  expect_equal(tsv_adj_cell(out$text, "age2 \\(per 1 unit\\)"), "not reliably estimated")
+  expect_match(tsv_unadj_cell(out$text, "age2 \\(per 1 unit\\)"), "^-?[0-9]")
+  expect_match(out$text, "CAUTION: one or more covariates were dropped from the adjusted model", fixed = TRUE)
+})
+
+test_that("a well-conditioned model raises no aliased, VIF or observations-per-term caution", {
+  out <- fig_linear(sc_lin(mk_lin_rows()))
+  expect_false(grepl("linear combinations", out$text, fixed = TRUE))
+  expect_false(grepl("VIF", out$text, fixed = TRUE))
+  expect_false(grepl("observations per model term", out$text, fixed = TRUE))
+  expect_false(grepl("numerical warning", out$text, fixed = TRUE))
+})
+
+test_that("observations-per-term caution fires under 10 per term", {
+  set.seed(9)
+  n <- 40
+  rows <- lapply(seq_len(n), function(i) list(
+    los = round(rnorm(1, 6, 2), 1), arm = c("A", "B")[i %% 2 + 1],
+    site = c("s1", "s2", "s3", "s4", "s5")[i %% 5 + 1], age = 50 + i))
+  # terms = 1 (arm) + 4 (site) + 1 (age) = 6; 40/6 = 6.7 < 10; residual df = 33.
+  out <- fig_linear(sc_lin(rows, covariates = c("arm", "site", "age")))
+  expect_match(out$text, "CAUTION: about 6\\.7 observations per model term \\(fewer than 10\\)")
+})
+
+test_that("Shapiro-Wilk caution fires on skewed residuals, with the large-n tail", {
+  set.seed(5)
+  rows <- lapply(mk_lin_rows(), function(r) { r$los <- round(r$los + rexp(1, 0.3), 2); r })
+  out <- fig_linear(sc_lin(rows))
+  expect_match(out$text, "Residuals depart from normality \\(Shapiro–Wilk p[<=][0-9.]+\\); with n = 240 the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points\\.")
+})
+
+test_that("Shapiro-Wilk caution uses the small-n tail under 30 observations", {
+  set.seed(6)
+  rows <- lapply(1:25, function(i) list(los = round(rexp(1, 0.2), 2), age = 40 + i))
+  out <- fig_linear(sc_lin(rows, covariates = "age"))
+  expect_match(out$text, "with n = 25 the confidence intervals may be unreliable; consider transforming the outcome", fixed = TRUE)
+})
+
+test_that("Breusch-Pagan caution fires on heteroscedastic residuals", {
+  set.seed(7)
+  rows <- lapply(1:300, function(i) {
+    age <- 30 + i / 4
+    list(los = round(2 + 0.1 * age + rnorm(1, 0, 0.05 * age), 2), age = age)
+  })
+  out <- fig_linear(sc_lin(rows, covariates = "age"))
+  expect_match(out$text, "CAUTION: residual variance is not constant across fitted values \\(Breusch–Pagan p[<=][0-9.]+\\)")
+})
+
+test_that(".linear_bp reproduces n * R^2 of squared residuals on fitted values", {
+  df <- data.frame(y = c(1, 3, 2, 5, 4, 6, 8, 7, 9, 12), x = 1:10)
+  fit <- stats::lm(y ~ x, data = df)
+  aux <- stats::lm(stats::resid(fit)^2 ~ stats::fitted(fit))
+  bp <- .linear_bp(fit)
+  expect_equal(bp$statistic, 10 * summary(aux)$r.squared)
+  expect_equal(bp$p, stats::pchisq(bp$statistic, df = 1, lower.tail = FALSE))
+})
+
+test_that("multicollinearity (VIF) is flagged for near-duplicate continuous covariates", {
+  set.seed(8)
+  rows <- lapply(mk_lin_rows(), function(r) { r$age_dup <- r$age + rnorm(1, 0, 0.3); r })
+  out <- fig_linear(sc_lin(rows, covariates = c("arm", "age", "age_dup")))
+  expect_match(out$text, "CAUTION: multicollinearity among continuous covariates \\(largest VIF = [0-9.]+, above the usual threshold of 5\\)")
+})
+
+test_that("influential observations (Cook's distance) are flagged when present", {
+  rows <- mk_lin_rows()
+  rows[[1]]$los <- 60
+  out <- fig_linear(sc_lin(rows))
+  expect_match(out$text, "[0-9]+ observation\\(s\\) were flagged as influential \\(Cook's distance > 4/n\\)")
+})
+
+test_that(".linear_other_warn speaks up for a captured fit warning and stays quiet otherwise", {
+  expect_equal(.linear_other_warn(list(NULL, NULL)), "")
+  msg <- .linear_other_warn(list(NULL, "something odd"))
+  expect_match(msg, "CAUTION: fitting reported a numerical warning (\"something odd\")", fixed = TRUE)
+})

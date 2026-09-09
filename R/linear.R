@@ -201,6 +201,38 @@
             p$n, ocol, paste(p$covs, collapse = ", "), r2)
 }
 
+# Advisory for any captured lm warning. Returns "" when there is nothing to
+# say. Advisory only — it never gates a fit or changes a number.
+.linear_other_warn <- function(warns) {
+  w <- unlist(warns, use.names = FALSE)
+  w <- w[!is.na(w) & nzchar(w)]
+  if (length(w) == 0) return("")
+  sprintf(paste0(" CAUTION: fitting reported a numerical warning (\"%s\"); the ",
+                 "coefficients above may come from a model that did not fit cleanly. ",
+                 "Check the covariates for extreme values, and seek statistical review."),
+          w[[1]])
+}
+
+# Koenker's studentized Breusch-Pagan, hand-rolled: regress the squared residuals
+# on the fitted values; LM = n * R^2 of that auxiliary fit; chi-square on 1 df.
+# Base stats only (no lmtest).
+.linear_bp <- function(fit) {
+  r2 <- stats::resid(fit)^2
+  fv <- stats::fitted(fit)
+  aux <- stats::lm(r2 ~ fv)
+  lm_stat <- length(r2) * summary(aux)$r.squared
+  list(statistic = lm_stat, p = stats::pchisq(lm_stat, df = 1, lower.tail = FALSE))
+}
+
+# Shapiro-Wilk on the residuals, in its supported size window only. NULL means
+# "not assessed" (n outside [3, 5000]) or the test could not run (identical
+# residuals) — never a stop.
+.linear_shapiro <- function(fit) {
+  r <- stats::resid(fit)
+  if (length(r) < 3 || length(r) > 5000) return(NULL)
+  tryCatch(stats::shapiro.test(r)$p.value, error = function(e) NULL)
+}
+
 fig_linear <- function(spec) {
   p <- .linear_prep(spec)
   fits <- .linear_fits(p$df, p$covs)
@@ -210,6 +242,56 @@ fig_linear <- function(spec) {
     "derives from the outcome."))
   disp_rows <- .linear_rows(p, fits)
   jfit <- fits$joint$fit
+
+  # ---- Model-quality advisories. Every one appends a sentence to the methods
+  # text and never blocks a fit or changes a number.
+  jt <- .linear_terms(jfit)
+  aliased <- any(vapply(jt, function(t) is.na(t$est), logical(1)))
+  aliased_line <- if (aliased)
+    paste0(" CAUTION: one or more covariates were dropped from the adjusted model ",
+           "because they are linear combinations of others (their cells read ",
+           "\"not reliably estimated\"); remove a redundant variable.") else ""
+
+  other_warn_line <- .linear_other_warn(
+    c(list(fits$joint$warn), lapply(fits$uni, function(f) f$warn)))
+
+  opt <- p$n / p$n_terms
+  opt_line <- if (opt < 10)
+    sprintf(paste0(" CAUTION: about %.1f observations per model term (fewer than 10); ",
+                   "the adjusted estimates may be unstable and are best treated as ",
+                   "exploratory."), opt) else ""
+
+  sw_p <- .linear_shapiro(jfit)
+  sw_line <- if (!is.null(sw_p) && sw_p < 0.05)
+    # Conditional guidance, not a verdict: n alone does not validate an interval,
+    # so the large-n tail defers to the variance and influence checks below.
+    sprintf(" Residuals depart from normality (Shapiro–Wilk %s); with n = %d %s.",
+            .linear_pfmt(sw_p), p$n,
+            if (p$n >= 30) paste0("the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points")
+            else "the confidence intervals may be unreliable; consider transforming the outcome or a non-parametric comparison")
+    else ""
+
+  bp <- .linear_bp(jfit)
+  bp_line <- if (is.finite(bp$p) && bp$p < 0.05)
+    sprintf(paste0(" CAUTION: residual variance is not constant across fitted values ",
+                   "(Breusch–Pagan %s); the standard errors may be misleading, and robust ",
+                   "standard errors or an outcome transform are worth considering."),
+            .linear_pfmt(bp$p)) else ""
+
+  num_covs <- names(p$cov_types)[p$cov_types == "numeric"]
+  vif <- .logistic_vif(p$df, num_covs)
+  vif_line <- if (!is.null(vif) && any(vif > 5)) {
+    largest <- if (any(!is.finite(vif))) "effectively infinite" else sprintf("%.1f", max(vif))
+    sprintf(paste0(" CAUTION: multicollinearity among continuous covariates ",
+                   "(largest VIF = %s, above the usual threshold of 5); consider dropping ",
+                   "a redundant variable."), largest)
+  } else ""
+
+  cd <- stats::cooks.distance(jfit)
+  n_infl <- sum(cd > 4 / length(cd), na.rm = TRUE)
+  infl_line <- if (n_infl > 0)
+    sprintf(paste0(" %d observation(s) were flagged as influential (Cook's distance > 4/n); ",
+                   "inspect them for data-entry errors."), n_infl) else ""
 
   table_html <- .linear_table_html(disp_rows)
   svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div></div>",
@@ -221,7 +303,8 @@ fig_linear <- function(spec) {
                collapse = "\n")
   drop_note <- if (p$n_dropped > 0)
     sprintf(" %d row(s) with missing values were excluded.", p$n_dropped) else ""
-  methods <- paste0(.linear_lead(spec, p, jfit), drop_note)
+  methods <- paste0(.linear_lead(spec, p, jfit), aliased_line, other_warn_line, opt_line,
+                    sw_line, bp_line, vif_line, infl_line, drop_note)
   text <- .with_citation(paste0(tsv, "\n\n", methods), "ggplot2")
   list(svg = svg_field, text = text)
 }
