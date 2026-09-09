@@ -275,3 +275,65 @@ test_that("the forest keeps a sane aspect ratio with one term and with many", {
   forest7 <- sub("^.*</table></div>", "", many$svg)
   expect_true(.forest_aspect(forest7) > .forest_aspect(forest1))
 })
+
+test_that("linear code parses as R and mentions lm and confint", {
+  out <- fig_linear(sc_lin(mk_lin_rows()))
+  expect_true(nzchar(out$code))
+  expect_silent(parse(text = out$code))
+  expect_match(out$code, "lm(.y ~", fixed = TRUE)
+  expect_match(out$code, "confint(fit)", fixed = TRUE)
+  expect_match(out$code, "shapiro.test(resid(fit))", fixed = TRUE)
+  expect_match(out$code, "pchisq(bp, df = 1, lower.tail = FALSE)", fixed = TRUE)
+  expect_false(grepl("\nplot(fit", out$code, fixed = TRUE))   # commented out: no device in a sourced run
+})
+
+test_that("demo-shape spec embeds data (no read.csv) in the script", {
+  out <- fig_linear(sc_lin(mk_lin_rows()))
+  expect_match(out$code, "df <- data.frame(los = c(", fixed = TRUE)
+  expect_false(grepl("read.csv", out$code, fixed = TRUE))
+})
+
+test_that("upload-shape spec reads the user's real column names", {
+  spec <- sc_lin(mk_lin_rows())
+  spec$options$source_filename <- "mydata.csv"
+  spec$options$source_roles <- list(outcome = "los", covariates = as.list(c("arm", "age")))
+  out <- fig_linear(spec)
+  expect_match(out$code, 'read.csv("mydata.csv"', fixed = TRUE)
+  expect_match(out$code, 'df[["los"]]', fixed = TRUE)
+})
+
+test_that("the generated script runs and reproduces the app's coefficients", {
+  spec <- sc_lin(mk_lin_rows(), ref_levels = list(arm = "Treated"),
+                 increments = list(age = 10))
+  out <- fig_linear(spec)
+  env <- new.env(parent = globalenv())
+  expect_silent(eval(parse(text = out$code), env))
+  adj <- cbind(stats::coef(env$fit), stats::confint(env$fit))
+  expect_equal(sprintf("%.2f", adj["armControl", ]),
+               sprintf("%.2f", cell_nums(tsv_adj_cell(out$text, "Control"))))
+  expect_equal(sprintf("%.2f", adj["age", ]),
+               sprintf("%.2f", cell_nums(tsv_adj_cell(out$text, "age \\(per 10 units\\)"))))
+  uni <- cbind(stats::coef(env$m_uni), stats::confint(env$m_uni))
+  expect_equal(sprintf("%.2f", uni["age", ]),
+               sprintf("%.2f", cell_nums(tsv_unadj_cell(out$text, "age \\(per 10 units\\)"))))
+  expect_true(is.numeric(env$bp))
+})
+
+test_that("the script runs on 5,001 rows, where the app skips Shapiro-Wilk", {
+  # shapiro.test() errors outside 3..5000 observations; the app guards it, and an
+  # unguarded export would stop where the app carried on.
+  set.seed(12)
+  rows <- lapply(1:5001, function(i) list(los = round(rnorm(1, 6, 2), 2), age = 40 + (i %% 50)))
+  out <- fig_linear(sc_lin(rows, covariates = "age"))
+  expect_false(grepl("Shapiro", out$text, fixed = TRUE))
+  env <- new.env(parent = globalenv())
+  expect_silent(eval(parse(text = out$code), env))
+})
+
+test_that("the script runs for a single non-syntactic covariate", {
+  rows <- lapply(mk_lin_rows(), function(r) list(los = r$los, `study arm` = r$arm))
+  out <- fig_linear(sc_lin(rows, covariates = "study arm"))
+  env <- new.env(parent = globalenv())
+  expect_silent(eval(parse(text = out$code), env))
+  expect_true("fit" %in% ls(env))
+})

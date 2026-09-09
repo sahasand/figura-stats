@@ -303,6 +303,79 @@
          .svg_string(g2, width = 6.5, height = 4.5))
 }
 
+# Downloadable R script: the univariable + joint lm calls, the residual
+# diagnostics the app reported, and an equivalent forest plot. The prep block
+# reproduces .linear_prep's pipeline in the SAME order (numeric coercion ->
+# complete cases -> increment rescale -> relevel), so the script's coefficients
+# match the app's table. For uploads, prep reads the user's REAL column names
+# (source_roles), exactly like .logistic_script.
+.linear_script <- function(spec, p, fits) {
+  opts <- spec$options %||% list()
+  qe <- function(s) gsub('"', '\\\\"', s)
+  covs <- p$covs
+  sr <- if (nzchar(as.character(opts$source_filename %||% ""))) opts$source_roles else NULL
+  outcome_name <- if (!is.null(sr)) sr$outcome else spec$roles$outcome
+  cov_expr <- function(cl) {
+    e <- sprintf('df[["%s"]]', qe(cl))
+    if (p$cov_types[[cl]] == "numeric") sprintf("as.numeric(%s)", e) else e
+  }
+  prep <- c(
+    sprintf('dat <- data.frame(.y = as.numeric(df[["%s"]]),', qe(outcome_name)),
+    paste0("                  ",
+      paste(vapply(covs, function(cl) sprintf('`%s` = %s', qe(cl), cov_expr(cl)),
+                   character(1)), collapse = ",\n                  "), ","),
+    "                  check.names = FALSE, stringsAsFactors = FALSE)",
+    "dat <- dat[complete.cases(dat), ]")
+  incr_lines <- unlist(lapply(covs, function(cl) {
+    if (p$cov_types[[cl]] != "numeric" || p$incr[[cl]] == 1) return(NULL)
+    sprintf('dat[["%s"]] <- dat[["%s"]] / %g   # coefficient per %g units',
+            qe(cl), qe(cl), p$incr[[cl]], p$incr[[cl]])
+  }))
+  relevel_lines <- unlist(lapply(covs, function(cl) {
+    if (p$cov_types[[cl]] != "categorical") return(NULL)
+    sprintf('dat[["%s"]] <- relevel(factor(dat[["%s"]]), ref = "%s")',
+            qe(cl), qe(cl), qe(levels(p$df[[cl]])[1]))
+  }))
+  uni_lines <- unlist(lapply(covs, function(cl) c(
+    sprintf('# Unadjusted coefficient for %s', cl),
+    sprintf('m_uni <- lm(.y ~ `%s`, data = dat)', qe(cl)),
+    "summary(m_uni)",
+    "cbind(beta = coef(m_uni), confint(m_uni))   # t-based 95% CI",
+    "")))
+  joint_rhs <- paste(sprintf("`%s`", covs), collapse = " + ")
+  joint_lines <- c(
+    "# Adjusted (joint) model:",
+    sprintf("fit <- lm(.y ~ %s, data = dat)", joint_rhs),
+    "summary(fit)                                  # coefficients, R-squared, adjusted R-squared",
+    "cbind(beta = coef(fit), confint(fit))         # adjusted coefficients + t-based 95% CI", "",
+    "# Residual diagnostics the app reported:",
+    "if (nrow(dat) >= 3 && nrow(dat) <= 5000) shapiro.test(resid(fit))   # residual normality; the app skips it outside this range, and so must the script",
+    "aux <- lm(resid(fit)^2 ~ fitted(fit))         # Breusch-Pagan (Koenker): n * R^2 of squared residuals on fitted values",
+    "bp <- nrow(dat) * summary(aux)$r.squared",
+    "pchisq(bp, df = 1, lower.tail = FALSE)",
+    "cooks.distance(fit)                           # influential observations (> 4/n flagged in the app)",
+    "# plot(fit, which = 1:2)                      # residuals vs fitted; normal Q-Q", "")
+  fig_lines <- c(
+    "# Equivalent forest plot of the adjusted coefficients:",
+    "library(ggplot2)",
+    "co <- cbind(coef(fit), confint(fit))[-1, , drop = FALSE]",
+    "fp <- data.frame(term = rownames(co), est = co[, 1], lo = co[, 2], hi = co[, 3])",
+    "fp <- fp[is.finite(fp$est), ]",
+    "fp$term <- factor(fp$term, levels = rev(fp$term))",
+    "p_forest <- ggplot(fp, aes(est, term)) +",
+    '  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +',
+    '  geom_errorbar(aes(xmin = lo, xmax = hi), orientation = "y", width = 0.2) +',
+    "  geom_point(size = 2.4) +",
+    '  labs(x = "Adjusted coefficient", y = NULL) +',
+    "  theme_minimal(base_size = 12)",
+    '# print(p_forest)')
+  body <- c(prep, "",
+            incr_lines, if (length(incr_lines)) "" else NULL,
+            relevel_lines, if (length(relevel_lines)) "" else NULL,
+            uni_lines, joint_lines, fig_lines)
+  .script_assemble("Linear regression", spec, c(spec$roles$outcome, covs), c("ggplot2"), body)
+}
+
 fig_linear <- function(spec) {
   p <- .linear_prep(spec)
   fits <- .linear_fits(p$df, p$covs)
@@ -378,5 +451,5 @@ fig_linear <- function(spec) {
   methods <- paste0(.linear_lead(spec, p, jfit), aliased_line, other_warn_line, opt_line,
                     sw_line, bp_line, vif_line, infl_line, drop_note)
   text <- .with_citation(paste0(tsv, "\n\n", methods), "ggplot2")
-  list(svg = svg_field, text = text)
+  list(svg = svg_field, text = text, code = .linear_script(spec, p, fits))
 }
