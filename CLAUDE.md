@@ -19,6 +19,7 @@ JS unit tests (plain Node, no framework) and browser end-to-end tests:
 - JS unit: `npm run test:unit` — **a hand-maintained `node a.mjs && node b.mjs && …` chain in `package.json`, not a glob.** Tests live in `web/lib/`, `web/guided/**/`, `web/sw.test.mjs`, and the validation harness's own `stats-validation/{harness,e2e}/*.test.mjs`; a new `*.test.mjs` that is not appended to that chain silently never runs. Always add the new file to `test:unit` in the same commit that creates it. Every entry runs from the repo root (`build-spec.test.mjs` requires it).
 - E2E (Playwright + webR): `rm -rf web/R && cp -R R web/R && npm run test:e2e`
 - Serve locally: `rm -rf web/R && cp -R R web/R && npm run serve` (→ http://localhost:8321; non-default port so stale service workers from other localhost PWA projects can't hijack the page)
+- Landing pages: `npm run build:pages` regenerates `web/<slug>/index.html`, `sample.csv`, `web/about/index.html`, `web/sitemap.xml`, `web/robots.txt` from `scripts/pages/registry.mjs` and each analysis's exported `UNDERSTAND_SECTIONS`; `scripts/pages/build.test.mjs` fails CI if the committed pages differ from a fresh build. **`npm run build:examples` (needs R)** re-renders `web/<slug>/example.json` through `render_figure()`; run it whenever a demo generator, a `fig_*`, or the citation sentence changes, then `build:pages`, and commit both. The generator lives outside `web/` on purpose (validation digest).
 
 **`web/R/` is a gitignored build copy of `R/`.** The worker fetches R sources at `R/<file>` relative to the `web/` root, so `R/` must be copied into `web/` before serving or running e2e. Use `rm -rf web/R` first — a bare `cp -R R web/R` nests into an existing dir. The deploy workflow does this copy at publish time.
 
@@ -61,13 +62,14 @@ Kaplan–Meier, Table 1 (Summary), Explore plot, Group comparison, Cox regressio
 
 ## Adding a figure or analysis
 
-A new figure `foo` requires **five parallel keys to stay in sync**, or it will pass R tests but 404 / mis-route in the browser:
+A new figure `foo` requires **six parallel keys to stay in sync**, or it will pass R tests but 404 / mis-route in the browser:
 
 1. `R/foo.R` — `fig_foo(spec)` returning `list(svg=, text=)`. Reuse `.svg_string(plot, w, h)` and `%||%` — both live in `R/dispatch.R` — do **not** redefine them.
 2. `R/dispatch.R` — add `foo = fig_foo(spec),` to the `switch`.
 3. `web/worker.js` — add `"foo.R"` to the boot-time R-file fetch loop (every new R file needs this), and add a `foo: [...]` entry to `EXTRA_PACKAGES` **only** if it needs packages beyond the boot set.
 4. `web/guided/foo/guided-foo.js` — a `createGuidedShell({...})` config exporting `renderGuidedFoo`, with the analysis's Understand/demo/analyze-form pieces beside it in `web/guided/foo/`; `web/app.js` — import `renderGuidedFoo` and add `foo: renderGuidedFoo` to the `forms` registry; `web/index.html` — a `<button data-figure="foo">`.
 5. If it uses a new R package, add it to `DESCRIPTION` Imports (CI installs deps via `local::.`) **and** to the worker's `EXTRA_PACKAGES` for that figure.
+6. `scripts/pages/registry.mjs` — one `PAGES` entry (slug, title, description, lede, the module's `UNDERSTAND_SECTIONS`, its demo data and demo spec builder), then `npm run build:examples && npm run build:pages`. `build.test.mjs` asserts the registry's keys equal the rail's `data-figure` set, so a missing entry fails CI. The analysis's `fig_*` must append `.with_citation(text, pkgs)` with the same `pkgs` it passes `.script_assemble`.
 
 **`R/*.R` is network-first in `web/sw.js`; everything else same-origin is stale-while-revalidate.** R sources are the statistical source of truth, so a cached copy may never answer while the network is reachable — the cache exists for them only as an offline fallback. This used to be SWR like the rest of the shell, and it bit twice, both times reading as "the fix didn't ship": a returning user's *first* load after a deploy computed with the previous R sources. The routing decision is the pure `routeFor(req)` and is pinned by `web/sw.test.mjs`, which runs the real `sw.js` in a vm sandbox. Bumping `CACHE` on an `R/` change is now a convenience (a hard reset lever), not the guard standing between a deploy and wrong output — still bump it when changing the precached shell.
 
