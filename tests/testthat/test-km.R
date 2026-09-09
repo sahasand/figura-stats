@@ -246,3 +246,9 @@ test_that("km script ignores source_roles when no source_filename (embedded data
   expect_false(grepl("followup_months", out$code, fixed = TRUE))
   expect_silent(parse(text = out$code))
 })
+
+test_that("fig_km ends with the citation paragraph", {
+  out <- fig_km(make_spec())
+  tail <- paste0("\n\n", .citation_sentence(c("survival", "ggplot2", "cowplot")))
+  expect_true(endsWith(out$text, tail))
+})

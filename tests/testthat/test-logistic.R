@@ -453,3 +453,9 @@ test_that("the forest keeps a readable axis when one term is extremely protectiv
   expect_false(grepl("x (per 15 units)", svg, fixed = TRUE))
   expect_match(svg, "z", fixed = TRUE)
 })
+
+test_that("fig_logistic ends with the citation paragraph", {
+  out <- fig_logistic(sc_logit(mk_logit_rows()))
+  expect_true(endsWith(out$text, paste0("\n\n", .citation_sentence("ggplot2"))))
+  expect_equal(length(strsplit(out$text, "\n\n", fixed = TRUE)[[1]]), 3L)
+})

@@ -331,3 +331,11 @@ test_that("a healthy model says nothing about separation or collinearity", {
   expect_false(grepl("not reliably estimated", out$svg, fixed = TRUE))
   expect_false(grepl("separation or severe collinearity", out$text, fixed = TRUE))
 })
+
+test_that("fig_cox ends with the citation paragraph after the methods sentence", {
+  out <- fig_cox(sc_cox(mk_cox_rows()))
+  tail <- paste0("\n\n", .citation_sentence(c("survival", "ggplot2")))
+  expect_true(endsWith(out$text, tail))
+  # TSV, blank line, methods, blank line, citation: exactly three paragraphs.
+  expect_equal(length(strsplit(out$text, "\n\n", fixed = TRUE)[[1]]), 3L)
+})

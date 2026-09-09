@@ -349,7 +349,8 @@ fig_summary <- function(spec) {
     "and as median (IQR) otherwise;", normality_clause, "Categorical variables are n (%)",
     "with the non-missing count as the denominator. Missing values are reported",
     "per variable. No hypothesis tests are reported for baseline characteristics.")
-  text <- paste0(paste(c(tsv_header, tsv_lines), collapse = "\n"), "\n\n", methods)
+  text <- .with_citation(
+    paste0(paste(c(tsv_header, tsv_lines), collapse = "\n"), "\n\n", methods))
 
   list(svg = svg_field, text = text,
        code = .summary_script(spec, cont_info, categorical, gcol))

@@ -242,3 +242,15 @@ test_that("groupcompare script honors source_filename", {
   out <- fig_groupcompare(spec)
   expect_match(out$code, 'read.csv("trial.csv"', fixed = TRUE)
 })
+
+test_that("fig_groupcompare ends with the citation paragraph for numeric and categorical outcomes", {
+  num <- fig_groupcompare(sc(two_norm))
+  set.seed(21)
+  g <- rep(c("A", "B"), each = 60)
+  yn <- c(sample(c("Yes", "No"), 60, TRUE, c(0.3, 0.7)),
+          sample(c("Yes", "No"), 60, TRUE, c(0.6, 0.4)))
+  cat <- fig_groupcompare(sc2(mkrows2(yn, g)))
+  tail <- paste0("\n\n", .citation_sentence("ggplot2"))
+  expect_true(endsWith(num$text, tail))
+  expect_true(endsWith(cat$text, tail))
+})

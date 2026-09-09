@@ -206,7 +206,7 @@ fig_cox <- function(spec) {
     "adjusted hazard ratios are from the joint model.%s%s%s%s"),
     p$n, p$events, paste(p$covs, collapse = ", "), unrel_line, ph_line, epv_line,
     drop_note)
-  text <- paste0(tsv, "\n\n", methods)
+  text <- .with_citation(paste0(tsv, "\n\n", methods), c("survival", "ggplot2"))
 
   list(svg = svg_field, text = text, code = .cox_script(spec, p, fits))
 }

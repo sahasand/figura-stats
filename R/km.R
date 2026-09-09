@@ -157,7 +157,8 @@ fig_km <- function(spec) {
     txt <- paste0(txt, " ", paste(lm_lines, collapse = "; "), ".")
   }
 
-  list(svg = .svg_string(plot_obj, width = 7, height = 6), text = txt,
+  list(svg = .svg_string(plot_obj, width = 7, height = 6),
+       text = .with_citation(txt, c("survival", "ggplot2", "cowplot")),
        code = .km_script(spec, opts, n_groups, fit_expr, lr_expr, cox_expr))
 }
 

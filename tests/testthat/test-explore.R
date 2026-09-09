@@ -134,3 +134,14 @@ test_that("facet emits facet_wrap(vars(...)) and renders", {
   expect_match(out$text, 'facet_wrap(vars(.data[["sex"]]))', fixed = TRUE)
   expect_match(out$svg, "<svg", fixed = TRUE)
 })
+
+test_that("fig_explore's script carries a # Cite: comment and still parses", {
+  out <- fig_explore(list(
+    data = rows_xy,
+    roles = list(x = "age", y = "bmi", color = "arm"),
+    options = list(geom = "scatter", point_size = 2, alpha = 0.8,
+                   smoother = "lm", se = TRUE)))
+  expect_match(out$text, paste0("# Cite: ", .citation_sentence("ggplot2")), fixed = TRUE)
+  expect_no_match(out$text, "Analyses were performed with Figura \\(Saha.*\\)\\.$")  # never bare prose
+  expect_silent(parse(text = out$text))
+})

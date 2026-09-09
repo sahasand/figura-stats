@@ -484,7 +484,7 @@ fig_logistic <- function(spec) {
             p$n, p$n_event, paste(p$covs, collapse = ", "))
   methods <- paste0(lead, sep_line, other_warn_line, epv_line, auc_line, vif_line,
                     infl_line, drop_note)
-  text <- paste0(tsv, "\n\n", methods)
+  text <- .with_citation(paste0(tsv, "\n\n", methods), "ggplot2")
 
   list(svg = svg_field, text = text, code = .logistic_script(spec, p, fits))
 }

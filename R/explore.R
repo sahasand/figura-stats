@@ -125,7 +125,8 @@ fig_explore <- function(spec) {
   p <- eval(Reduce(function(a, b) call("+", a, b), components), env)
 
   dep <- function(e) paste(deparse(e, width.cutoff = 60L), collapse = "\n    ")
-  code <- c("library(ggplot2)", "",
+  code <- c("library(ggplot2)",
+    sprintf("# Cite: %s", .citation_sentence("ggplot2")), "",
     "# Load your data (edit the path):",
     '# df <- read.csv("your-data.csv", check.names = FALSE)', "")
   if (!is.null(prep_expr)) code <- c(code,

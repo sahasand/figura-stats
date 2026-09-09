@@ -173,7 +173,8 @@
   txt <- sprintf("%s across groups: %s. %s%s: %s, %s.%s%s",
     p$vcol, paste(summ, collapse = "; "), tname, reason, pfmt, eff, posthoc, notes)
   gg <- .gc_numeric_plot(df, p$vcol, spec$options$plot %||% "box")
-  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt,
+  list(svg = .svg_string(gg, width = 6, height = 4.5),
+       text = .with_citation(txt, "ggplot2"),
        code = .gc_script_numeric(spec, test_expr, tname, reason, nonpar, ng))
 }
 
@@ -239,7 +240,8 @@
   notes <- if (n_na > 0) sprintf(" %d row(s) with missing values were excluded.", n_na) else ""
   txt <- sprintf("%s by group (n = %d): %s: %s, %s.%s",
     vcol, n, tname, pfmt, eff, notes)
-  list(svg = .svg_string(gg, width = 6, height = 4.5), text = txt,
+  list(svg = .svg_string(gg, width = 6, height = 4.5),
+       text = .with_citation(txt, "ggplot2"),
        code = .gc_script_categorical(spec, test_expr, tname,
                                      is_2x2 = all(dim(tab) == 2)))
 }
