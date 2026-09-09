@@ -1,9 +1,9 @@
 // web/guided/summary/content.js
 // Teaching copy for the guided Summary (Table 1) analysis. Each section maps to a
 // documented descriptive-statistics reporting error.
-const SECTIONS = [
-  { title: "What this table (a clinical “Table 1”) is for", html: `
-    <p>A baseline characteristics table (“Table 1”) describes who was in the study:
+export const UNDERSTAND_SECTIONS = [
+  { title: "What this table (a clinical Table 1) is for", html: `
+    <p>A baseline characteristics table ("Table 1") describes who was in the study:
     the distribution of each variable, overall and — when relevant — by study group. It is a
     <em>description</em>, not a hypothesis test.</p>` },
   { title: "Mean ± SD or median (IQR)?", html: `
@@ -23,12 +23,12 @@ const SECTIONS = [
     <p>Reporting guidelines (STROBE) ask for the number of observations per variable and the
     count of missing values, with percentages computed on an unambiguous denominator. This tool
     reports a per-variable missing count and computes each percentage on the non-missing count,
-    stated on the variable’s own row — the column header’s N includes rows with missing values,
+    stated on the variable's own row — the column header's N includes rows with missing values,
     so it is never used as the percentage denominator.</p>` },
   { title: "Why there are no p-values here", html: `
     <p>In a randomized trial, any baseline difference between arms is by definition due to chance,
-    so a p-value testing baseline balance answers a question no one is asking — the “Table 1
-    fallacy.” CONSORT explicitly discourages baseline significance tests. This tool does not
+    so a p-value testing baseline balance answers a question no one is asking — the "Table 1
+    fallacy." CONSORT explicitly discourages baseline significance tests. This tool does not
     produce them. Describe the groups; test your outcomes elsewhere.</p>` },
 ];
 
@@ -40,14 +40,14 @@ export const EXAMPLE_INTRO_HTML = `
   the tool pick mean ± SD for the normal variable and median (IQR) for the skewed ones.</p>`;
 
 export const CALLOUTS = {
-  groupBy: "Grouping splits each row into one column per arm. Percentages use the non-missing count within each arm as the denominator. Note there is still no p-value column — see “Why there are no p-values here.”",
+  groupBy: "Grouping splits each row into one column per arm. Percentages use the non-missing count within each arm as the denominator. Note there is still no p-value column — see \"Why there are no p-values here.\"",
   showPlots: "The distribution panels show each continuous variable two ways: a histogram with a smoothed density curve (dashed mean, solid median — when the two lines separate, the variable is skewed and median (IQR) is the honest summary) and a box plot per group with every individual observation jittered on top.",
   showQq: "A Q–Q plot compares your data against a perfect normal distribution, within each study group — exactly how this tool assesses normality. Points hugging the line support mean ± SD; a tail curving away supports median (IQR).",
   forceMean: "Forcing mean ± SD on every variable reproduces the most common Table 1 error. Watch the skewed variables: the mean is pulled toward the long tail and misrepresents a typical patient.",
 };
 
 export function renderUnderstand(panel) {
-  panel.innerHTML = SECTIONS.map((s) => `<section><h3>${s.title}</h3>${s.html}</section>`).join("")
+  panel.innerHTML = UNDERSTAND_SECTIONS.map((s) => `<section><h3>${s.title}</h3>${s.html}</section>`).join("")
     + `<details><summary>Sources and methodology</summary>
          <p>This workflow uses base R statistics (Shapiro–Wilk normality testing, quantiles)
          and ggplot2 inside your browser. Its reporting choices follow established

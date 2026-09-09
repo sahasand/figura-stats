@@ -2,14 +2,13 @@
 import { renderColumnPicker } from "../../lib/columnpicker.js";
 import { DEMO_TABLE } from "./demo.js";
 
-export function renderUnderstand(panel) {
-  panel.innerHTML = `
-    <h3>Is the difference between groups real?</h3>
+export const UNDERSTAND_SECTIONS = [
+  { title: "Is the difference between groups real?", html: `
     <p>A group comparison asks whether an outcome differs across two or more
       groups — a biomarker between treatment arms, a complication rate between
       centres. Pick the grouping column and the outcome; the tool chooses the
-      right test.</p>
-    <h3>The tool picks the test for you</h3>
+      right test.</p>` },
+  { title: "The tool picks the test for you", html: `
     <ul>
       <li><strong>A number</strong> (e.g. CRP) compared across groups uses a
         t-test or ANOVA when it looks normal, and their rank-based cousins
@@ -22,13 +21,18 @@ export function renderUnderstand(panel) {
       <code>1</code> is read as a number, so it is compared with a t-test. To
       get proportions, a chi-square test, and an odds ratio instead, write the
       outcome as words — <code>Yes</code>/<code>No</code>,
-      <code>Responder</code>/<code>Non-responder</code>.</p>
-    <h3>Report more than a p-value</h3>
+      <code>Responder</code>/<code>Non-responder</code>.</p>` },
+  { title: "Report more than a p-value", html: `
     <p>A p-value tells you whether a difference is detectable, not how big it is.
       Every result here also reports an <strong>effect size with a 95% confidence
       interval</strong> — what reviewers increasingly ask for. With three or more
       groups, a significant test is followed by pairwise comparisons so you can
-      see <em>which</em> groups differ.</p>`;
+      see <em>which</em> groups differ.</p>` },
+];
+
+export function renderUnderstand(panel) {
+  panel.innerHTML = UNDERSTAND_SECTIONS.map((s) =>
+    `<section><h3>${s.title}</h3>${s.html}</section>`).join("");
 }
 
 export const EXAMPLE_INTRO_HTML = `

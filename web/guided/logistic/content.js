@@ -1,7 +1,7 @@
 // web/guided/logistic/content.js
 import { LOGISTIC_DEMO } from "./demo-data.js";
 
-const SECTIONS = [
+export const UNDERSTAND_SECTIONS = [
   { title: "Adjust for what else is going on", html: `
     <p>A group comparison tells you whether an outcome happened more often in one
     group. Logistic regression answers the next question: <em>by how much, after
@@ -63,7 +63,7 @@ const SECTIONS = [
 ];
 
 export function renderUnderstand(panel) {
-  panel.innerHTML = SECTIONS.map((s) => `<section><h3>${s.title}</h3>${s.html}</section>`).join("");
+  panel.innerHTML = UNDERSTAND_SECTIONS.map((s) => `<section><h3>${s.title}</h3>${s.html}</section>`).join("");
 }
 
 export const EXAMPLE_INTRO_HTML = `

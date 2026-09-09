@@ -3,7 +3,7 @@
 // .scratch/guided-analysis-km/content/km-learning-journey.md — change it there first.
 import { TEACHING_VISUAL_SVG, TEACHING_VISUAL_ALT } from "./teaching-visual.js";
 
-const SECTIONS = [
+export const UNDERSTAND_SECTIONS = [
   { title: "Estimate survival over time", html: `
     <p>Kaplan–Meier analysis estimates how the probability of remaining alive—or
     remaining free of a defined event—changes over follow-up. It can include participants
@@ -68,7 +68,7 @@ export const CALLOUTS = {
 };
 
 export function renderUnderstand(panel) {
-  panel.innerHTML = SECTIONS.map((s) => `<section><h3>${s.title}</h3>${s.html}</section>`).join("")
+  panel.innerHTML = UNDERSTAND_SECTIONS.map((s) => `<section><h3>${s.title}</h3>${s.html}</section>`).join("")
     + `<figure class="teaching-visual" aria-label="${TEACHING_VISUAL_ALT}">
          ${TEACHING_VISUAL_SVG}
          <figcaption><strong>Illustration—not computed data.</strong></figcaption>
