@@ -279,8 +279,9 @@ const KM_TEXT =
 {
   assert.deepEqual(
     Object.keys(COMPARATORS).sort(),
-    ["gc_summary", "km_summary", "ratio_table", "table1"],
+    ["coef_table", "gc_summary", "km_summary", "ratio_table", "table1"],
     "every display kind a case can declare needs a comparison shape");
+  assert.equal(compareDisplay("coef_table", NATIVE, NATIVE).compared, 13);
   assert.equal(compareDisplay("ratio_table", NATIVE, NATIVE).compared, 13);
   assert.equal(compareDisplay("table1", TABLE1, TABLE1).compared, 20);
   assert.equal(compareDisplay("km_summary", KM_TEXT, KM_TEXT).compared, 2);

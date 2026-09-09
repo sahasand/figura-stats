@@ -225,4 +225,17 @@ assert.deepEqual(Object.keys(summaryNarrowing.data[0]).sort(),
 assert.ok(!("notes" in summaryNarrowing.data[0]),
   "an unticked column must not cross into the spec");
 
+// Linear regression: the one covariate-bearing figure with NO event value (the
+// outcome is continuous), so the builder's positional shape differs from
+// logistic's and the spec must carry no `event_value` at all.
+{
+  const spec = await buildSpecForCase("stats-validation/cases/linear-confounding");
+  assert.equal(spec.figure, "linear");
+  assert.deepEqual(spec.roles, { outcome: "los", covariates: ["arm", "age", "stage"] });
+  assert.ok(!("event_value" in spec.options), "linear carries no event value");
+  assert.deepEqual(spec.options.increments, { age: 10 });
+  assert.equal(spec.options.source_filename, "data.csv");
+  assert.equal(spec.data.length, 320);
+}
+
 console.log("build-spec.test.mjs ok");

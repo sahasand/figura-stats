@@ -831,6 +831,7 @@ ANALYSES = (
     ("groupcompare", "Group comparison"),
     ("cox", "Cox regression"),
     ("logistic", "Logistic regression"),
+    ("linear", "Linear regression"),
 )
 ANALYSIS_NAMES = dict(ANALYSES)
 
@@ -846,6 +847,14 @@ KIND_TIERS = {
         "adjusted, estimate, 95% CI and p-value &mdash; exactly as the app "
         "prints it",
         "the adjusted cells the exported <code>.R</code> produces when it is "
+        "re-run in R, rendered through the app's own display rule",
+    ),
+    "coef_table": (
+        "every cell of the rendered coefficient table &mdash; unadjusted and "
+        "adjusted, estimate, t-based 95% CI and p-value &mdash; exactly as the app "
+        "prints it, plus R&sup2; and the residual advisories",
+        "the adjusted cells, R&sup2;, the Shapiro&ndash;Wilk p and the "
+        "Breusch&ndash;Pagan p the exported <code>.R</code> produces when it is "
         "re-run in R, rendered through the app's own display rule",
     ),
     "km_summary": (
@@ -877,6 +886,11 @@ KIND_NOT_COMPARED = {
         "displayed &mdash; only the joint model is harvested from the exported "
         "script); the prose wrapped around the numbers; the rendered forest "
         "plot, which draws the same adjusted estimates"
+    ),
+    "coef_table": (
+        "the unadjusted column at full precision (compared as displayed only); "
+        "the prose wrapped around the numbers; the rendered forest, residual and "
+        "Q&ndash;Q plots, which draw the same fitted model"
     ),
     "km_summary": (
         "the hazard-ratio clause of the displayed sentence; the rendered "
@@ -910,6 +924,15 @@ TARGET_GLOSS = {
     "test_p": "the test's p-value",
     "test_statistic": "the test statistic",
     "decisions": "the mean-vs-median choice for each variable",
+    "adjusted_beta": "the adjusted regression coefficient",
+    "r_squared": "R-squared",
+    "adj_r_squared": "adjusted R-squared",
+    "shapiro_p": "the residual-normality (Shapiro-Wilk) p-value",
+    "bp_p": "the constant-variance (Breusch-Pagan) p-value",
+    "shapiro_note": "the residual-normality advisory",
+    "bp_note": "the constant-variance advisory",
+    "obs_per_term_note": "the observations-per-model-term advisory",
+    "aliased_note": "the dropped-covariate caution",
     "vif_note": "the collinearity (VIF) advisory",
     "epv_note": "the events-per-variable advisory",
     "cooks_note": "the influential-observations advisory",
@@ -926,6 +949,12 @@ TARGET_GLOSS = {
 DISPLAY_TIER_TARGETS = frozenset({
     "decisions", "vif_note", "epv_note", "cooks_note", "separation_note",
     "ph_note",
+    # fig_linear's three extra advisory sentences. Same rule: the exported .R
+    # computes no observations-per-term ratio and no aliasing check, and the
+    # residual advisories are judged as SENTENCES here (their p-values are
+    # separately exact-tier targets, `shapiro_p` / `bp_p`, because the script
+    # really does compute those two).
+    "shapiro_note", "bp_note", "obs_per_term_note", "aliased_note",
 })
 # Of those, the ones that are advisory SENTENCES (compared for whether they
 # fire). `decisions` is display-tier too but is not an advisory anything — it

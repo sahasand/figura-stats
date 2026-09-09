@@ -30,12 +30,12 @@
 // read #stats — so what it measures is the app as shipped, not a test harness
 // wearing the app's clothes.
 //
-// THE WHOLE ROSTER, ONE BOOT. All eight registered cases run here, in one page
+// THE WHOLE ROSTER, ONE BOOT. All nine registered cases run here, in one page
 // load, because a page reload throws away the Web Worker and therefore the
-// booted webR runtime. Five of the eight are not ratio tables, so the
-// comparison shape is chosen per case from its own `display.kind` — see
-// compare-text.mjs's header for the three shapes and why they all report the
-// same cell vocabulary.
+// booted webR runtime. Five of the nine are neither ratio nor coefficient
+// tables, so the comparison shape is chosen per case from its own
+// `display.kind` — see compare-text.mjs's header for the three shapes and why
+// they all report the same cell vocabulary.
 //
 // COMPARISON, NOT ASSERTION. A cell that differs from native R is RECORDED as
 // a WEBR_DRIFT finding in results/webr-tier.json, not thrown. A first run must
@@ -84,6 +84,7 @@ const WEBR_MODULE = "https://webr.r-wasm.org/latest/webr.mjs";
 const CASES = [
   { id: "logistic-confounding", nav: /logistic regression/i, kind: "logistic" },
   { id: "logistic-dirty", nav: /logistic regression/i, kind: "logistic" },
+  { id: "linear-confounding", nav: /linear regression/i, kind: "linear" },
   { id: "cox-adjusted", nav: /cox regression/i, kind: "cox" },
   { id: "km-twoarm", nav: /kaplan-meier/i, kind: "km" },
   { id: "groupcompare-numeric", nav: /group comparison/i, kind: "groupcompare" },
@@ -93,12 +94,13 @@ const CASES = [
 ];
 
 // What "the render finished" looks like per display kind. `fig_summary`,
-// `fig_cox` and `fig_logistic` put an HTML <table> in the `svg` field; km and
-// group comparison return a real <svg>. Structural, never textual: a readiness
+// `fig_cox`, `fig_logistic` and `fig_linear` put an HTML <table> in the `svg`
+// field; km and group comparison return a real <svg>. Structural, never textual: a readiness
 // signal that waited for a specific STRING would time out on exactly the drift
 // this tier exists to record, instead of recording it.
 const PREVIEW_ELEMENT = {
   ratio_table: "table",
+  coef_table: "table",
   table1: "table",
   km_summary: "svg",
   gc_summary: "svg",
@@ -135,7 +137,7 @@ function nativeText(id) {
 // Every case starts here. Clicking the nav button is not decoration: web/app.js
 // clears #preview and #stats on a [data-figure] click and re-mounts the guided
 // shell (a fresh analyze form, so the file input and the role pickers are the
-// pristine ones), which is what lets eight cases share one page without
+// pristine ones), which is what lets nine cases share one page without
 // inheriting each other's forms.
 async function openAnalyze(page, navPattern) {
   await page.getByRole("button", { name: navPattern }).click();
@@ -168,6 +170,23 @@ async function driveLogistic(page, analyze, def, csv) {
     await analyze.locator(`#logistic-increments input[data-cov="${cov}"]`).fill(String(step));
   }
   await analyze.locator("#logistic-render").click();
+}
+
+async function driveLinear(page, analyze, def, csv) {
+  await expect(page.locator("#linear-config")).toBeHidden();
+  await analyze.locator("#csv").setInputFiles(csv);
+  await expect(page.locator("#linear-config")).toBeVisible();
+  await analyze.locator("#cp_outcome").selectOption(def.roles.outcome);
+  // No event value for a continuous outcome; reference/increment controls are
+  // re-rendered on every column-picker change, so covariates come first.
+  await analyze.locator("#cp_covariates").selectOption(def.roles.covariates);
+  for (const [cov, level] of Object.entries(def.options.ref_levels || {})) {
+    await analyze.locator(`#linear-refs select[data-cov="${cov}"]`).selectOption(level);
+  }
+  for (const [cov, step] of Object.entries(def.options.increments || {})) {
+    await analyze.locator(`#linear-increments input[data-cov="${cov}"]`).fill(String(step));
+  }
+  await analyze.locator("#linear-render").click();
 }
 
 async function driveCox(page, analyze, def, csv) {
@@ -293,6 +312,7 @@ async function driveSummary(page, analyze, def, csv) {
 
 const DRIVERS = {
   logistic: driveLogistic,
+  linear: driveLinear,
   cox: driveCox,
   km: driveKm,
   groupcompare: driveGroupCompare,
@@ -301,7 +321,7 @@ const DRIVERS = {
 
 // Drive one case's form and read back what the app displayed.
 //
-// THE STALE-RESULT PROBLEM, and why the wait below is two-stage. Eight cases
+// THE STALE-RESULT PROBLEM, and why the wait below is two-stage. Nine cases
 // share one page, and five of them share an analysis with another case
 // (logistic x2, group comparison x3). The guided shell's `user` result survives
 // a nav switch by design, so re-entering an analysis REPAINTS the previous
@@ -522,7 +542,7 @@ test("webR renders the same numbers native R does", async ({ page }) => {
 
   // ONE page load for the whole roster: the app is a single-page shell whose
   // nav buttons swap the analysis without a reload, so the webR runtime booted
-  // for the first case is the same one that fits all eight.
+  // for the first case is the same one that fits all nine.
   await page.goto("/");
 
   // Every case this tier claims to cover must actually be registered in

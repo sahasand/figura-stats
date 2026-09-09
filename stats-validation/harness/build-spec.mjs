@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCsv } from "../../web/lib/csv.js";
 import { buildLogisticSpec } from "../../web/guided/logistic/spec.js";
+import { buildLinearSpec } from "../../web/guided/linear/spec.js";
 import { buildCoxSpec } from "../../web/guided/cox/spec.js";
 import { buildKmSpec } from "../../web/guided/km/spec.js";
 import { buildGroupCompareSpec } from "../../web/guided/groupcompare/spec.js";
@@ -15,6 +16,15 @@ const BUILDERS = {
       table,
       { outcome: c.roles.outcome, covariates: c.roles.covariates },
       c.options.event_value,
+      c.options.ref_levels || {},
+      c.options.increments || {},
+      { source_filename: "data.csv" }
+    ),
+  // linear has no event value: buildLinearSpec(table, roles, refLevels, increments, options).
+  linear: (table, c) =>
+    buildLinearSpec(
+      table,
+      { outcome: c.roles.outcome, covariates: c.roles.covariates },
       c.options.ref_levels || {},
       c.options.increments || {},
       { source_filename: "data.csv" }

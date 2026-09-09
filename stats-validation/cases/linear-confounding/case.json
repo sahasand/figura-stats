@@ -1,0 +1,15 @@
+{
+  "id": "linear-confounding",
+  "figure": "linear",
+  "roles": { "outcome": "los", "covariates": ["arm", "age", "stage"] },
+  "options": {
+    "ref_levels": { "arm": "Standard care", "stage": "I" },
+    "increments": { "age": 10 }
+  },
+  "display": { "kind": "coef_table" },
+  "exact_targets": [
+    "adjusted_beta", "adjusted_ci", "adjusted_p", "n", "n_dropped",
+    "r_squared", "adj_r_squared", "shapiro_p", "bp_p",
+    "shapiro_note", "bp_note", "obs_per_term_note", "vif_note", "cooks_note", "aliased_note"
+  ]
+}

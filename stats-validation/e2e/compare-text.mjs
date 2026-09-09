@@ -355,6 +355,12 @@ export function compareProse(native, webr) {
 // unregistered kind is a loud failure, never a silent skip.
 export const COMPARATORS = {
   ratio_table: compareText,
+  // linear's coefficient table is the SAME three-column TSV shape: the header
+  // wording differs ("Adjusted β (95% CI, p)") and the cells read "-1.23
+  // (-2.10 to -0.36, p=0.006)", but `parseRatioTable` is column-agnostic and
+  // compares each cell as an opaque string, so " to " inside a cell needs no
+  // special case.
+  coef_table: compareText,
   table1: compareTable,
   km_summary: compareProse,
   gc_summary: compareProse,

@@ -254,6 +254,22 @@ TARGET_QUANTITIES = {
     # not exist.
     "c_statistic": ("c_statistic",),
     "zph": ("zph_global_p",),
+    # ---- fig_linear. `adjusted_beta` aliases the same `est` slot
+    # `adjusted_hr`/`adjusted_or` do; the four model-fit quantities below are
+    # exact-tier (the exported .R computes and prints all four), while the four
+    # new `*_note` targets are display-tier for the same reason vif/cooks are:
+    # the script counts no Cook's exceedances, computes no VIF and no
+    # observations-per-term ratio, and the aliased caution is a claim about the
+    # displayed table rather than a number at all.
+    "adjusted_beta": ("est",),          # linear's name for the same estimate slot
+    "r_squared": ("r_squared",),
+    "adj_r_squared": ("adj_r_squared",),
+    "shapiro_p": ("shapiro_p",),
+    "bp_p": ("bp_p",),
+    "shapiro_note": ("Shapiro-Wilk note",),
+    "bp_note": ("Breusch-Pagan note",),
+    "obs_per_term_note": ("observations-per-term note",),
+    "aliased_note": ("aliased note",),
     "vif_note": ("VIF note",),
     "epv_note": ("EPV note",),
     "cooks_note": ("Cook's distance note",),
@@ -374,6 +390,43 @@ def parse_ratio_cell(cell: str):
             "p_text": m["p"]}
 
 
+# --- the coefficient scale (fig_linear). Same three helpers, different rules:
+# a linear coefficient is a DIFFERENCE, so it is signed, is never exponentiated,
+# renders with an ASCII " to " between the bounds instead of an en dash, and has
+# no ratio-scale plausibility window to fail.
+def format_coef_cell(est: float, lo: float, hi: float, p: float) -> str:
+    """R/linear.R: `sprintf("%.2f (%.2f to %.2f, %s)", est, lo, hi, pf)`."""
+    return f"{est:.2f} ({lo:.2f} to {hi:.2f}, {format_p(p)})"
+
+
+COEF_CELL_RE = re.compile(
+    r"^(?P<est>-?\d+\.\d{2}) \((?P<lo>-?\d+\.\d{2}) to "
+    r"(?P<hi>-?\d+\.\d{2}), (?P<p>p<0\.001|p=\d+\.\d{3})\)$")
+
+
+def parse_coef_cell(cell: str):
+    """A rendered coefficient cell -> its displayed numbers, or None.
+
+    Strict against the coefficient display rule specifically: a ratio-format
+    cell (en dash, no " to ") does NOT match, so a table rendered through the
+    wrong rule surfaces as a finding instead of being read back as if it were
+    the right one.
+    """
+    m = COEF_CELL_RE.match(cell)
+    if m is None:
+        return None
+    return {"est": float(m["est"]), "lo": float(m["lo"]), "hi": float(m["hi"]),
+            "p_text": m["p"]}
+
+
+def coef_reportable(cell: dict) -> bool:
+    """R/linear.R `.coef_reportable`: finite estimate and bounds, no ratio window."""
+    try:
+        return all(math.isfinite(float(cell[q])) for q in ("est", "lo", "hi"))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def display_agrees(value: float, shown: float) -> bool:
     """Could `value` and the true number behind `shown` be the same number?
 
@@ -406,8 +459,17 @@ def cell_values(cell):
 
 
 def classify_cell(term: str, figura_cell: str, python: dict,
-                  quantity: str = "displayed cell") -> dict:
-    """One displayed cell, Path A vs Path B. Returns a finding (maybe PASS)."""
+                  quantity: str = "displayed cell", *,
+                  fmt=format_ratio_cell, ok=reportable,
+                  parse=parse_ratio_cell) -> dict:
+    """One displayed cell, Path A vs Path B. Returns a finding (maybe PASS).
+
+    `fmt`/`ok`/`parse` are the DISPLAY RULE, and their defaults are the ratio
+    rule this function was written for, so every cox/logistic caller is
+    unchanged. fig_linear passes the coefficient-scale trio instead; the
+    dispositions below (unreportable agreement, p-part never an artifact, half
+    a display step) are the same three-way judgment either way.
+    """
     py = cell_values(python)
     if py is None:
         return finding(
@@ -415,7 +477,7 @@ def classify_cell(term: str, figura_cell: str, python: dict,
             "Path B's cell is missing est/lo/hi/p or carries a non-numeric "
             "value; the displayed cell could not be compared")
     python = py
-    py_ok = reportable(python)
+    py_ok = ok(python)
 
     # Addendum 7 — the unreportable disposition. Agreeing that a cell cannot be
     # estimated is a real agreement, and disagreeing about it is a real defect.
@@ -425,21 +487,20 @@ def classify_cell(term: str, figura_cell: str, python: dict,
                            "both paths agree the cell is unreportable")
         return finding(
             "DEFECT", term, quantity, figura_cell,
-            format_ratio_cell(python["est"], python["lo"], python["hi"], python["p"]),
+            fmt(python["est"], python["lo"], python["hi"], python["p"]),
             "Figura suppressed the cell as unreliable; Python reports a value")
     if not py_ok:
         return finding("DEFECT", term, quantity, figura_cell, UNREPORTABLE,
                        "Python's cell fails the reliability rule; Figura "
                        "displayed a value")
 
-    rendered = format_ratio_cell(python["est"], python["lo"], python["hi"],
-                                 python["p"])
+    rendered = fmt(python["est"], python["lo"], python["hi"], python["p"])
     if rendered == figura_cell:
         return finding("PASS", term, quantity, figura_cell, rendered,
                        "Python's value through Figura's display rule is the "
                        "identical string")
 
-    shown = parse_ratio_cell(figura_cell)
+    shown = parse(figura_cell)
     if shown is None:
         return finding("DEFECT", term, quantity, figura_cell, rendered,
                        "Figura's cell does not match the display rule and "
@@ -730,6 +791,9 @@ DIAGNOSTIC_TARGETS = {
     "logistic": ("c_statistic", "vif_note", "epv_note", "cooks_note",
                  "separation_note"),
     "cox": ("zph", "ph_note", "epv_note", "separation_note"),
+    "linear": ("r_squared", "adj_r_squared", "shapiro_p", "bp_p",
+               "shapiro_note", "bp_note", "obs_per_term_note", "vif_note",
+               "cooks_note", "aliased_note"),
 }
 
 # R/logistic.R: sprintf(" Overall model discrimination: apparent (in-sample)
@@ -772,6 +836,33 @@ ZPH_VIOLATION_TEXT = ("CAUTION: the assumption may not hold (global p<0.05)")
 # is outside the contract. Detected and reported (mirroring GC_OR_CLAUSE), never
 # ignored: a case that provokes it needs the contract extended first.
 OTHER_WARN_CLAUSE = "CAUTION: fitting reported a numerical warning"
+
+# --- fig_linear's own sentences, restated from R/linear.R. The VIF, Cook's and
+# numerical-warning clauses are word-for-word logistic's, so those patterns are
+# reused rather than restated; these five are linear's alone.
+#
+# R/linear.R `.linear_lead`: sprintf("(R² = %.3f, adjusted R² = %.3f)", ...) —
+# the ONE advisory number that is always printed, inside the lead sentence
+# rather than in the advisory block. R² cannot be negative; the adjusted one can.
+R2_RE = re.compile(r"\(R² = (-?\d\.\d{3}), adjusted R² = (-?\d+\.\d{3})\)")
+# R/linear.R: sprintf(" Residuals depart from normality (Shapiro–Wilk %s); ...")
+# — EN DASH in "Shapiro–Wilk", as in R's own string.
+SHAPIRO_RE = re.compile(
+    r"Residuals depart from normality \(Shapiro" + EN_DASH +
+    r"Wilk (p<0\.001|p=\d\.\d{3})\)")
+# R/linear.R: sprintf(" CAUTION: residual variance is not constant across
+# fitted values (Breusch–Pagan %s); ...")
+BP_RE = re.compile(r"\(Breusch" + EN_DASH + r"Pagan (p<0\.001|p=\d\.\d{3})\)")
+# R/linear.R: sprintf(" CAUTION: about %.1f observations per model term
+# (fewer than 10); ...") — linear's analogue of logistic's EPV sentence, and
+# like it, carrying its own number at 1 dp.
+OBS_PER_TERM_RE = re.compile(
+    r"CAUTION: about (\d+\.\d) observations per model term \(fewer than 10\)")
+# R/linear.R's aliased caution is a FIXED string with no number in it, so its
+# whole claim is whether it fires.
+ALIASED_TEXT = "CAUTION: one or more covariates were dropped from the adjusted model"
+# R² and adjusted R² are displayed at 3 dp, one more than the ratio cells.
+R2_HALF_ULP = 0.5 * 10.0 ** -3
 
 # The C-statistic is displayed at 2 dp, like the ratio cells, so it shares
 # DISPLAY_HALF_ULP. The logistic EPV note is at 1 dp and the VIF note at 1 dp;
@@ -1182,8 +1273,157 @@ def _compare_cox_diagnostics(text, exact, python, targets):
     return findings, compared
 
 
+def _compare_linear_diagnostics(text, exact, python, targets):
+    """(findings, comparisons performed) for fig_linear's advisory block plus
+    the R² pair in its lead sentence."""
+    findings = []
+    compared = 0
+    py = python.get("diagnostics")
+    if not isinstance(py, dict):
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "diagnostics", None, py,
+            "Path B produced no `diagnostics` block; none of the advisory "
+            "diagnostics could be compared", source=SRC_PATH_B))
+        return findings, compared
+    ex = exact.get("diagnostics") or {}
+
+    mark = len(findings)
+    if OTHER_WARN_CLAUSE in text:
+        findings.append(finding(
+            "MISSING_QUANTITY", "-", "numerical-warning note", OTHER_WARN_CLAUSE, None,
+            "the displayed text carries the numerical-warning fallback, which embeds "
+            "R's own verbatim warning string; fit_linear's contract does not report "
+            "it, so the contract must be extended before this case can be judged"))
+
+    # -- R² and adjusted R²: always printed, 3 dp, in the lead sentence.
+    m = R2_RE.search(text)
+    for q, grp, py_key in (("r_squared", 1, "r_squared"), ("adj_r_squared", 2, "adj_r_squared")):
+        py_v = python.get(py_key)
+        if m is None or py_v is None:
+            findings.append(finding("MISSING_QUANTITY", "-", q, m.group(0) if m else None, py_v,
+                                    "the R² clause or Path B's value is missing"))
+            continue
+        compared += 1
+        _diag_value(findings, "-", q, float(m.group(grp)), float(py_v),
+                    f"{float(py_v):.3f}", m.group(grp), R2_HALF_ULP)
+
+    # -- Shapiro-Wilk: state, then the p inside it (p is compared as text).
+    m = SHAPIRO_RE.search(text)
+    state = _note(findings, targets, "-", "Shapiro-Wilk note", "Shapiro-Wilk note",
+                  m is not None, py.get("shapiro_triggered"), m.group(0) if m else None,
+                  "Shapiro-Wilk caution")
+    compared += state is not None
+    if state:
+        compared += 1
+        if py.get("shapiro_p") is None or format_p(float(py["shapiro_p"])) != m.group(1):
+            findings.append(finding("DEFECT", "-", "Shapiro-Wilk note", m.group(1),
+                                    None if py.get("shapiro_p") is None else format_p(float(py["shapiro_p"])),
+                                    "the p-value inside the sentence differs; a p disagreement is never a display artifact"))
+
+    # -- Breusch-Pagan: same shape.
+    m = BP_RE.search(text)
+    state = _note(findings, targets, "-", "Breusch-Pagan note", "Breusch-Pagan note",
+                  m is not None, py.get("bp_triggered"), m.group(0) if m else None,
+                  "Breusch-Pagan caution")
+    compared += state is not None
+    if state:
+        compared += 1
+        if py.get("bp_p") is None or format_p(float(py["bp_p"])) != m.group(1):
+            findings.append(finding("DEFECT", "-", "Breusch-Pagan note", m.group(1),
+                                    None if py.get("bp_p") is None else format_p(float(py["bp_p"])),
+                                    "the p-value inside the sentence differs"))
+
+    # -- observations per term: state, then the 1-dp value.
+    m = OBS_PER_TERM_RE.search(text)
+    state = _note(findings, targets, "-", "observations-per-term note",
+                  "observations-per-term note", m is not None,
+                  py.get("obs_per_term_triggered"), m.group(0) if m else None,
+                  "observations-per-term caution")
+    compared += state is not None
+    if state:
+        compared += 1
+        v = py.get("obs_per_term")
+        _diag_value(findings, "-", "observations-per-term note", float(m.group(1)),
+                    None if v is None else float(v),
+                    None if v is None else f"about {float(v):.1f} observations per model term",
+                    f"about {m.group(1)} observations per model term", DIAG_1DP_HALF_ULP)
+
+    # -- VIF and Cook's: identical rules to logistic (same R wording).
+    m = VIF_RE.search(text)
+    py_vif = py.get("vif")
+    state = _note(findings, targets, "-", "VIF note", "VIF note", m is not None,
+                  py.get("vif_triggered"), m.group(0) if m else None, "VIF caution")
+    compared += state is not None
+    if state:
+        if not isinstance(py_vif, dict) or not py_vif:
+            findings.append(finding("MISSING_QUANTITY", "-", "VIF note", m.group(0), py_vif,
+                                    "Path B raises the VIF caution but reports no per-covariate VIF map"))
+        else:
+            compared += 1
+            rendered, shown = format_vif_largest(py_vif), m.group(1)
+            if rendered != shown:
+                if VIF_INFINITE in (rendered, shown):
+                    findings.append(finding("DEFECT", "-", "VIF note", shown, rendered,
+                                            "one path reports an effectively infinite VIF and the other a finite one"))
+                else:
+                    _diag_value(findings, "-", "VIF note", float(shown),
+                                max(float(v) for v in py_vif.values()), rendered, shown, DIAG_1DP_HALF_ULP)
+
+    m = COOKS_RE.search(text)
+    state = _note(findings, targets, "-", "Cook's distance note", "Cook's distance note",
+                  m is not None, py.get("cooks_triggered"), m.group(0) if m else None,
+                  "Cook's-distance caution")
+    compared += state is not None
+    if state:
+        if py.get("cooks_influential") is None:
+            findings.append(finding("MISSING_QUANTITY", "-", "Cook's distance note", m.group(0), None,
+                                    "Path B raises the Cook's-distance caution but reports no count"))
+        else:
+            compared += 1
+            if int(py["cooks_influential"]) != int(m.group(1)):
+                findings.append(finding("DEFECT", "-", "Cook's distance note", int(m.group(1)),
+                                        int(py["cooks_influential"]),
+                                        "the two paths flagged different numbers of influential observations"))
+
+    # -- aliased: a fixed sentence, state is the whole claim.
+    compared += _note(findings, targets, "-", "aliased note", "aliased note",
+                      ALIASED_TEXT in text, py.get("aliased_caution"),
+                      ALIASED_TEXT if ALIASED_TEXT in text else None,
+                      "aliased-covariate caution") is not None
+    _source(findings[mark:], SRC_DISPLAY)
+
+    # -- exact tier: the four diagnostics the exported script computes.
+    mark = len(findings)
+    for q, py_v in (("r_squared", python.get("r_squared")),
+                    ("adj_r_squared", python.get("adj_r_squared")),
+                    ("shapiro_p", py.get("shapiro_p")), ("bp_p", py.get("bp_p"))):
+        a = ex.get(q)
+        if a is None or py_v is None:
+            findings.append(finding("MISSING_QUANTITY", "-", q, a, py_v,
+                                    f"{'Path A' if a is None else 'Path B'} did not report {q} at full precision"))
+            continue
+        compared += 1
+        targets.credit(q)
+        if not close_enough(float(a), float(py_v)):
+            findings.append(finding("DEFECT", "-", q, a, py_v, f"beyond rel {REL_TOL} / abs {ABS_TOL}"))
+    _source(findings[mark:], SRC_EXACT)
+
+    # -- script tier: does the exported .R's R² re-render the lead sentence?
+    mark = len(findings)
+    m = R2_RE.search(text)
+    if m is not None and ex.get("r_squared") is not None:
+        compared += 1
+        if f"{float(ex['r_squared']):.3f}" != m.group(1):
+            findings.append(finding("SCRIPT_DIVERGENCE", "-", "exported script R²", m.group(1),
+                                    f"{float(ex['r_squared']):.3f}",
+                                    "the exported .R's R² does not reproduce the value the screen showed"))
+    _source(findings[mark:], SRC_SCRIPT)
+    return findings, compared
+
+
 DIAGNOSTIC_HANDLERS = {"logistic": _compare_logistic_diagnostics,
-                       "cox": _compare_cox_diagnostics}
+                       "cox": _compare_cox_diagnostics,
+                       "linear": _compare_linear_diagnostics}
 
 
 def compare_diagnostics(case, figura, exact, python, targets):
@@ -1206,8 +1446,17 @@ def compare_diagnostics(case, figura, exact, python, targets):
     return handler(methods_text(figura.get("text")), exact, python, targets)
 
 
-def compare_ratio_table(case, figura, exact, python):
-    """The full ratio_table branch: display, exact, and script tiers."""
+def compare_ratio_table(case, figura, exact, python, *,
+                        counts=("n", "n_event", "n_dropped"),
+                        fmt=format_ratio_cell, ok=reportable,
+                        parse=parse_ratio_cell):
+    """The full ratio_table branch: display, exact, and script tiers.
+
+    The keyword parameters are the two things a coefficient table changes and
+    nothing else: WHICH counts exist (a continuous outcome has no `n_event`)
+    and WHICH display rule renders a cell. Their defaults are the ratio rule,
+    so `compare_ratio_table(case, figura, exact, python)` is byte-for-byte the
+    function cox and logistic have always called. See `compare_coef_table`."""
     findings = []
     compared = 0
     # The advisory-diagnostics block is deferred while Path B has not published
@@ -1239,7 +1488,7 @@ def compare_ratio_table(case, figura, exact, python):
     # SRC_EXACT (see the SRC_* comment above; this is exactly the attribution
     # logistic-dirty depends on).
     mark = len(findings)
-    for key in ("n", "n_event", "n_dropped"):
+    for key in counts:
         a, b = exact.get(key), python.get(key)
         if a is None or b is None:
             missing = "Path A" if a is None else "Path B"
@@ -1299,7 +1548,8 @@ def compare_ratio_table(case, figura, exact, python):
                     f"no Path B {label} term maps to this displayed row"))
                 continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
             f = classify_cell(row["key"], row[cell_key], cell,
-                              quantity=f"displayed {label} cell")
+                              quantity=f"displayed {label} cell",
+                              fmt=fmt, ok=ok, parse=parse)
             if f["code"] == "MISSING_QUANTITY":
                 # The cell was unusable, so no comparison happened: record the
                 # hole and do NOT credit `compared` with a comparison that was
@@ -1371,9 +1621,8 @@ def compare_ratio_table(case, figura, exact, python):
                 "the exported script produced a term with no displayed row"))
             continue  # NOT a silent skip: MISSING_QUANTITY was just recorded
         try:
-            rendered = (format_ratio_cell(cell["est"], cell["lo"], cell["hi"],
-                                          cell["p"])
-                        if reportable(cell) else UNREPORTABLE)
+            rendered = (fmt(cell["est"], cell["lo"], cell["hi"], cell["p"])
+                        if ok(cell) else UNREPORTABLE)
         except (KeyError, TypeError, ValueError):
             findings.append(finding(
                 "MISSING_QUANTITY", dkey, "exported script cell", cell, None,
@@ -1399,6 +1648,16 @@ def compare_ratio_table(case, figura, exact, python):
 
     findings.extend(_source(targets.findings(), SRC_COVERAGE))
     return findings, compared, targets
+
+
+def compare_coef_table(case, figura, exact, python):
+    """Linear regression: the ratio branch on the coefficient scale. No
+    n_event (the outcome is continuous), no exponentiation, "to" in the cell,
+    finiteness as the only reportability rule."""
+    return compare_ratio_table(case, figura, exact, python,
+                               counts=("n", "n_dropped"),
+                               fmt=format_coef_cell, ok=coef_reportable,
+                               parse=parse_coef_cell)
 
 
 # ---------------------------------------------------------------------------
@@ -2962,7 +3221,8 @@ def _table1_script_tier(exact, rows_by_key):
 # Per-kind dispatch. Registering a kind is the ONLY way to compare it: an
 # unregistered kind stops loudly rather than being waved through as "nothing
 # to compare", which would publish a green result backed by zero evidence.
-KIND_HANDLERS = {"ratio_table": compare_ratio_table,
+KIND_HANDLERS = {"coef_table": compare_coef_table,
+                 "ratio_table": compare_ratio_table,
                  "km_summary": compare_km_summary,
                  "gc_summary": compare_gc_summary,
                  "table1": compare_table1}

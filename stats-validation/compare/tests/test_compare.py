@@ -2895,3 +2895,76 @@ def test_strip_citation_keeps_a_paragraph_that_carries_more_than_the_citation():
     for pk in ("", " with the survival package", " with the survival, ggplot2, and cowplot packages"):
         t = "a\n\nb.\n\nAnalyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R" + pk + " in the browser."
         assert strip_citation(t) == "a\n\nb."
+
+
+# ---------------------------------------------------------------------------
+# coef_table: the linear-regression branch. It is the ratio machinery
+# parametrised, so these tests pin the coefficient-scale rules — ASCII " to "
+# instead of an en dash, negative values everywhere, finiteness as the only
+# reportability rule — while every ratio test above pins that the defaults did
+# not move.
+# ---------------------------------------------------------------------------
+
+from compare import (format_coef_cell, parse_coef_cell, coef_reportable,
+                     _compare_linear_diagnostics, _Targets, compare_coef_table)
+
+
+def test_format_coef_cell_uses_to_and_ascii_minus():
+    assert format_coef_cell(-1.234, -2.1, -0.36, 0.0061) == "-1.23 (-2.10 to -0.36, p=0.006)"
+    assert format_coef_cell(0.5, 0.1, 0.9, 0.0001) == "0.50 (0.10 to 0.90, p<0.001)"
+
+
+def test_parse_coef_cell_round_trips_and_rejects_ratio_format():
+    assert parse_coef_cell("-1.23 (-2.10 to -0.36, p=0.006)") == {
+        "est": -1.23, "lo": -2.10, "hi": -0.36, "p_text": "p=0.006"}
+    assert parse_coef_cell("1.02 (0.63–1.66, p=0.932)") is None
+
+
+def test_coef_reportable_is_finiteness_only():
+    assert coef_reportable({"est": -1e9, "lo": -2e9, "hi": -5e8})
+    assert not coef_reportable({"est": float("nan"), "lo": 0.0, "hi": 1.0})
+
+
+def _linear_python(**over):
+    d = {"r_squared": 0.4123, "adj_r_squared": 0.4049,
+         "diagnostics": {"shapiro_p": 0.31, "shapiro_triggered": False,
+                         "bp_p": 0.52, "bp_triggered": False,
+                         "obs_per_term": 64.0, "obs_per_term_triggered": False,
+                         "vif": None, "vif_triggered": False,
+                         "cooks_influential": 17, "cooks_triggered": True,
+                         "aliased_caution": False}}
+    d.update(over)
+    return d
+
+
+LEAD = ("Multivariable linear regression (n = 320) of los adjusted for arm, age, stage. "
+        "Unadjusted coefficients are from single-covariate models; adjusted coefficients "
+        "are from the joint model (R² = 0.412, adjusted R² = 0.405).")
+COOKS = " 17 observation(s) were flagged as influential (Cook's distance > 4/n); inspect them for data-entry errors."
+
+
+def test_linear_diagnostics_agree_when_states_and_values_match():
+    exact = {"diagnostics": {"r_squared": 0.4123, "adj_r_squared": 0.4049,
+                             "shapiro_p": 0.31, "bp_p": 0.52}}
+    targets = _Targets(["r_squared", "adj_r_squared", "shapiro_p", "bp_p", "shapiro_note",
+                        "bp_note", "obs_per_term_note", "vif_note", "cooks_note", "aliased_note"])
+    findings, compared = _compare_linear_diagnostics(LEAD + COOKS, exact, _linear_python(), targets)
+    assert [f for f in findings if f["code"] not in ("PASS",)] == []
+    assert compared >= 10
+    assert targets.met
+
+
+def test_linear_diagnostics_flag_a_shapiro_state_disagreement():
+    text = LEAD + " Residuals depart from normality (Shapiro–Wilk p=0.012); with n = 320 the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points." + COOKS
+    exact = {"diagnostics": {"r_squared": 0.4123, "adj_r_squared": 0.4049, "shapiro_p": 0.012, "bp_p": 0.52}}
+    targets = _Targets(["shapiro_note"])
+    findings, _ = _compare_linear_diagnostics(text, exact, _linear_python(), targets)
+    codes = {f["code"] for f in findings}
+    assert "DIAGNOSTIC_MISMATCH" in codes
+
+
+def test_linear_diagnostics_flag_an_r_squared_value_defect():
+    exact = {"diagnostics": {"r_squared": 0.4123, "adj_r_squared": 0.4049, "shapiro_p": 0.31, "bp_p": 0.52}}
+    targets = _Targets(["r_squared"])
+    findings, _ = _compare_linear_diagnostics(LEAD + COOKS, exact, _linear_python(r_squared=0.39), targets)
+    assert any(f["code"] == "DEFECT" and f["quantity"] == "r_squared" for f in findings)

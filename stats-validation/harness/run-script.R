@@ -31,6 +31,9 @@
 #                  summary(survfit); strip the "group=" prefix off strata names.
 #   groupcompare — the test object's `ht$p.value` / `ht$statistic`, plus counts.
 #   summary      — counts only.
+#   linear       — lm. "Estimate" / "Std. Error" / "Pr(>|t|)", and the interval
+#                  is confint(fit) (t-based) — NOT a 1.96 Wald window, and NOT
+#                  exponentiated. No `n_event` (the outcome is continuous).
 #
 # HARVEST BY COLUMN NAME, NEVER BY POSITION. Column order differs between model
 # classes and a positional harvest returns a plausible wrong number in silence;
@@ -468,9 +471,54 @@ harvest_summary <- function(env, id) {
        n_dropped = n_dropped_vs_csv(df))
 }
 
+# lm: summary()$coefficients columns are "Estimate" / "Std. Error" / "Pr(>|t|)";
+# the CI is confint(fit) (t-based), NOT exp(est ± 1.96 se) — no exponentiation
+# anywhere for a linear model. `dat`/`fit`/`aux`/`bp` are the names
+# .linear_script in R/linear.R assigns.
+#
+# DIAGNOSTICS: the script computes and prints summary(fit) (R^2, adjusted R^2),
+# shapiro.test(resid(fit)) and pchisq(bp, 1, lower.tail = FALSE), so those four
+# have full-precision Path A values and are harvested from the script's own
+# objects with the identical expressions. It prints cooks.distance(fit) but never
+# counts the > 4/n exceedances, and computes no VIF and no observations-per-term
+# ratio, so those are judged on the DISPLAY tier (spec/linear-confounding.md,
+# "Which tier judges which diagnostic"). Nothing is invented here.
+coef_terms <- function(fit) {
+  sm <- summary(fit)$coefficients
+  for (cn in c("Estimate", "Std. Error", "Pr(>|t|)"))
+    if (!(cn %in% colnames(sm)))
+      stop(sprintf("coefficient matrix has no `%s` column", cn))
+  ci <- stats::confint(fit, level = 0.95)
+  keys <- setdiff(names(stats::coef(fit)), "(Intercept)")
+  out <- lapply(keys, function(k) {
+    if (!(k %in% rownames(sm)))   # aliased: NA everywhere, reported as such
+      return(list(est = NA_real_, se = NA_real_, lo = NA_real_, hi = NA_real_, p = NA_real_))
+    list(est = unname(sm[k, "Estimate"]), se = unname(sm[k, "Std. Error"]),
+         lo = unname(ci[k, 1]), hi = unname(ci[k, 2]), p = unname(sm[k, "Pr(>|t|)"]))
+  })
+  names(out) <- keys
+  out
+}
+
+harvest_linear <- function(env, id) {
+  fit <- need(env, "fit", id)
+  dat <- need(env, "dat", id)
+  bp <- need(env, "bp", id)
+  s <- summary(fit)
+  r <- stats::resid(fit)
+  sw <- if (length(r) >= 3 && length(r) <= 5000)
+    tryCatch(stats::shapiro.test(r)$p.value, error = function(e) NA_real_) else NA_real_
+  list(terms = coef_terms(fit),
+       n = nrow(dat),
+       n_dropped = n_dropped_vs_csv(dat),
+       diagnostics = list(r_squared = s$r.squared, adj_r_squared = s$adj.r.squared,
+                          shapiro_p = sw,
+                          bp_p = stats::pchisq(bp, df = 1, lower.tail = FALSE)))
+}
+
 HARVESTERS <- list(logistic = harvest_logistic, cox = harvest_cox,
                    km = harvest_km, groupcompare = harvest_groupcompare,
-                   summary = harvest_summary)
+                   summary = harvest_summary, linear = harvest_linear)
 
 # ---- harvest orchestration -------------------------------------------------
 

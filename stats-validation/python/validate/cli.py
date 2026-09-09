@@ -41,6 +41,12 @@ RESULTS = Path(__file__).resolve().parents[2] / "results"
 # `roles["outcome"]` column, positional order `(df, outcome, event_value,
 # covariates, ref_levels, increments)`). So cox is dispatched as an EXPLICIT
 # branch in run() below rather than through the generic FITTERS lookup.
+#
+# `linear` is an explicit branch for the mirror-image reason: its outcome is
+# CONTINUOUS, so there is no event value at all and `fit_linear`'s positional
+# order is `(df, outcome, covariates, ref_levels, increments)` — one argument
+# short of fit_logistic's. Its `terms`/`unadjusted` shape is the same, so it
+# still falls through to the display_* re-keying below.
 FITTERS = {"logistic": fit_logistic}
 
 
@@ -125,7 +131,24 @@ def run(case_dir: str) -> dict:
 
     covariates = list(case["roles"]["covariates"])
 
-    if figure == "cox":
+    if figure == "linear":
+        # No event value: the outcome is continuous. Falls through to the
+        # display_terms/display_unadjusted re-keying below like logistic/cox.
+        #
+        # Imported HERE rather than at module scope: validate/linear.py is the
+        # clean-room module (its own task), and a top-level import of a module
+        # that does not exist yet would stop every OTHER case's Path B run at
+        # import time instead of only this one.
+        from .linear import fit_linear
+
+        out = fit_linear(
+            df,
+            case["roles"]["outcome"],
+            covariates,
+            options.get("ref_levels", {}),
+            options.get("increments", {}),
+        )
+    elif figure == "cox":
         out = fit_cox(
             df,
             case["roles"]["time"],
@@ -140,7 +163,7 @@ def run(case_dir: str) -> dict:
         if fitter is None:
             raise SystemExit(
                 f"no Path B implementation for figure {figure!r} "
-                f"(implemented: {sorted(FITTERS)} + cox)")
+                f"(implemented: {sorted(FITTERS)} + cox, linear)")
         out = fitter(
             df,
             case["roles"]["outcome"],
