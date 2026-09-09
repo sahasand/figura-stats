@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cox proportional-hazards regression — Figura</title>
+<meta name="description" content="Univariable and multivariable Cox regression from a CSV: a Table 3 of unadjusted and adjusted hazard ratios with 95% CIs, a forest plot, and a proportional-hazards check.">
+<link rel="canonical" href="https://figurastats.org/cox-regression/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Figura">
+<meta property="og:url" content="https://figurastats.org/cox-regression/">
+<meta property="og:title" content="Cox proportional-hazards regression — Figura">
+<meta property="og:description" content="Univariable and multivariable Cox regression from a CSV: a Table 3 of unadjusted and adjusted hazard ratios with 95% CIs, a forest plot, and a proportional-hazards check.">
+<meta property="og:image" content="https://figurastats.org/preview.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Figura: real R, running in your browser — beside a journal-style Table 1 of baseline characteristics.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../pages.css">
+</head>
+<body>
+<div class="doc">
+<header class="toolbar"><a class="wordmark" href="../">Figura</a></header>
+<nav class="page-nav" aria-label="Site"><a href="../">App</a><a href="../table-1/">Table 1 baseline characteristics</a><a href="../kaplan-meier/">Kaplan–Meier survival curves</a><a href="../group-comparison/">Group comparison</a><a href="../cox-regression/" aria-current="page">Cox proportional-hazards regression</a><a href="../logistic-regression/">Logistic regression odds ratios</a><a href="../explore-plot/">Explore plot with ggplot2</a><a href="../about/">About</a><a href="../validation.html">Validation</a></nav>
+<article class="card">
+<p class="eyebrow">Guided analysis</p>
+<h1>Cox proportional-hazards regression</h1>
+<p class="lede">Map time, status and covariates, and get the Table 3 a manuscript needs: unadjusted hazard ratios beside adjusted ones from the joint model, a forest plot of the adjusted estimates, and a proportional-hazards check reported without blocking the fit.</p>
+<div class="cta-row">
+<a class="cta" href="../#cox/example">See the worked example</a>
+<a class="cta secondary" href="../#cox/analyze">Analyze your data</a>
+</div>
+<section><h2>Adjust for what else is going on</h2>
+    <p>Kaplan–Meier shows whether survival curves differ. Cox regression answers
+    the next question: <em>by how much, after accounting for the other things that
+    differ between patients?</em> Each covariate gets a hazard ratio — the relative
+    event rate per unit (for a number) or versus a reference level (for a category).</p>
+    <p>Unadjusted hazard ratios come from one model per covariate. Adjusted hazard
+    ratios come from a single joint model, so each is the effect of that variable
+    holding the others fixed — the difference between the two columns is the
+    confounding the adjustment removed.</p></section>
+<section><h2>Is Cox appropriate?</h2>
+    <p>Use it when each row is one independent participant with a follow-up time, an
+    event or censoring status, and the baseline covariates you want to adjust for.
+    The model assumes <strong>proportional hazards</strong>: the hazard ratio for
+    each covariate is roughly constant over follow-up.</p>
+    <p>This tool checks that assumption with scaled Schoenfeld residuals and warns
+    when it looks violated, but it does not fit stratified, time-varying, or
+    competing-risks models. If curves cross or the check flags a covariate, seek
+    statistical review before interpreting the hazard ratios.</p></section>
+<section><h2>How to read the result</h2>
+    <ul>
+      <li><strong>HR &lt; 1</strong>: lower event rate (protective). <strong>HR &gt; 1</strong>: higher.</li>
+      <li>A numeric covariate's HR is <strong>per one unit</strong> — scale the variable first if one unit is too small to be meaningful.</li>
+      <li>A category's HR is <strong>versus its reference level</strong>, shown as "1 (reference)".</li>
+      <li>A 95% CI that crosses 1 means the effect is not statistically resolved.</li>
+    </ul>
+    <p class="callout">With fewer than about 10 events per model term, adjusted
+    estimates become unstable — the tool warns you when that happens.</p></section>
+
+<section class="example">
+<h2>Example output</h2>
+<figure><div class="summary-output"><div class="table-scroll"><table class="table1"><thead><tr><th>Characteristic</th><th>Unadjusted HR (95% CI)</th><th>Adjusted HR (95% CI)</th></tr></thead><tbody><tr><td>arm (reference: Standard care)</td><td></td><td></td></tr><tr><td><span class="lvl">New treatment</span></td><td>0.78 (0.57–1.06, p=0.115)</td><td>0.58 (0.41–0.80, p=0.001)</td></tr><tr><td>age (per 1 unit)</td><td>1.05 (1.03–1.06, p&lt;0.001)</td><td>1.06 (1.04–1.08, p&lt;0.001)</td></tr><tr><td>stage (reference: I)</td><td></td><td></td></tr><tr><td><span class="lvl">II</span></td><td>1.58 (1.08–2.32, p=0.018)</td><td>1.46 (1.00–2.14, p=0.052)</td></tr><tr><td><span class="lvl">III</span></td><td>2.08 (1.41–3.06, p&lt;0.001)</td><td>2.44 (1.65–3.60, p&lt;0.001)</td></tr></tbody></table></div><?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='468.00pt' height='266.40pt' viewBox='0 0 468.00 266.40'>
+<g class='svglite'>
+<defs>
+  <style type='text/css'><![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+    .svglite g.glyphgroup path {
+      fill: inherit;
+      stroke: none;
+    }
+  ]]></style>
+</defs>
+<rect width='100%' height='100%' style='stroke: none; fill: #FFFFFF;'/>
+<defs>
+  <clipPath id='cpMC4wMHw0NjguMDB8MC4wMHwyNjYuNDA='>
+    <rect x='0.00' y='0.00' width='468.00' height='266.40' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHw0NjguMDB8MC4wMHwyNjYuNDA=)'>
+<rect x='0.00' y='0.00' width='468.00' height='266.40' style='stroke-width: 1.16; stroke: none; fill: #FFFFFF;' />
+</g>
+<defs>
+  <clipPath id='cpOTUuNTR8NDYyLjAyfDUuOTh8MjMyLjA1'>
+    <rect x='95.54' y='5.98' width='366.48' height='226.07' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpOTUuNTR8NDYyLjAyfDUuOTh8MjMyLjA1)'>
+<polyline points='195.17,232.05 195.17,5.98 ' style='stroke-width: 0.58; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='332.87,232.05 332.87,5.98 ' style='stroke-width: 0.58; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,199.76 462.02,199.76 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,145.93 462.02,145.93 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,92.10 462.02,92.10 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,38.27 462.02,38.27 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='141.90,232.05 141.90,5.98 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='248.44,232.05 248.44,5.98 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='417.31,232.05 417.31,5.98 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<line x1='248.44' y1='232.05' x2='248.44' y2='5.98' style='stroke-width: 1.07; stroke: #7F7F7F; stroke-dasharray: 5.69,5.69; stroke-linecap: butt;' />
+<polyline points='214.83,43.66 214.83,32.89 ' style='stroke-width: 1.28; stroke: #CCBB44; stroke-linecap: butt;' />
+<polyline points='214.83,38.27 112.20,38.27 ' style='stroke-width: 1.28; stroke: #CCBB44; stroke-linecap: butt;' />
+<polyline points='112.20,43.66 112.20,32.89 ' style='stroke-width: 1.28; stroke: #CCBB44; stroke-linecap: butt;' />
+<polyline points='259.74,97.48 259.74,86.72 ' style='stroke-width: 1.28; stroke: #228833; stroke-linecap: butt;' />
+<polyline points='259.74,92.10 254.54,92.10 ' style='stroke-width: 1.28; stroke: #228833; stroke-linecap: butt;' />
+<polyline points='254.54,97.48 254.54,86.72 ' style='stroke-width: 1.28; stroke: #228833; stroke-linecap: butt;' />
+<polyline points='365.72,151.31 365.72,140.55 ' style='stroke-width: 1.28; stroke: #CC6677; stroke-linecap: butt;' />
+<polyline points='365.72,145.93 247.86,145.93 ' style='stroke-width: 1.28; stroke: #CC6677; stroke-linecap: butt;' />
+<polyline points='247.86,151.31 247.86,140.55 ' style='stroke-width: 1.28; stroke: #CC6677; stroke-linecap: butt;' />
+<polyline points='445.36,205.14 445.36,194.37 ' style='stroke-width: 1.28; stroke: #4477AA; stroke-linecap: butt;' />
+<polyline points='445.36,199.76 325.52,199.76 ' style='stroke-width: 1.28; stroke: #4477AA; stroke-linecap: butt;' />
+<polyline points='325.52,205.14 325.52,194.37 ' style='stroke-width: 1.28; stroke: #4477AA; stroke-linecap: butt;' />
+<circle cx='163.51' cy='38.27' r='2.95' style='stroke-width: 0.77; stroke: #CCBB44; fill: #CCBB44;' />
+<circle cx='257.14' cy='92.10' r='2.95' style='stroke-width: 0.77; stroke: #228833; fill: #228833;' />
+<circle cx='306.79' cy='145.93' r='2.95' style='stroke-width: 0.77; stroke: #CC6677; fill: #CC6677;' />
+<circle cx='385.44' cy='199.76' r='2.95' style='stroke-width: 0.77; stroke: #4477AA; fill: #4477AA;' />
+</g>
+<g clip-path='url(#cpMC4wMHw0NjguMDB8MC4wMHwyNjYuNDA=)'>
+<text x='90.17' y='203.19' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='36.81px' lengthAdjust='spacingAndGlyphs'>stage: III</text>
+<text x='90.17' y='149.36' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='34.14px' lengthAdjust='spacingAndGlyphs'>stage: II</text>
+<text x='90.17' y='95.54' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='65.00px' lengthAdjust='spacingAndGlyphs'>age (per 1 unit)</text>
+<text x='90.17' y='41.71' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='84.19px' lengthAdjust='spacingAndGlyphs'>arm: New treatment</text>
+<text x='141.90' y='244.30' text-anchor='middle' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='13.33px' lengthAdjust='spacingAndGlyphs'>0.5</text>
+<text x='248.44' y='244.30' text-anchor='middle' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='13.33px' lengthAdjust='spacingAndGlyphs'>1.0</text>
+<text x='417.31' y='244.30' text-anchor='middle' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='13.33px' lengthAdjust='spacingAndGlyphs'>3.0</text>
+<text x='278.78' y='257.90' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";' textLength='172.06px' lengthAdjust='spacingAndGlyphs'>Adjusted hazard ratio (log scale)</text>
+</g>
+</g>
+</svg></div><figcaption>Synthetic demonstration data: the table Figura renders for the example dataset.</figcaption></figure>
+<p>The text Figura produced for this example, ready to paste into a methods section:</p>
+<pre class="example-text">Characteristic	Unadjusted HR (95% CI, p)	Adjusted HR (95% CI, p)
+arm (reference: Standard care)		
+New treatment	0.78 (0.57–1.06, p=0.115)	0.58 (0.41–0.80, p=0.001)
+age (per 1 unit)	1.05 (1.03–1.06, p&lt;0.001)	1.06 (1.04–1.08, p&lt;0.001)
+stage (reference: I)		
+II	1.58 (1.08–2.32, p=0.018)	1.46 (1.00–2.14, p=0.052)
+III	2.08 (1.41–3.06, p&lt;0.001)	2.44 (1.65–3.60, p&lt;0.001)
+
+Multivariable Cox proportional-hazards regression (n = 220, 157 events) adjusted for arm, age, stage. Unadjusted hazard ratios are from single-covariate models; adjusted hazard ratios are from the joint model. The proportional-hazards assumption was assessed with scaled Schoenfeld residuals (global p=0.509).
+
+Analyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R with the survival and ggplot2 packages in the browser.</pre>
+</section>
+<section>
+<h2>Sample data</h2>
+<p><a href="sample.csv" download>Download sample.csv</a> — 220 rows, columns <code>arm</code>, <code>age</code>, <code>stage</code>, <code>followup_months</code>, <code>status</code>. A frozen synthetic dataset generated by a script in the repository's <code>data-raw/</code> folder; nothing in it is a real patient.</p>
+</section>
+<section class="cite" id="cite">
+<h2>How to cite</h2>
+<p>Journals ask for a software statement. The methods text Figura generates already ends with one; this is the same attribution in reference form.</p>
+<pre>Saha S. Figura: clinical manuscript figures and statistics in the browser. 2026. https://figurastats.org</pre>
+<pre>@misc{figura2026,
+  author = {Saha, Sandeep},
+  title  = {Figura: clinical manuscript figures and statistics in the browser},
+  year   = {2026},
+  url    = {https://figurastats.org},
+  note   = {Accessed &lt;date&gt;}
+}</pre>
+</section>
+</article>
+<footer class="doc-foot">
+<p>Figura runs R in your browser via webR. There is no backend: your CSV and your results never leave the tab. <a href="../about/">What the page does connect to, and why</a>.</p>
+<p><a href="../validation.html">How the numbers are checked</a> · Feedback: feedback@figurastats.org</p>
+</footer>
+</div>
+</body>
+</html>

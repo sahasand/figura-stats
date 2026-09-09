@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logistic regression odds ratios — Figura</title>
+<meta name="description" content="Univariable and multivariable logistic regression from a CSV: unadjusted and adjusted odds ratios with 95% CIs, a forest plot, per-increment scaling for continuous covariates, and separation, EPV, C-statistic and VIF checks.">
+<link rel="canonical" href="https://figurastats.org/logistic-regression/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Figura">
+<meta property="og:url" content="https://figurastats.org/logistic-regression/">
+<meta property="og:title" content="Logistic regression odds ratios — Figura">
+<meta property="og:description" content="Univariable and multivariable logistic regression from a CSV: unadjusted and adjusted odds ratios with 95% CIs, a forest plot, per-increment scaling for continuous covariates, and separation, EPV, C-statistic and VIF checks.">
+<meta property="og:image" content="https://figurastats.org/preview.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Figura: real R, running in your browser — beside a journal-style Table 1 of baseline characteristics.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../pages.css">
+</head>
+<body>
+<div class="doc">
+<header class="toolbar"><a class="wordmark" href="../">Figura</a></header>
+<nav class="page-nav" aria-label="Site"><a href="../">App</a><a href="../table-1/">Table 1 baseline characteristics</a><a href="../kaplan-meier/">Kaplan–Meier survival curves</a><a href="../group-comparison/">Group comparison</a><a href="../cox-regression/">Cox proportional-hazards regression</a><a href="../logistic-regression/" aria-current="page">Logistic regression odds ratios</a><a href="../explore-plot/">Explore plot with ggplot2</a><a href="../about/">About</a><a href="../validation.html">Validation</a></nav>
+<article class="card">
+<p class="eyebrow">Guided analysis</p>
+<h1>Logistic regression odds ratios</h1>
+<p class="lede">A binary outcome, a set of covariates, and a Table 3 of odds ratios: unadjusted and adjusted side by side, a forest plot on a log axis, and continuous covariates reported per a clinically meaningful step such as age per 10 years.</p>
+<div class="cta-row">
+<a class="cta" href="../#logistic/example">See the worked example</a>
+<a class="cta secondary" href="../#logistic/analyze">Analyze your data</a>
+</div>
+<section><h2>Adjust for what else is going on</h2>
+    <p>A group comparison tells you whether an outcome happened more often in one
+    group. Logistic regression answers the next question: <em>by how much, after
+    accounting for the other things that differ between patients?</em> Each covariate
+    gets an odds ratio — the relative odds of the outcome per increment (for a number)
+    or versus a reference level (for a category).</p>
+    <p>Unadjusted odds ratios come from one model per covariate. Adjusted odds ratios
+    come from a single joint model, so each one is the effect of that variable with the
+    others held fixed. Most of the gap between the two columns here is the confounding
+    that the adjustment removed — when a treatment is given more often to sicker
+    patients, the unadjusted column carries their extra risk and the adjusted column
+    does not.</p></section>
+<section><h2>What an odds ratio is, and is not</h2>
+    <p>Odds are events divided by non-events: 30 complications in 100 patients is a
+    risk of 30% but odds of 30/70 = 0.43. An odds ratio compares those odds between
+    two groups.</p>
+    <p>An odds ratio is <strong>not</strong> a risk ratio, and it is always the further
+    of the two from 1. When the outcome is uncommon (under roughly 10%) the two are
+    close enough that people read an OR as a relative risk; when the outcome is common
+    — as in the example below, where 28% of patients had a complication — an OR of 0.50
+    corresponds to about a 42% reduction in <em>risk</em>, not the 50% that "half"
+    suggests. Report it as an odds ratio and say so.</p>
+    <p>One more quirk: an adjusted odds ratio differs from the unadjusted one even when
+    there is nothing to correct. Add a covariate that predicts the outcome and the odds
+    ratio for everything else moves further from 1, whether or not that covariate has
+    any relation to the exposure — statisticians call this
+    <strong>non-collapsibility</strong>, and it is a property of the odds ratio itself,
+    not evidence that bias was removed. So read a gap between the two columns as
+    confounding only when the covariate you added is plausibly related to both the
+    exposure and the outcome.</p></section>
+<section><h2>Is logistic regression appropriate?</h2>
+    <p>Use it when each row is one independent participant, the outcome is
+    <strong>binary</strong> (event / no event), and you have the baseline covariates
+    you want to adjust for. The tool needs at least 10 patients in the smaller outcome
+    group before it will fit a model, and it drops rows with a missing value in any
+    column you use.</p>
+    <p>It checks for <strong>separation</strong> (a covariate that predicts the outcome
+    almost perfectly, which makes odds ratios meaningless), for
+    <strong>multicollinearity</strong> among numeric covariates (two variables carrying
+    the same information), and it reports the model's overall discrimination as a
+    C-statistic — measured on the very patients the model was fitted to, so it flatters
+    the model and would be lower in new patients. Each of
+    those is advisory — none of them blocks a result or changes a number. The tool does
+    not fit penalized (Firth), matched, or mixed models; if separation is flagged, seek
+    statistical review rather than reporting the affected odds ratios.</p></section>
+<section><h2>How to read the result</h2>
+    <ul>
+      <li><strong>OR &lt; 1</strong>: lower odds of the outcome. <strong>OR &gt; 1</strong>: higher.</li>
+      <li>A numeric covariate's OR is <strong>per increment</strong> — set the increment
+      (for example per 10 years of age) so that one step is clinically meaningful.</li>
+      <li>A category's OR is <strong>versus its reference level</strong>, shown as "1 (reference)".</li>
+      <li>A 95% CI that crosses 1 means the effect is not statistically resolved. It does
+      not mean there is no effect.</li>
+      <li>Adjusted odds ratios are adjusted only for the covariates you put in the model.
+      Anything you did not measure could still be confounding the result.</li>
+    </ul>
+    <p class="callout">With fewer than about 10 events per model term, adjusted
+    estimates become unstable — the tool warns you when that happens.</p></section>
+
+<section class="example">
+<h2>Example output</h2>
+<figure><div class="summary-output"><div class="table-scroll"><table class="table1"><thead><tr><th>Characteristic</th><th>Unadjusted OR (95% CI)</th><th>Adjusted OR (95% CI)</th></tr></thead><tbody><tr><td>arm (reference: Standard care)</td><td></td><td></td></tr><tr><td><span class="lvl">New treatment</span></td><td>1.02 (0.63–1.66, p=0.932)</td><td>0.50 (0.28–0.91, p=0.023)</td></tr><tr><td>age (per 10 units)</td><td>1.56 (1.19–2.05, p=0.001)</td><td>1.69 (1.26–2.26, p&lt;0.001)</td></tr><tr><td>stage (reference: I)</td><td></td><td></td></tr><tr><td><span class="lvl">II</span></td><td>1.85 (1.01–3.38, p=0.045)</td><td>2.01 (1.07–3.78, p=0.030)</td></tr><tr><td><span class="lvl">III</span></td><td>2.61 (1.43–4.77, p=0.002)</td><td>3.43 (1.73–6.79, p&lt;0.001)</td></tr></tbody></table></div><?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='468.00pt' height='266.40pt' viewBox='0 0 468.00 266.40'>
+<g class='svglite'>
+<defs>
+  <style type='text/css'><![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+    .svglite g.glyphgroup path {
+      fill: inherit;
+      stroke: none;
+    }
+  ]]></style>
+</defs>
+<rect width='100%' height='100%' style='stroke: none; fill: #FFFFFF;'/>
+<defs>
+  <clipPath id='cpMC4wMHw0NjguMDB8MC4wMHwyNjYuNDA='>
+    <rect x='0.00' y='0.00' width='468.00' height='266.40' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHw0NjguMDB8MC4wMHwyNjYuNDA=)'>
+<rect x='0.00' y='0.00' width='468.00' height='266.40' style='stroke-width: 1.16; stroke: none; fill: #FFFFFF;' />
+</g>
+<defs>
+  <clipPath id='cpOTUuNTR8NDYyLjAyfDUuOTh8MjMyLjA1'>
+    <rect x='95.54' y='5.98' width='366.48' height='226.07' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpOTUuNTR8NDYyLjAyfDUuOTh8MjMyLjA1)'>
+<polyline points='182.36,232.05 182.36,5.98 ' style='stroke-width: 0.58; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='302.64,232.05 302.64,5.98 ' style='stroke-width: 0.58; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='422.91,232.05 422.91,5.98 ' style='stroke-width: 0.58; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,199.76 462.02,199.76 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,145.93 462.02,145.93 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,92.10 462.02,92.10 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='95.54,38.27 462.02,38.27 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='119.47,232.05 119.47,5.98 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='245.25,232.05 245.25,5.98 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='360.02,232.05 360.02,5.98 ' style='stroke-width: 1.16; stroke: #EBEBEB; stroke-linecap: butt;' />
+<line x1='245.25' y1='232.05' x2='245.25' y2='5.98' style='stroke-width: 1.07; stroke: #7F7F7F; stroke-dasharray: 5.69,5.69; stroke-linecap: butt;' />
+<polyline points='235.42,43.66 235.42,32.89 ' style='stroke-width: 1.28; stroke: #CCBB44; stroke-linecap: butt;' />
+<polyline points='235.42,38.27 112.20,38.27 ' style='stroke-width: 1.28; stroke: #CCBB44; stroke-linecap: butt;' />
+<polyline points='112.20,43.66 112.20,32.89 ' style='stroke-width: 1.28; stroke: #CCBB44; stroke-linecap: butt;' />
+<polyline points='330.38,97.48 330.38,86.72 ' style='stroke-width: 1.28; stroke: #228833; stroke-linecap: butt;' />
+<polyline points='330.38,92.10 269.56,92.10 ' style='stroke-width: 1.28; stroke: #228833; stroke-linecap: butt;' />
+<polyline points='269.56,97.48 269.56,86.72 ' style='stroke-width: 1.28; stroke: #228833; stroke-linecap: butt;' />
+<polyline points='384.06,151.31 384.06,140.55 ' style='stroke-width: 1.28; stroke: #CC6677; stroke-linecap: butt;' />
+<polyline points='384.06,145.93 252.25,145.93 ' style='stroke-width: 1.28; stroke: #CC6677; stroke-linecap: butt;' />
+<polyline points='252.25,151.31 252.25,140.55 ' style='stroke-width: 1.28; stroke: #CC6677; stroke-linecap: butt;' />
+<polyline points='445.36,205.14 445.36,194.37 ' style='stroke-width: 1.28; stroke: #4477AA; stroke-linecap: butt;' />
+<polyline points='445.36,199.76 302.70,199.76 ' style='stroke-width: 1.28; stroke: #4477AA; stroke-linecap: butt;' />
+<polyline points='302.70,205.14 302.70,194.37 ' style='stroke-width: 1.28; stroke: #4477AA; stroke-linecap: butt;' />
+<circle cx='173.81' cy='38.27' r='2.95' style='stroke-width: 0.77; stroke: #CCBB44; fill: #CCBB44;' />
+<circle cx='299.97' cy='92.10' r='2.95' style='stroke-width: 0.77; stroke: #228833; fill: #228833;' />
+<circle cx='318.16' cy='145.93' r='2.95' style='stroke-width: 0.77; stroke: #CC6677; fill: #CC6677;' />
+<circle cx='374.03' cy='199.76' r='2.95' style='stroke-width: 0.77; stroke: #4477AA; fill: #4477AA;' />
+</g>
+<g clip-path='url(#cpMC4wMHw0NjguMDB8MC4wMHwyNjYuNDA=)'>
+<text x='90.17' y='203.19' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='36.81px' lengthAdjust='spacingAndGlyphs'>stage: III</text>
+<text x='90.17' y='149.36' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='34.14px' lengthAdjust='spacingAndGlyphs'>stage: II</text>
+<text x='90.17' y='95.54' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='75.12px' lengthAdjust='spacingAndGlyphs'>age (per 10 units)</text>
+<text x='90.17' y='41.71' text-anchor='end' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='84.19px' lengthAdjust='spacingAndGlyphs'>arm: New treatment</text>
+<text x='119.47' y='244.30' text-anchor='middle' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='13.33px' lengthAdjust='spacingAndGlyphs'>0.3</text>
+<text x='245.25' y='244.30' text-anchor='middle' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='13.33px' lengthAdjust='spacingAndGlyphs'>1.0</text>
+<text x='360.02' y='244.30' text-anchor='middle' style='font-size: 9.60px;fill: #4D4D4D; font-family: "Arial";' textLength='13.33px' lengthAdjust='spacingAndGlyphs'>3.0</text>
+<text x='278.78' y='257.90' text-anchor='middle' style='font-size: 12.00px; font-family: "Arial";' textLength='161.39px' lengthAdjust='spacingAndGlyphs'>Adjusted odds ratio (log scale)</text>
+</g>
+</g>
+</svg></div><figcaption>Synthetic demonstration data: the table Figura renders for the example dataset.</figcaption></figure>
+<p>The text Figura produced for this example, ready to paste into a methods section:</p>
+<pre class="example-text">Characteristic	Unadjusted OR (95% CI, p)	Adjusted OR (95% CI, p)
+arm (reference: Standard care)		
+New treatment	1.02 (0.63–1.66, p=0.932)	0.50 (0.28–0.91, p=0.023)
+age (per 10 units)	1.56 (1.19–2.05, p=0.001)	1.69 (1.26–2.26, p&lt;0.001)
+stage (reference: I)		
+II	1.85 (1.01–3.38, p=0.045)	2.01 (1.07–3.78, p=0.030)
+III	2.61 (1.43–4.77, p=0.002)	3.43 (1.73–6.79, p&lt;0.001)
+
+Multivariable logistic regression (n = 320, 91 events) adjusted for arm, age, stage. Unadjusted odds ratios are from single-covariate models; adjusted odds ratios are from the joint model. Overall model discrimination: apparent (in-sample) C-statistic = 0.68. 13 observation(s) were flagged as influential (Cook's distance &gt; 4/n); inspect them for data-entry errors.
+
+Analyses were performed with Figura (Saha, 2026; https://figurastats.org), which runs R with the ggplot2 package in the browser.</pre>
+</section>
+<section>
+<h2>Sample data</h2>
+<p><a href="sample.csv" download>Download sample.csv</a> — 320 rows, columns <code>arm</code>, <code>age</code>, <code>stage</code>, <code>complication</code>. A frozen synthetic dataset generated by a script in the repository's <code>data-raw/</code> folder; nothing in it is a real patient.</p>
+</section>
+<section class="cite" id="cite">
+<h2>How to cite</h2>
+<p>Journals ask for a software statement. The methods text Figura generates already ends with one; this is the same attribution in reference form.</p>
+<pre>Saha S. Figura: clinical manuscript figures and statistics in the browser. 2026. https://figurastats.org</pre>
+<pre>@misc{figura2026,
+  author = {Saha, Sandeep},
+  title  = {Figura: clinical manuscript figures and statistics in the browser},
+  year   = {2026},
+  url    = {https://figurastats.org},
+  note   = {Accessed &lt;date&gt;}
+}</pre>
+</section>
+</article>
+<footer class="doc-foot">
+<p>Figura runs R in your browser via webR. There is no backend: your CSV and your results never leave the tab. <a href="../about/">What the page does connect to, and why</a>.</p>
+<p><a href="../validation.html">How the numbers are checked</a> · Feedback: feedback@figurastats.org</p>
+</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About Figura — Figura</title>
+<meta name="description" content="What Figura is, whether you can use it with patient data, what the page connects to, how the numbers are checked, and how to cite it.">
+<link rel="canonical" href="https://figurastats.org/about/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Figura">
+<meta property="og:url" content="https://figurastats.org/about/">
+<meta property="og:title" content="About Figura — Figura">
+<meta property="og:description" content="What Figura is, whether you can use it with patient data, what the page connects to, how the numbers are checked, and how to cite it.">
+<meta property="og:image" content="https://figurastats.org/preview.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Figura: real R, running in your browser — beside a journal-style Table 1 of baseline characteristics.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../pages.css">
+</head>
+<body>
+<div class="doc">
+<header class="toolbar"><a class="wordmark" href="../">Figura</a></header>
+<nav class="page-nav" aria-label="Site"><a href="../">App</a><a href="../table-1/">Table 1 baseline characteristics</a><a href="../kaplan-meier/">Kaplan–Meier survival curves</a><a href="../group-comparison/">Group comparison</a><a href="../cox-regression/">Cox proportional-hazards regression</a><a href="../logistic-regression/">Logistic regression odds ratios</a><a href="../explore-plot/">Explore plot with ggplot2</a><a href="../about/" aria-current="page">About</a><a href="../validation.html">Validation</a></nav>
+<article class="card">
+<p class="eyebrow">About</p>
+<h1>About Figura</h1>
+<p class="lede">Figura makes journal-ready tables and figures for clinical manuscripts: a Table 1, Kaplan–Meier curves, group comparisons, Cox and logistic regression tables, and ggplot2 figures. Real R packages do the statistics, running inside your browser through webR. It is free, and it has no server.</p>
+
+<h2>Can I use this with patient data?</h2>
+<p><strong>Your data stays in the tab.</strong> There is no backend, no upload, and no request that carries any part of your CSV or any result. R runs in a Web Worker in your browser; the figures you download are produced there.</p>
+<p><strong>What the page does connect to.</strong> Three things, and nothing else:</p>
+<ul>
+<li>the webR runtime and R packages, downloaded from the webR content delivery network the first time you run an analysis;</li>
+<li>Figura's own files from this domain: the app, the R sources, self-hosted fonts;</li>
+<li>Cloudflare Web Analytics, a small beacon Cloudflare injects at the network edge. It reports that a page loaded, the referring site, country, device type and browser to Cloudflare. It carries no uploaded research data and no analysis results; nothing from your files is in it. You can see it in your browser's network panel as a request to <code>/cdn-cgi/rum</code>.</li>
+</ul>
+<p>You can verify all of this yourself: open the browser's developer tools, watch the network panel while you run an analysis, and confirm that no request leaves with your data.</p>
+
+<h2>How the numbers are checked</h2>
+<p>Every statistic Figura reports on eight fixed test datasets is re-derived by an independent Python implementation written from a specification rather than from Figura's R, and every difference is published. <a href="../validation.html">Read the validation page</a>.</p>
+
+<section class="cite" id="cite">
+<h2>How to cite</h2>
+<p>Journals ask for a software statement. The methods text Figura generates already ends with one; this is the same attribution in reference form.</p>
+<pre>Saha S. Figura: clinical manuscript figures and statistics in the browser. 2026. https://figurastats.org</pre>
+<pre>@misc{figura2026,
+  author = {Saha, Sandeep},
+  title  = {Figura: clinical manuscript figures and statistics in the browser},
+  year   = {2026},
+  url    = {https://figurastats.org},
+  note   = {Accessed &lt;date&gt;}
+}</pre>
+</section>
+
+<h2>Feedback</h2>
+<p>Write to feedback@figurastats.org. Bugs, ideas, and analyses you wish it had are all welcome.</p>
+
+<h2>The analyses</h2>
+<ul>
+<li><a href="../table-1/">Table 1 baseline characteristics</a></li>
+<li><a href="../kaplan-meier/">Kaplan–Meier survival curves</a></li>
+<li><a href="../group-comparison/">Group comparison</a></li>
+<li><a href="../cox-regression/">Cox proportional-hazards regression</a></li>
+<li><a href="../logistic-regression/">Logistic regression odds ratios</a></li>
+<li><a href="../explore-plot/">Explore plot with ggplot2</a></li>
+</ul>
+</article>
+<footer class="doc-foot">
+<p>Figura runs R in your browser via webR. There is no backend: your CSV and your results never leave the tab. <a href="../about/">What the page does connect to, and why</a>.</p>
+<p><a href="../validation.html">How the numbers are checked</a> · Feedback: feedback@figurastats.org</p>
+</footer>
+</div>
+</body>
+</html>
