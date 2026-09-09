@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { buildLinearDemoSpec, DEFAULT_DEMO_STATE, DEMO_TABLE } from "./demo.js";
 import { LINEAR_DEMO } from "./demo-data.js";
 import { EXAMPLE_INTRO_HTML } from "./content.js";
+import { renderUnderstand } from "./content.js";
 
 const spec = buildLinearDemoSpec(DEFAULT_DEMO_STATE());
 assert.equal(spec.figure, "linear");
@@ -37,4 +38,10 @@ assert.equal(DEMO_TABLE.types.stage, "categorical");
 
 // The intro's sample size is derived, never hand-typed.
 assert.ok(EXAMPLE_INTRO_HTML.includes(String(LINEAR_DEMO.rows.length)));
+
+const fakePanel = { innerHTML: "" };
+renderUnderstand(fakePanel);
+assert.ok(fakePanel.innerHTML.includes("<h3>"), "Understand renders sections");
+assert.ok(/per 10 years/.test(fakePanel.innerHTML), "Understand copy explains the increment");
+
 console.log("demo.test.mjs OK");

@@ -5,8 +5,9 @@ import * as cox from "./cox/content.js";
 import * as logistic from "./logistic/content.js";
 import * as groupcompare from "./groupcompare/content.js";
 import * as explore from "./explore/content.js";
+import * as linear from "./linear/content.js";
 
-const MODULES = { km, summary, cox, logistic, groupcompare, explore };
+const MODULES = { km, summary, cox, logistic, groupcompare, explore, linear };
 
 for (const [name, mod] of Object.entries(MODULES)) {
   assert.ok(Array.isArray(mod.UNDERSTAND_SECTIONS), `${name}: UNDERSTAND_SECTIONS is an array`);
