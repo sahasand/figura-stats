@@ -232,3 +232,46 @@ test_that(".linear_other_warn speaks up for a captured fit warning and stays qui
   msg <- .linear_other_warn(list(NULL, "something odd"))
   expect_match(msg, "CAUTION: fitting reported a numerical warning (\"something odd\")", fixed = TRUE)
 })
+
+svg_count <- function(s) lengths(regmatches(s, gregexpr("<svg", s, fixed = TRUE)))
+
+test_that("fig_linear svg holds the table plus forest, residual and Q-Q plots", {
+  out <- fig_linear(sc_lin(mk_lin_rows()))
+  expect_equal(svg_count(out$svg), 3)
+  expect_match(out$svg, "Adjusted coefficient (difference in los)", fixed = TRUE)
+  expect_match(out$svg, "Fitted values", fixed = TRUE)
+  expect_match(out$svg, "Theoretical quantiles", fixed = TRUE)
+})
+
+test_that("the forest labels a non-syntactic covariate header without backticks", {
+  rows <- lapply(mk_lin_rows(), function(r) list(los = r$los, `study arm` = r$arm, age = r$age))
+  out <- fig_linear(sc_lin(rows, covariates = c("study arm", "age")))
+  forest <- sub("^.*</table></div>", "", out$svg)
+  expect_match(forest, "study arm: Treated", fixed = TRUE)
+  expect_false(grepl("`", forest, fixed = TRUE))
+})
+
+test_that("the forest omits an aliased term but still draws the others", {
+  rows <- lapply(mk_lin_rows(), function(r) { r$age2 <- r$age * 2; r })
+  out <- fig_linear(sc_lin(rows, covariates = c("arm", "age", "age2")))
+  forest <- sub("^.*</table></div>", "", out$svg)
+  expect_match(forest, "age (per 1 unit)", fixed = TRUE)
+  expect_false(grepl("age2", forest, fixed = TRUE))
+  expect_equal(svg_count(out$svg), 3)
+})
+
+.forest_aspect <- function(svg) {
+  w <- as.numeric(sub(".*\\bwidth='([0-9.]+)pt'.*", "\\1", substr(svg, 1, 400)))
+  h <- as.numeric(sub(".*\\bheight='([0-9.]+)pt'.*", "\\1", substr(svg, 1, 400)))
+  h / w
+}
+
+test_that("the forest keeps a sane aspect ratio with one term and with many", {
+  one <- fig_linear(sc_lin(mk_lin_rows(), covariates = "arm"))
+  forest1 <- sub("^.*</table></div>", "", one$svg)
+  expect_true(.forest_aspect(forest1) >= 0.5)
+  rows <- lapply(mk_lin_rows(), function(r) { r$site <- c("a","b","c","d","e","f")[(floor(r$age) %% 6) + 1]; r })
+  many <- fig_linear(sc_lin(rows, covariates = c("arm", "age", "site")))
+  forest7 <- sub("^.*</table></div>", "", many$svg)
+  expect_true(.forest_aspect(forest7) > .forest_aspect(forest1))
+})

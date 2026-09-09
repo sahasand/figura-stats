@@ -67,7 +67,8 @@
     stop("The outcome has no variation after removing missing values.")
 
   list(df = df, covs = covs, cov_types = cov_types, ref_levels = ref_levels,
-       incr = incr, n = nrow(df), n_terms = n_terms, n_dropped = n_dropped)
+       incr = incr, n = nrow(df), n_terms = n_terms, n_dropped = n_dropped,
+       outcome_name = ocol)
 }
 
 # Fit one lm, capturing (not suppressing) fit warnings so an unclean fit can be
@@ -233,6 +234,75 @@
   tryCatch(stats::shapiro.test(r)$p.value, error = function(e) NULL)
 }
 
+# Forest plot of ADJUSTED coefficients (one point per non-reference level /
+# numeric term), linear x-axis, dashed rule at 0. Inclusion mirrors .linear_cell
+# exactly (both use .coef_reportable), so the table and the plot can never
+# disagree about which terms carry usable information.
+.linear_forest_svg <- function(p, fits) {
+  jt <- .linear_terms(fits$joint$fit)
+  keys <- names(jt)
+  if (length(keys) == 0) return("")
+  est <- vapply(jt, `[[`, numeric(1), "est")
+  lo <- vapply(jt, `[[`, numeric(1), "lo")
+  hi <- vapply(jt, `[[`, numeric(1), "hi")
+  keep <- .coef_reportable(est, lo, hi)
+  if (!any(keep)) return("")
+  by_len <- p$covs[order(nchar(vapply(p$covs, .logistic_term_label, character(1))),
+                         decreasing = TRUE)]
+  labeller <- function(key) {
+    for (cl in by_len) {
+      tl <- .logistic_term_label(cl)
+      if (startsWith(key, tl)) {
+        if (p$cov_types[[cl]] == "numeric") {
+          k <- p$incr[[cl]]
+          return(if (k == 1) sprintf("%s (per 1 unit)", cl) else sprintf("%s (per %g units)", cl, k))
+        }
+        return(sprintf("%s: %s", cl, substring(key, nchar(tl) + 1)))
+      }
+    }
+    key
+  }
+  d <- data.frame(term = vapply(keys[keep], labeller, character(1)),
+                  est = est[keep], lo = lo[keep], hi = hi[keep],
+                  stringsAsFactors = FALSE)
+  d$term <- factor(d$term, levels = rev(d$term))
+  pal <- .km_palette(nrow(d))
+  gg <- ggplot2::ggplot(d, ggplot2::aes(x = est, y = term, color = term)) +
+    ggplot2::geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.5,
+                        colour = "grey50") +
+    ggplot2::geom_errorbar(ggplot2::aes(xmin = lo, xmax = hi), orientation = "y",
+                           width = 0.2, linewidth = 0.6) +
+    ggplot2::geom_point(size = 2.4) +
+    ggplot2::scale_color_manual(values = pal, guide = "none") +
+    ggplot2::labs(x = sprintf("Adjusted coefficient (difference in %s)", p$outcome_name),
+                  y = NULL) +
+    .fig_theme("generic")
+  .svg_string(gg, width = 6.5, height = max(3.6, 0.9 + 0.7 * nrow(d)))
+}
+
+# Residuals vs fitted and a normal Q-Q of the residuals, always from the JOINT
+# model. Two separate SVGs (no cowplot). No loess smoother: a geom_smooth on a
+# small n warns, and the reader wants the raw scatter.
+.linear_diagnostics_svg <- function(jfit) {
+  d <- data.frame(fitted = stats::fitted(jfit), resid = stats::resid(jfit))
+  col <- .km_palette(1)
+  g1 <- ggplot2::ggplot(d, ggplot2::aes(x = fitted, y = resid)) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.5,
+                        colour = "grey50") +
+    ggplot2::geom_point(size = 1.8, alpha = 0.7, colour = col) +
+    ggplot2::labs(x = "Fitted values", y = "Residuals",
+                  caption = "Healthy: points scattered evenly around 0, with no funnel or curve.") +
+    .fig_theme("generic")
+  g2 <- ggplot2::ggplot(d, ggplot2::aes(sample = resid)) +
+    ggplot2::stat_qq_line(linewidth = 0.5, colour = "grey50") +
+    ggplot2::stat_qq(size = 1.8, alpha = 0.7, colour = col) +
+    ggplot2::labs(x = "Theoretical quantiles", y = "Residual quantiles",
+                  caption = "Healthy: points along the line.") +
+    .fig_theme("generic")
+  paste0(.svg_string(g1, width = 6.5, height = 4.5),
+         .svg_string(g2, width = 6.5, height = 4.5))
+}
+
 fig_linear <- function(spec) {
   p <- .linear_prep(spec)
   fits <- .linear_fits(p$df, p$covs)
@@ -294,8 +364,10 @@ fig_linear <- function(spec) {
                    "inspect them for data-entry errors."), n_infl) else ""
 
   table_html <- .linear_table_html(disp_rows)
-  svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div></div>",
-                       table_html)
+  forest_svg <- .linear_forest_svg(p, fits)
+  diag_svg <- .linear_diagnostics_svg(jfit)
+  svg_field <- sprintf("<div class=\"summary-output\"><div class=\"table-scroll\">%s</div>%s%s</div>",
+                       table_html, forest_svg, diag_svg)
   tsv <- paste(c(paste(c("Characteristic", "Unadjusted β (95% CI, p)",
                          "Adjusted β (95% CI, p)"), collapse = "\t"),
                  vapply(disp_rows, function(r)
