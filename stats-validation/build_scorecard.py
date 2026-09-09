@@ -2099,12 +2099,17 @@ again through the independent implementation. Three comparisons run on each: the
 numbers <b>as displayed</b>, the underlying quantities <b>at full precision</b>,
 and the <code>.R</code> script the app offers <b>for download</b>, re-run in R.</p>
 {_web_coverage_table(data, cases_dir)}
-<p>Two boundaries this table does not draw on its own. <b>Explore</b>, the plot
+<p>Coverage boundaries: <b>Explore</b>, the plot
 builder, has no case here: it reports no statistics of its own, only a figure.
 And the whole table above is <b>native R</b> &mdash; the runtime that actually
 runs in your browser is checked separately, and how much of the roster that
 check reaches is stated where it is reported; see
 <a href="#webr">webR against native R</a>.</p>
+<p>The <a href="sample-size/#methodology">sample-size and power planner</a>
+is outside this CSV-case comparison. It has separate native-R reference and
+solver tests, exported-script checks, and browser-versus-native checks.
+Those checks are not an independent Python reimplementation of the planning
+methods, and the CSV cases here must not be read as covering that planner.</p>
 
 <h3>Case by case</h3>
 {_web_case_table(data, pending, cases_dir)}

@@ -1,0 +1,4193 @@
+[
+  {
+    "name": "Two independent means",
+    "spec": {
+      "method": "two_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "two_mean",
+      "solve": "n",
+      "params": {
+        "method": "two_mean",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1
+      },
+      "counts": {
+        "n": 64,
+        "n2": 64,
+        "groups": 2,
+        "analyzable": 128,
+        "recruit": 128,
+        "per_group": [64, 64],
+        "recruit_per_group": [64, 64],
+        "unit": "participants",
+        "participants": 128,
+        "events": null
+      },
+      "metric": 0.8014595579223,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 22,
+          "total": 44,
+          "value": 0.3672710825916
+        },
+        {
+          "n": 25,
+          "total": 50,
+          "value": 0.4101003324424
+        },
+        {
+          "n": 27,
+          "total": 54,
+          "value": 0.4377863409731
+        },
+        {
+          "n": 29,
+          "total": 58,
+          "value": 0.46472218094
+        },
+        {
+          "n": 31,
+          "total": 62,
+          "value": 0.4908696736674
+        },
+        {
+          "n": 33,
+          "total": 66,
+          "value": 0.5161990021918
+        },
+        {
+          "n": 35,
+          "total": 70,
+          "value": 0.5406879163736
+        },
+        {
+          "n": 37,
+          "total": 74,
+          "value": 0.5643209762373
+        },
+        {
+          "n": 39,
+          "total": 78,
+          "value": 0.5870888380579
+        },
+        {
+          "n": 41,
+          "total": 82,
+          "value": 0.6089875852748
+        },
+        {
+          "n": 43,
+          "total": 86,
+          "value": 0.6300181048091
+        },
+        {
+          "n": 46,
+          "total": 92,
+          "value": 0.6599481618921
+        },
+        {
+          "n": 48,
+          "total": 96,
+          "value": 0.6788384125321
+        },
+        {
+          "n": 50,
+          "total": 100,
+          "value": 0.6968934055335
+        },
+        {
+          "n": 52,
+          "total": 104,
+          "value": 0.7141291036948
+        },
+        {
+          "n": 54,
+          "total": 108,
+          "value": 0.7305636117345
+        },
+        {
+          "n": 56,
+          "total": 112,
+          "value": 0.7462168183579
+        },
+        {
+          "n": 58,
+          "total": 116,
+          "value": 0.7611100720524
+        },
+        {
+          "n": 60,
+          "total": 120,
+          "value": 0.7752658885126
+        },
+        {
+          "n": 62,
+          "total": 124,
+          "value": 0.7887076876184
+        },
+        {
+          "n": 65,
+          "total": 130,
+          "value": 0.8075844281217
+        },
+        {
+          "n": 67,
+          "total": 134,
+          "value": 0.8193475231117
+        },
+        {
+          "n": 69,
+          "total": 138,
+          "value": 0.8304825158917
+        },
+        {
+          "n": 71,
+          "total": 142,
+          "value": 0.8410143324261
+        },
+        {
+          "n": 73,
+          "total": 146,
+          "value": 0.8509677967436
+        },
+        {
+          "n": 75,
+          "total": 150,
+          "value": 0.8603675134257
+        },
+        {
+          "n": 77,
+          "total": 154,
+          "value": 0.8692377661576
+        },
+        {
+          "n": 79,
+          "total": 158,
+          "value": 0.8776024309032
+        },
+        {
+          "n": 81,
+          "total": 162,
+          "value": 0.8854849023549
+        },
+        {
+          "n": 84,
+          "total": 168,
+          "value": 0.8964543245035
+        },
+        {
+          "n": 86,
+          "total": 172,
+          "value": 0.9032299799905
+        },
+        {
+          "n": 88,
+          "total": 176,
+          "value": 0.9096007400403
+        },
+        {
+          "n": 90,
+          "total": 180,
+          "value": 0.9155872189538
+        },
+        {
+          "n": 92,
+          "total": 184,
+          "value": 0.9212093303693
+        },
+        {
+          "n": 94,
+          "total": 188,
+          "value": 0.9264862729273
+        },
+        {
+          "n": 96,
+          "total": 192,
+          "value": 0.9314365217032
+        },
+        {
+          "n": 98,
+          "total": 196,
+          "value": 0.9360778247001
+        },
+        {
+          "n": 100,
+          "total": 200,
+          "value": 0.9404272037725
+        },
+        {
+          "n": 103,
+          "total": 206,
+          "value": 0.9464393769823
+        },
+        {
+          "n": 105,
+          "total": 210,
+          "value": 0.9501287033889
+        },
+        {
+          "n": 107,
+          "total": 214,
+          "value": 0.9535800614054
+        },
+        {
+          "n": 109,
+          "total": 218,
+          "value": 0.9568073078925
+        },
+        {
+          "n": 111,
+          "total": 222,
+          "value": 0.9598236343093
+        },
+        {
+          "n": 113,
+          "total": 226,
+          "value": 0.962641584422
+        },
+        {
+          "n": 115,
+          "total": 230,
+          "value": 0.9652730732132
+        }
+      ],
+      "notes": [
+        "Independent observations, common population SD and a two-sample t-test. Unequal variances require a different planning model.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified two mean planning model (two-sided alpha 0.05), 128 analyzable participants gives 80.15% power. Recruitment after 0% participant attrition is 128 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Paired measurements",
+    "spec": {
+      "method": "paired_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "paired_mean",
+      "solve": "n",
+      "params": {
+        "method": "paired_mean",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 34,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1
+      },
+      "counts": {
+        "n": 34,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 34,
+        "recruit": 34,
+        "per_group": 34,
+        "recruit_per_group": 34,
+        "unit": "complete pairs",
+        "participants": 34,
+        "events": null
+      },
+      "metric": 0.8077775012794,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 12,
+          "total": 12,
+          "value": 0.3528241493274
+        },
+        {
+          "n": 13,
+          "total": 13,
+          "value": 0.3818484886529
+        },
+        {
+          "n": 14,
+          "total": 14,
+          "value": 0.4102363215045
+        },
+        {
+          "n": 15,
+          "total": 15,
+          "value": 0.4379267106887
+        },
+        {
+          "n": 16,
+          "total": 16,
+          "value": 0.4648699556359
+        },
+        {
+          "n": 18,
+          "total": 18,
+          "value": 0.5163649719174
+        },
+        {
+          "n": 19,
+          "total": 19,
+          "value": 0.5408629627433
+        },
+        {
+          "n": 20,
+          "total": 20,
+          "value": 0.5645044184391
+        },
+        {
+          "n": 21,
+          "total": 21,
+          "value": 0.5872797228774
+        },
+        {
+          "n": 22,
+          "total": 22,
+          "value": 0.6091848041841
+        },
+        {
+          "n": 23,
+          "total": 23,
+          "value": 0.6302204760143
+        },
+        {
+          "n": 24,
+          "total": 24,
+          "value": 0.6503918341548
+        },
+        {
+          "n": 25,
+          "total": 25,
+          "value": 0.6697077041798
+        },
+        {
+          "n": 26,
+          "total": 26,
+          "value": 0.6881801365699
+        },
+        {
+          "n": 28,
+          "total": 28,
+          "value": 0.7226562927689
+        },
+        {
+          "n": 29,
+          "total": 29,
+          "value": 0.7386963010489
+        },
+        {
+          "n": 30,
+          "total": 30,
+          "value": 0.7539647157439
+        },
+        {
+          "n": 31,
+          "total": 31,
+          "value": 0.7684835911432
+        },
+        {
+          "n": 32,
+          "total": 32,
+          "value": 0.7822760116542
+        },
+        {
+          "n": 33,
+          "total": 33,
+          "value": 0.7953658414876
+        },
+        {
+          "n": 34,
+          "total": 34,
+          "value": 0.8077775012794
+        },
+        {
+          "n": 35,
+          "total": 35,
+          "value": 0.8195357696016
+        },
+        {
+          "n": 37,
+          "total": 37,
+          "value": 0.8411920036016
+        },
+        {
+          "n": 38,
+          "total": 38,
+          "value": 0.8511398398656
+        },
+        {
+          "n": 39,
+          "total": 39,
+          "value": 0.8605337732848
+        },
+        {
+          "n": 40,
+          "total": 40,
+          "value": 0.8693981350244
+        },
+        {
+          "n": 41,
+          "total": 41,
+          "value": 0.8777568437148
+        },
+        {
+          "n": 42,
+          "total": 42,
+          "value": 0.8856333321407
+        },
+        {
+          "n": 43,
+          "total": 43,
+          "value": 0.8930504859708
+        },
+        {
+          "n": 44,
+          "total": 44,
+          "value": 0.9000305933315
+        },
+        {
+          "n": 46,
+          "total": 46,
+          "value": 0.9127655981504
+        },
+        {
+          "n": 47,
+          "total": 47,
+          "value": 0.9185617608294
+        },
+        {
+          "n": 48,
+          "total": 48,
+          "value": 0.9240033661021
+        },
+        {
+          "n": 49,
+          "total": 49,
+          "value": 0.9291092652622
+        },
+        {
+          "n": 50,
+          "total": 50,
+          "value": 0.9338975812615
+        },
+        {
+          "n": 51,
+          "total": 51,
+          "value": 0.9383857077269
+        },
+        {
+          "n": 52,
+          "total": 52,
+          "value": 0.9425903120937
+        },
+        {
+          "n": 53,
+          "total": 53,
+          "value": 0.9465273423003
+        },
+        {
+          "n": 54,
+          "total": 54,
+          "value": 0.950212036539
+        },
+        {
+          "n": 56,
+          "total": 56,
+          "value": 0.956881897457
+        },
+        {
+          "n": 57,
+          "total": 57,
+          "value": 0.9598941135414
+        },
+        {
+          "n": 58,
+          "total": 58,
+          "value": 0.9627081266775
+        },
+        {
+          "n": 59,
+          "total": 59,
+          "value": 0.9653358500761
+        },
+        {
+          "n": 60,
+          "total": 60,
+          "value": 0.9677885873055
+        },
+        {
+          "n": 61,
+          "total": 61,
+          "value": 0.9700770529424
+        }
+      ],
+      "notes": [
+        "n counts complete pairs. SD is the SD of within-pair differences, not the SD of either occasion. This is not a repeated-measures interaction or mixed-model calculation.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified paired mean planning model (two-sided alpha 0.05), 34 analyzable complete pairs gives 80.78% power. Recruitment after 0% pair attrition is 34 complete pairs. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "One mean against a reference",
+    "spec": {
+      "method": "one_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "one_mean",
+      "solve": "n",
+      "params": {
+        "method": "one_mean",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 34,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1
+      },
+      "counts": {
+        "n": 34,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 34,
+        "recruit": 34,
+        "per_group": 34,
+        "recruit_per_group": 34,
+        "unit": "participants",
+        "participants": 34,
+        "events": null
+      },
+      "metric": 0.8077775012794,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 12,
+          "total": 12,
+          "value": 0.3528241493274
+        },
+        {
+          "n": 13,
+          "total": 13,
+          "value": 0.3818484886529
+        },
+        {
+          "n": 14,
+          "total": 14,
+          "value": 0.4102363215045
+        },
+        {
+          "n": 15,
+          "total": 15,
+          "value": 0.4379267106887
+        },
+        {
+          "n": 16,
+          "total": 16,
+          "value": 0.4648699556359
+        },
+        {
+          "n": 18,
+          "total": 18,
+          "value": 0.5163649719174
+        },
+        {
+          "n": 19,
+          "total": 19,
+          "value": 0.5408629627433
+        },
+        {
+          "n": 20,
+          "total": 20,
+          "value": 0.5645044184391
+        },
+        {
+          "n": 21,
+          "total": 21,
+          "value": 0.5872797228774
+        },
+        {
+          "n": 22,
+          "total": 22,
+          "value": 0.6091848041841
+        },
+        {
+          "n": 23,
+          "total": 23,
+          "value": 0.6302204760143
+        },
+        {
+          "n": 24,
+          "total": 24,
+          "value": 0.6503918341548
+        },
+        {
+          "n": 25,
+          "total": 25,
+          "value": 0.6697077041798
+        },
+        {
+          "n": 26,
+          "total": 26,
+          "value": 0.6881801365699
+        },
+        {
+          "n": 28,
+          "total": 28,
+          "value": 0.7226562927689
+        },
+        {
+          "n": 29,
+          "total": 29,
+          "value": 0.7386963010489
+        },
+        {
+          "n": 30,
+          "total": 30,
+          "value": 0.7539647157439
+        },
+        {
+          "n": 31,
+          "total": 31,
+          "value": 0.7684835911432
+        },
+        {
+          "n": 32,
+          "total": 32,
+          "value": 0.7822760116542
+        },
+        {
+          "n": 33,
+          "total": 33,
+          "value": 0.7953658414876
+        },
+        {
+          "n": 34,
+          "total": 34,
+          "value": 0.8077775012794
+        },
+        {
+          "n": 35,
+          "total": 35,
+          "value": 0.8195357696016
+        },
+        {
+          "n": 37,
+          "total": 37,
+          "value": 0.8411920036016
+        },
+        {
+          "n": 38,
+          "total": 38,
+          "value": 0.8511398398656
+        },
+        {
+          "n": 39,
+          "total": 39,
+          "value": 0.8605337732848
+        },
+        {
+          "n": 40,
+          "total": 40,
+          "value": 0.8693981350244
+        },
+        {
+          "n": 41,
+          "total": 41,
+          "value": 0.8777568437148
+        },
+        {
+          "n": 42,
+          "total": 42,
+          "value": 0.8856333321407
+        },
+        {
+          "n": 43,
+          "total": 43,
+          "value": 0.8930504859708
+        },
+        {
+          "n": 44,
+          "total": 44,
+          "value": 0.9000305933315
+        },
+        {
+          "n": 46,
+          "total": 46,
+          "value": 0.9127655981504
+        },
+        {
+          "n": 47,
+          "total": 47,
+          "value": 0.9185617608294
+        },
+        {
+          "n": 48,
+          "total": 48,
+          "value": 0.9240033661021
+        },
+        {
+          "n": 49,
+          "total": 49,
+          "value": 0.9291092652622
+        },
+        {
+          "n": 50,
+          "total": 50,
+          "value": 0.9338975812615
+        },
+        {
+          "n": 51,
+          "total": 51,
+          "value": 0.9383857077269
+        },
+        {
+          "n": 52,
+          "total": 52,
+          "value": 0.9425903120937
+        },
+        {
+          "n": 53,
+          "total": 53,
+          "value": 0.9465273423003
+        },
+        {
+          "n": 54,
+          "total": 54,
+          "value": 0.950212036539
+        },
+        {
+          "n": 56,
+          "total": 56,
+          "value": 0.956881897457
+        },
+        {
+          "n": 57,
+          "total": 57,
+          "value": 0.9598941135414
+        },
+        {
+          "n": 58,
+          "total": 58,
+          "value": 0.9627081266775
+        },
+        {
+          "n": 59,
+          "total": 59,
+          "value": 0.9653358500761
+        },
+        {
+          "n": 60,
+          "total": 60,
+          "value": 0.9677885873055
+        },
+        {
+          "n": 61,
+          "total": 61,
+          "value": 0.9700770529424
+        }
+      ],
+      "notes": [
+        "Independent observations and a one-sample t-test against a specified reference mean.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified one mean planning model (two-sided alpha 0.05), 34 analyzable participants gives 80.78% power. Recruitment after 0% participant attrition is 34 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "One-way ANOVA",
+    "spec": {
+      "method": "anova",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "groups": 3,
+        "f": 0.25
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "anova",
+      "solve": "n",
+      "params": {
+        "method": "anova",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 53,
+        "sides": 2,
+        "ratio": 1,
+        "groups": 3,
+        "f": 0.25
+      },
+      "counts": {
+        "n": 53,
+        "n2": null,
+        "groups": 3,
+        "analyzable": 159,
+        "recruit": 159,
+        "per_group": [53, 53, 53],
+        "recruit_per_group": [53, 53, 53],
+        "unit": "participants",
+        "participants": 159,
+        "events": null
+      },
+      "metric": 0.8048872853635,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 19,
+          "total": 57,
+          "value": 0.3567515145828
+        },
+        {
+          "n": 20,
+          "total": 60,
+          "value": 0.3744310763193
+        },
+        {
+          "n": 22,
+          "total": 66,
+          "value": 0.4093001752523
+        },
+        {
+          "n": 24,
+          "total": 72,
+          "value": 0.4433798310399
+        },
+        {
+          "n": 26,
+          "total": 78,
+          "value": 0.4765306534407
+        },
+        {
+          "n": 27,
+          "total": 81,
+          "value": 0.4927212102974
+        },
+        {
+          "n": 29,
+          "total": 87,
+          "value": 0.5242725119073
+        },
+        {
+          "n": 31,
+          "total": 93,
+          "value": 0.5546531468157
+        },
+        {
+          "n": 33,
+          "total": 99,
+          "value": 0.5838033718304
+        },
+        {
+          "n": 34,
+          "total": 102,
+          "value": 0.5979033735483
+        },
+        {
+          "n": 36,
+          "total": 108,
+          "value": 0.6251346559456
+        },
+        {
+          "n": 38,
+          "total": 114,
+          "value": 0.6510602405076
+        },
+        {
+          "n": 40,
+          "total": 120,
+          "value": 0.6756744947484
+        },
+        {
+          "n": 41,
+          "total": 123,
+          "value": 0.6874912422132
+        },
+        {
+          "n": 43,
+          "total": 129,
+          "value": 0.7101521612275
+        },
+        {
+          "n": 45,
+          "total": 135,
+          "value": 0.7315334745511
+        },
+        {
+          "n": 46,
+          "total": 138,
+          "value": 0.741752456562
+        },
+        {
+          "n": 48,
+          "total": 144,
+          "value": 0.7612669133436
+        },
+        {
+          "n": 50,
+          "total": 150,
+          "value": 0.7795803375458
+        },
+        {
+          "n": 52,
+          "total": 156,
+          "value": 0.7967328617199
+        },
+        {
+          "n": 53,
+          "total": 159,
+          "value": 0.8048872853635
+        },
+        {
+          "n": 55,
+          "total": 165,
+          "value": 0.8203809219296
+        },
+        {
+          "n": 57,
+          "total": 171,
+          "value": 0.834826998559
+        },
+        {
+          "n": 59,
+          "total": 177,
+          "value": 0.8482739396554
+        },
+        {
+          "n": 60,
+          "total": 180,
+          "value": 0.8546380912027
+        },
+        {
+          "n": 62,
+          "total": 186,
+          "value": 0.8666786440744
+        },
+        {
+          "n": 64,
+          "total": 192,
+          "value": 0.8778432962149
+        },
+        {
+          "n": 66,
+          "total": 198,
+          "value": 0.8881809408057
+        },
+        {
+          "n": 67,
+          "total": 201,
+          "value": 0.8930547033646
+        },
+        {
+          "n": 69,
+          "total": 207,
+          "value": 0.9022416738863
+        },
+        {
+          "n": 71,
+          "total": 213,
+          "value": 0.9107197310891
+        },
+        {
+          "n": 73,
+          "total": 219,
+          "value": 0.9185337960786
+        },
+        {
+          "n": 74,
+          "total": 222,
+          "value": 0.9222054350254
+        },
+        {
+          "n": 76,
+          "total": 228,
+          "value": 0.9291042012691
+        },
+        {
+          "n": 78,
+          "total": 234,
+          "value": 0.9354440126792
+        },
+        {
+          "n": 80,
+          "total": 240,
+          "value": 0.9412637208398
+        },
+        {
+          "n": 81,
+          "total": 243,
+          "value": 0.9439901610244
+        },
+        {
+          "n": 83,
+          "total": 249,
+          "value": 0.9490984191133
+        },
+        {
+          "n": 85,
+          "total": 255,
+          "value": 0.9537753935861
+        },
+        {
+          "n": 87,
+          "total": 261,
+          "value": 0.9580532766074
+        },
+        {
+          "n": 88,
+          "total": 264,
+          "value": 0.9600521048784
+        },
+        {
+          "n": 90,
+          "total": 270,
+          "value": 0.9637876173932
+        },
+        {
+          "n": 92,
+          "total": 276,
+          "value": 0.9671963993675
+        },
+        {
+          "n": 94,
+          "total": 282,
+          "value": 0.97030427024
+        },
+        {
+          "n": 95,
+          "total": 285,
+          "value": 0.9717529665715
+        }
+      ],
+      "notes": [
+        "Balanced, independent groups; common within-group SD. Omnibus one-way ANOVA power is not power for individual post-hoc contrasts or repeated measures.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified anova planning model (upper-tail alpha 0.05), 159 analyzable participants gives 80.49% power. Recruitment after 0% participant attrition is 159 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Pearson correlation",
+    "spec": {
+      "method": "correlation",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "r": 0.3
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "correlation",
+      "solve": "n",
+      "params": {
+        "method": "correlation",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 85,
+        "sides": 2,
+        "ratio": 1,
+        "r": 0.3
+      },
+      "counts": {
+        "n": 85,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 85,
+        "recruit": 85,
+        "per_group": 85,
+        "recruit_per_group": 85,
+        "unit": "participants",
+        "participants": 85,
+        "events": null
+      },
+      "metric": 0.8043956918387,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 30,
+          "total": 30,
+          "value": 0.371168259282
+        },
+        {
+          "n": 33,
+          "total": 33,
+          "value": 0.404114321901
+        },
+        {
+          "n": 35,
+          "total": 35,
+          "value": 0.425567033462
+        },
+        {
+          "n": 38,
+          "total": 38,
+          "value": 0.4569239734907
+        },
+        {
+          "n": 41,
+          "total": 41,
+          "value": 0.487241265349
+        },
+        {
+          "n": 44,
+          "total": 44,
+          "value": 0.5164725392356
+        },
+        {
+          "n": 47,
+          "total": 47,
+          "value": 0.5445845764201
+        },
+        {
+          "n": 49,
+          "total": 49,
+          "value": 0.5626930633762
+        },
+        {
+          "n": 52,
+          "total": 52,
+          "value": 0.588896990494
+        },
+        {
+          "n": 55,
+          "total": 55,
+          "value": 0.6139464984571
+        },
+        {
+          "n": 58,
+          "total": 58,
+          "value": 0.6378446924419
+        },
+        {
+          "n": 61,
+          "total": 61,
+          "value": 0.6606017469431
+        },
+        {
+          "n": 63,
+          "total": 63,
+          "value": 0.6751469359841
+        },
+        {
+          "n": 66,
+          "total": 66,
+          "value": 0.6960406673053
+        },
+        {
+          "n": 69,
+          "total": 69,
+          "value": 0.7158473890577
+        },
+        {
+          "n": 72,
+          "total": 72,
+          "value": 0.7345950553732
+        },
+        {
+          "n": 75,
+          "total": 75,
+          "value": 0.7523146365165
+        },
+        {
+          "n": 77,
+          "total": 77,
+          "value": 0.7635729215931
+        },
+        {
+          "n": 80,
+          "total": 80,
+          "value": 0.7796540609861
+        },
+        {
+          "n": 83,
+          "total": 83,
+          "value": 0.7947998436724
+        },
+        {
+          "n": 86,
+          "total": 86,
+          "value": 0.8090473918195
+        },
+        {
+          "n": 89,
+          "total": 89,
+          "value": 0.822434449261
+        },
+        {
+          "n": 91,
+          "total": 91,
+          "value": 0.8308998761267
+        },
+        {
+          "n": 94,
+          "total": 94,
+          "value": 0.8429372644168
+        },
+        {
+          "n": 97,
+          "total": 97,
+          "value": 0.8542153558475
+        },
+        {
+          "n": 100,
+          "total": 100,
+          "value": 0.8647715463272
+        },
+        {
+          "n": 103,
+          "total": 103,
+          "value": 0.8746426045271
+        },
+        {
+          "n": 105,
+          "total": 105,
+          "value": 0.8808604853065
+        },
+        {
+          "n": 108,
+          "total": 108,
+          "value": 0.8896691604454
+        },
+        {
+          "n": 111,
+          "total": 111,
+          "value": 0.8978865465859
+        },
+        {
+          "n": 114,
+          "total": 114,
+          "value": 0.9055459390149
+        },
+        {
+          "n": 117,
+          "total": 117,
+          "value": 0.9126794757921
+        },
+        {
+          "n": 119,
+          "total": 119,
+          "value": 0.9171583495441
+        },
+        {
+          "n": 122,
+          "total": 122,
+          "value": 0.9234835783663
+        },
+        {
+          "n": 125,
+          "total": 125,
+          "value": 0.9293626533339
+        },
+        {
+          "n": 128,
+          "total": 128,
+          "value": 0.9348231443416
+        },
+        {
+          "n": 131,
+          "total": 131,
+          "value": 0.9398913464032
+        },
+        {
+          "n": 133,
+          "total": 133,
+          "value": 0.9430646205021
+        },
+        {
+          "n": 136,
+          "total": 136,
+          "value": 0.9475340052787
+        },
+        {
+          "n": 139,
+          "total": 139,
+          "value": 0.9516750694562
+        },
+        {
+          "n": 142,
+          "total": 142,
+          "value": 0.9555095533634
+        },
+        {
+          "n": 145,
+          "total": 145,
+          "value": 0.959058015662
+        },
+        {
+          "n": 147,
+          "total": 147,
+          "value": 0.9612743883012
+        },
+        {
+          "n": 150,
+          "total": 150,
+          "value": 0.9643887348654
+        },
+        {
+          "n": 153,
+          "total": 153,
+          "value": 0.9672663772362
+        }
+      ],
+      "notes": [
+        "Pearson correlation against zero, using pwr's Fisher-z approximation with its small-sample adjustment; independent bivariate-normal pairs.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified correlation planning model (two-sided alpha 0.05), 85 analyzable participants gives 80.44% power. Recruitment after 0% participant attrition is 85 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Multiple linear regression",
+    "spec": {
+      "method": "regression",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "predictors": 3,
+        "f2": 0.15
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "regression",
+      "solve": "n",
+      "params": {
+        "method": "regression",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 77,
+        "sides": 2,
+        "ratio": 1,
+        "predictors": 3,
+        "f2": 0.15
+      },
+      "counts": {
+        "n": 77,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 77,
+        "recruit": 77,
+        "per_group": 77,
+        "recruit_per_group": 77,
+        "unit": "participants",
+        "participants": 77,
+        "events": null
+      },
+      "metric": 0.8017655210574,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 27,
+          "total": 27,
+          "value": 0.3106694369733
+        },
+        {
+          "n": 29,
+          "total": 29,
+          "value": 0.3360055947255
+        },
+        {
+          "n": 32,
+          "total": 32,
+          "value": 0.3737557265361
+        },
+        {
+          "n": 35,
+          "total": 35,
+          "value": 0.4109672486132
+        },
+        {
+          "n": 37,
+          "total": 37,
+          "value": 0.4353610672991
+        },
+        {
+          "n": 40,
+          "total": 40,
+          "value": 0.4711833713995
+        },
+        {
+          "n": 42,
+          "total": 42,
+          "value": 0.4944788493462
+        },
+        {
+          "n": 45,
+          "total": 45,
+          "value": 0.5284365053232
+        },
+        {
+          "n": 47,
+          "total": 47,
+          "value": 0.5503667532808
+        },
+        {
+          "n": 50,
+          "total": 50,
+          "value": 0.5821295641327
+        },
+        {
+          "n": 52,
+          "total": 52,
+          "value": 0.6025181153871
+        },
+        {
+          "n": 55,
+          "total": 55,
+          "value": 0.6318813877626
+        },
+        {
+          "n": 57,
+          "total": 57,
+          "value": 0.6506285412925
+        },
+        {
+          "n": 60,
+          "total": 60,
+          "value": 0.6774923427925
+        },
+        {
+          "n": 62,
+          "total": 62,
+          "value": 0.6945613989492
+        },
+        {
+          "n": 65,
+          "total": 65,
+          "value": 0.7189103319348
+        },
+        {
+          "n": 68,
+          "total": 68,
+          "value": 0.7417710468483
+        },
+        {
+          "n": 70,
+          "total": 70,
+          "value": 0.7561990081954
+        },
+        {
+          "n": 73,
+          "total": 73,
+          "value": 0.7766500414842
+        },
+        {
+          "n": 75,
+          "total": 75,
+          "value": 0.7895092266709
+        },
+        {
+          "n": 78,
+          "total": 78,
+          "value": 0.8076724720617
+        },
+        {
+          "n": 80,
+          "total": 80,
+          "value": 0.819054248085
+        },
+        {
+          "n": 83,
+          "total": 83,
+          "value": 0.8350787524336
+        },
+        {
+          "n": 85,
+          "total": 85,
+          "value": 0.8450888142778
+        },
+        {
+          "n": 88,
+          "total": 88,
+          "value": 0.8591400459986
+        },
+        {
+          "n": 90,
+          "total": 90,
+          "value": 0.8678919865187
+        },
+        {
+          "n": 93,
+          "total": 93,
+          "value": 0.8801432265785
+        },
+        {
+          "n": 95,
+          "total": 95,
+          "value": 0.8877534540124
+        },
+        {
+          "n": 98,
+          "total": 98,
+          "value": 0.898379095532
+        },
+        {
+          "n": 101,
+          "total": 101,
+          "value": 0.9081116192659
+        },
+        {
+          "n": 103,
+          "total": 103,
+          "value": 0.9141334561394
+        },
+        {
+          "n": 106,
+          "total": 106,
+          "value": 0.9225096844099
+        },
+        {
+          "n": 108,
+          "total": 108,
+          "value": 0.9276806148825
+        },
+        {
+          "n": 111,
+          "total": 111,
+          "value": 0.9348576818962
+        },
+        {
+          "n": 113,
+          "total": 113,
+          "value": 0.9392789129766
+        },
+        {
+          "n": 116,
+          "total": 116,
+          "value": 0.945402925904
+        },
+        {
+          "n": 118,
+          "total": 118,
+          "value": 0.9491678985781
+        },
+        {
+          "n": 121,
+          "total": 121,
+          "value": 0.9543728861364
+        },
+        {
+          "n": 123,
+          "total": 123,
+          "value": 0.9575668013175
+        },
+        {
+          "n": 126,
+          "total": 126,
+          "value": 0.9619742969308
+        },
+        {
+          "n": 128,
+          "total": 128,
+          "value": 0.9646740099286
+        },
+        {
+          "n": 131,
+          "total": 131,
+          "value": 0.9683931152884
+        },
+        {
+          "n": 134,
+          "total": 134,
+          "value": 0.9717465270569
+        },
+        {
+          "n": 136,
+          "total": 136,
+          "value": 0.9737950924099
+        },
+        {
+          "n": 139,
+          "total": 139,
+          "value": 0.9766099224971
+        }
+      ],
+      "notes": [
+        "Omnibus fixed-model F-test of all listed slope parameters against zero. f² = R²/(1−R²); this does not power an individual predictor or a multilevel model.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified regression planning model (upper-tail alpha 0.05), 77 analyzable participants gives 80.18% power. Recruitment after 0% participant attrition is 77 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Chi-square test",
+    "spec": {
+      "method": "chi_square",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "df": 2,
+        "w": 0.3
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "chi_square",
+      "solve": "n",
+      "params": {
+        "method": "chi_square",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 108,
+        "sides": 2,
+        "ratio": 1,
+        "df": 2,
+        "w": 0.3
+      },
+      "counts": {
+        "n": 108,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 108,
+        "recruit": 108,
+        "per_group": 108,
+        "recruit_per_group": 108,
+        "unit": "participants",
+        "participants": 108,
+        "events": null
+      },
+      "metric": 0.8036938981998,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 38,
+          "total": 38,
+          "value": 0.3614576863334
+        },
+        {
+          "n": 41,
+          "total": 41,
+          "value": 0.3867849811688
+        },
+        {
+          "n": 45,
+          "total": 45,
+          "value": 0.4199967197115
+        },
+        {
+          "n": 48,
+          "total": 48,
+          "value": 0.4444102318367
+        },
+        {
+          "n": 52,
+          "total": 52,
+          "value": 0.4762048184801
+        },
+        {
+          "n": 56,
+          "total": 56,
+          "value": 0.5070429304662
+        },
+        {
+          "n": 59,
+          "total": 59,
+          "value": 0.5294942109681
+        },
+        {
+          "n": 63,
+          "total": 63,
+          "value": 0.5584737974682
+        },
+        {
+          "n": 66,
+          "total": 66,
+          "value": 0.5794641787285
+        },
+        {
+          "n": 70,
+          "total": 70,
+          "value": 0.6064289233783
+        },
+        {
+          "n": 73,
+          "total": 73,
+          "value": 0.6258717608548
+        },
+        {
+          "n": 77,
+          "total": 77,
+          "value": 0.6507428199487
+        },
+        {
+          "n": 81,
+          "total": 81,
+          "value": 0.6744067018095
+        },
+        {
+          "n": 84,
+          "total": 84,
+          "value": 0.6913648002478
+        },
+        {
+          "n": 88,
+          "total": 88,
+          "value": 0.7129320346188
+        },
+        {
+          "n": 91,
+          "total": 91,
+          "value": 0.7283347632096
+        },
+        {
+          "n": 95,
+          "total": 95,
+          "value": 0.747860480365
+        },
+        {
+          "n": 98,
+          "total": 98,
+          "value": 0.7617618377859
+        },
+        {
+          "n": 102,
+          "total": 102,
+          "value": 0.7793322751372
+        },
+        {
+          "n": 105,
+          "total": 105,
+          "value": 0.7918059734503
+        },
+        {
+          "n": 109,
+          "total": 109,
+          "value": 0.8075292549465
+        },
+        {
+          "n": 113,
+          "total": 113,
+          "value": 0.8222513133475
+        },
+        {
+          "n": 116,
+          "total": 116,
+          "value": 0.8326608831413
+        },
+        {
+          "n": 120,
+          "total": 120,
+          "value": 0.8457319972117
+        },
+        {
+          "n": 123,
+          "total": 123,
+          "value": 0.8549528355762
+        },
+        {
+          "n": 127,
+          "total": 127,
+          "value": 0.8665056451088
+        },
+        {
+          "n": 130,
+          "total": 130,
+          "value": 0.8746378780347
+        },
+        {
+          "n": 134,
+          "total": 134,
+          "value": 0.8848057631087
+        },
+        {
+          "n": 137,
+          "total": 137,
+          "value": 0.891948752173
+        },
+        {
+          "n": 141,
+          "total": 141,
+          "value": 0.9008625602636
+        },
+        {
+          "n": 145,
+          "total": 145,
+          "value": 0.9091166760027
+        },
+        {
+          "n": 148,
+          "total": 148,
+          "value": 0.9148984226378
+        },
+        {
+          "n": 152,
+          "total": 152,
+          "value": 0.9220934160723
+        },
+        {
+          "n": 155,
+          "total": 155,
+          "value": 0.9271246959216
+        },
+        {
+          "n": 159,
+          "total": 159,
+          "value": 0.9333755158014
+        },
+        {
+          "n": 162,
+          "total": 162,
+          "value": 0.9377395404751
+        },
+        {
+          "n": 166,
+          "total": 166,
+          "value": 0.9431529778503
+        },
+        {
+          "n": 169,
+          "total": 169,
+          "value": 0.9469266489761
+        },
+        {
+          "n": 173,
+          "total": 173,
+          "value": 0.9516009202866
+        },
+        {
+          "n": 177,
+          "total": 177,
+          "value": 0.9558935663608
+        },
+        {
+          "n": 180,
+          "total": 180,
+          "value": 0.9588792907711
+        },
+        {
+          "n": 184,
+          "total": 184,
+          "value": 0.9625696295736
+        },
+        {
+          "n": 187,
+          "total": 187,
+          "value": 0.965133026221
+        },
+        {
+          "n": 191,
+          "total": 191,
+          "value": 0.9682973161912
+        },
+        {
+          "n": 194,
+          "total": 194,
+          "value": 0.9704925396514
+        }
+      ],
+      "notes": [
+        "Noncentral chi-square approximation. Specify Cohen's w from expected and alternative cell probabilities, and the test's degrees of freedom. Sparse expected cells can invalidate the approximation.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified chi square planning model (upper-tail alpha 0.05), 108 analyzable participants gives 80.37% power. Recruitment after 0% participant attrition is 108 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Two independent proportions",
+    "spec": {
+      "method": "two_proportion",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "p1": 0.5,
+        "p2": 0.65
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "two_proportion",
+      "solve": "n",
+      "params": {
+        "method": "two_proportion",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 170,
+        "sides": 2,
+        "ratio": 1,
+        "p1": 0.5,
+        "p2": 0.65
+      },
+      "counts": {
+        "n": 170,
+        "n2": 170,
+        "groups": 2,
+        "analyzable": 340,
+        "recruit": 340,
+        "per_group": [170, 170],
+        "recruit_per_group": [170, 170],
+        "unit": "participants",
+        "participants": 340,
+        "events": null
+      },
+      "metric": 0.8021057609696,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 59,
+          "total": 118,
+          "value": 0.3803107534773
+        },
+        {
+          "n": 65,
+          "total": 130,
+          "value": 0.4118968443071
+        },
+        {
+          "n": 71,
+          "total": 142,
+          "value": 0.4426137685145
+        },
+        {
+          "n": 76,
+          "total": 152,
+          "value": 0.4674997057941
+        },
+        {
+          "n": 82,
+          "total": 164,
+          "value": 0.4964638859208
+        },
+        {
+          "n": 88,
+          "total": 176,
+          "value": 0.5244098235281
+        },
+        {
+          "n": 93,
+          "total": 186,
+          "value": 0.5468992283417
+        },
+        {
+          "n": 99,
+          "total": 198,
+          "value": 0.5729111696547
+        },
+        {
+          "n": 104,
+          "total": 208,
+          "value": 0.5937676184993
+        },
+        {
+          "n": 110,
+          "total": 220,
+          "value": 0.6178081739524
+        },
+        {
+          "n": 116,
+          "total": 232,
+          "value": 0.6407749918431
+        },
+        {
+          "n": 121,
+          "total": 242,
+          "value": 0.6591003309299
+        },
+        {
+          "n": 127,
+          "total": 254,
+          "value": 0.6801266313352
+        },
+        {
+          "n": 132,
+          "total": 264,
+          "value": 0.6968576440513
+        },
+        {
+          "n": 138,
+          "total": 276,
+          "value": 0.7160048379804
+        },
+        {
+          "n": 144,
+          "total": 288,
+          "value": 0.7341612287482
+        },
+        {
+          "n": 149,
+          "total": 298,
+          "value": 0.7485546361288
+        },
+        {
+          "n": 155,
+          "total": 310,
+          "value": 0.7649681772744
+        },
+        {
+          "n": 160,
+          "total": 320,
+          "value": 0.7779519482811
+        },
+        {
+          "n": 166,
+          "total": 332,
+          "value": 0.7927276302382
+        },
+        {
+          "n": 172,
+          "total": 344,
+          "value": 0.8066568944937
+        },
+        {
+          "n": 177,
+          "total": 354,
+          "value": 0.8176425911804
+        },
+        {
+          "n": 183,
+          "total": 366,
+          "value": 0.8301087318904
+        },
+        {
+          "n": 188,
+          "total": 376,
+          "value": 0.8399233077952
+        },
+        {
+          "n": 194,
+          "total": 388,
+          "value": 0.8510418389539
+        },
+        {
+          "n": 200,
+          "total": 400,
+          "value": 0.8614735974365
+        },
+        {
+          "n": 205,
+          "total": 410,
+          "value": 0.8696663022713
+        },
+        {
+          "n": 211,
+          "total": 422,
+          "value": 0.878925542079
+        },
+        {
+          "n": 216,
+          "total": 432,
+          "value": 0.8861867970585
+        },
+        {
+          "n": 222,
+          "total": 444,
+          "value": 0.8943818138727
+        },
+        {
+          "n": 228,
+          "total": 456,
+          "value": 0.9020400925789
+        },
+        {
+          "n": 233,
+          "total": 466,
+          "value": 0.9080333972654
+        },
+        {
+          "n": 239,
+          "total": 478,
+          "value": 0.9147838881747
+        },
+        {
+          "n": 244,
+          "total": 488,
+          "value": 0.9200602160197
+        },
+        {
+          "n": 250,
+          "total": 500,
+          "value": 0.9259960302328
+        },
+        {
+          "n": 256,
+          "total": 512,
+          "value": 0.9315242993104
+        },
+        {
+          "n": 261,
+          "total": 522,
+          "value": 0.9358376283241
+        },
+        {
+          "n": 267,
+          "total": 534,
+          "value": 0.9406817306491
+        },
+        {
+          "n": 272,
+          "total": 544,
+          "value": 0.944457200246
+        },
+        {
+          "n": 278,
+          "total": 556,
+          "value": 0.9486928549479
+        },
+        {
+          "n": 284,
+          "total": 568,
+          "value": 0.952626137372
+        },
+        {
+          "n": 289,
+          "total": 578,
+          "value": 0.9556869726269
+        },
+        {
+          "n": 295,
+          "total": 590,
+          "value": 0.9591157319669
+        },
+        {
+          "n": 300,
+          "total": 600,
+          "value": 0.9617814477122
+        },
+        {
+          "n": 306,
+          "total": 612,
+          "value": 0.9647648704224
+        }
+      ],
+      "notes": [
+        "Independent groups; Cohen's arcsine-transformed normal approximation, without continuity correction. This is not Fisher's exact-test power.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified two proportion planning model (two-sided alpha 0.05), 340 analyzable participants gives 80.21% power. Recruitment after 0% participant attrition is 340 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "One proportion against a reference",
+    "spec": {
+      "method": "one_proportion",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "p1": 0.5,
+        "p2": 0.65
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "one_proportion",
+      "solve": "n",
+      "params": {
+        "method": "one_proportion",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 85,
+        "sides": 2,
+        "ratio": 1,
+        "p1": 0.5,
+        "p2": 0.65
+      },
+      "counts": {
+        "n": 85,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 85,
+        "recruit": 85,
+        "per_group": 85,
+        "recruit_per_group": 85,
+        "unit": "participants",
+        "participants": 85,
+        "events": null
+      },
+      "metric": 0.8021057609696,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 30,
+          "total": 30,
+          "value": 0.3856322239857
+        },
+        {
+          "n": 33,
+          "total": 33,
+          "value": 0.4170786416434
+        },
+        {
+          "n": 35,
+          "total": 35,
+          "value": 0.4375575962283
+        },
+        {
+          "n": 38,
+          "total": 38,
+          "value": 0.4674997057941
+        },
+        {
+          "n": 41,
+          "total": 41,
+          "value": 0.4964638859208
+        },
+        {
+          "n": 44,
+          "total": 44,
+          "value": 0.5244098235281
+        },
+        {
+          "n": 47,
+          "total": 47,
+          "value": 0.5513087771806
+        },
+        {
+          "n": 49,
+          "total": 49,
+          "value": 0.5686502376848
+        },
+        {
+          "n": 52,
+          "total": 52,
+          "value": 0.5937676184993
+        },
+        {
+          "n": 55,
+          "total": 55,
+          "value": 0.6178081739524
+        },
+        {
+          "n": 58,
+          "total": 58,
+          "value": 0.6407749918431
+        },
+        {
+          "n": 61,
+          "total": 61,
+          "value": 0.6626773673831
+        },
+        {
+          "n": 63,
+          "total": 63,
+          "value": 0.6766946155336
+        },
+        {
+          "n": 66,
+          "total": 66,
+          "value": 0.6968576440513
+        },
+        {
+          "n": 69,
+          "total": 69,
+          "value": 0.7160048379804
+        },
+        {
+          "n": 72,
+          "total": 72,
+          "value": 0.7341612287482
+        },
+        {
+          "n": 75,
+          "total": 75,
+          "value": 0.751354557367
+        },
+        {
+          "n": 77,
+          "total": 77,
+          "value": 0.7622964340054
+        },
+        {
+          "n": 80,
+          "total": 80,
+          "value": 0.7779519482811
+        },
+        {
+          "n": 83,
+          "total": 83,
+          "value": 0.7927276302382
+        },
+        {
+          "n": 86,
+          "total": 86,
+          "value": 0.8066568944937
+        },
+        {
+          "n": 89,
+          "total": 89,
+          "value": 0.8197737794733
+        },
+        {
+          "n": 91,
+          "total": 91,
+          "value": 0.8280840084759
+        },
+        {
+          "n": 94,
+          "total": 94,
+          "value": 0.8399233077952
+        },
+        {
+          "n": 97,
+          "total": 97,
+          "value": 0.8510418389539
+        },
+        {
+          "n": 100,
+          "total": 100,
+          "value": 0.8614735974365
+        },
+        {
+          "n": 103,
+          "total": 103,
+          "value": 0.8712520886857
+        },
+        {
+          "n": 105,
+          "total": 105,
+          "value": 0.8774244175121
+        },
+        {
+          "n": 108,
+          "total": 108,
+          "value": 0.8861867970585
+        },
+        {
+          "n": 111,
+          "total": 111,
+          "value": 0.8943818138727
+        },
+        {
+          "n": 114,
+          "total": 114,
+          "value": 0.9020400925789
+        },
+        {
+          "n": 117,
+          "total": 117,
+          "value": 0.9091912722834
+        },
+        {
+          "n": 119,
+          "total": 119,
+          "value": 0.9136911719232
+        },
+        {
+          "n": 122,
+          "total": 122,
+          "value": 0.9200602160197
+        },
+        {
+          "n": 125,
+          "total": 125,
+          "value": 0.9259960302328
+        },
+        {
+          "n": 128,
+          "total": 128,
+          "value": 0.9315242993104
+        },
+        {
+          "n": 131,
+          "total": 131,
+          "value": 0.9366695900065
+        },
+        {
+          "n": 133,
+          "total": 133,
+          "value": 0.9398986439667
+        },
+        {
+          "n": 136,
+          "total": 136,
+          "value": 0.944457200246
+        },
+        {
+          "n": 139,
+          "total": 139,
+          "value": 0.9486928549479
+        },
+        {
+          "n": 142,
+          "total": 142,
+          "value": 0.952626137372
+        },
+        {
+          "n": 145,
+          "total": 145,
+          "value": 0.9562765187315
+        },
+        {
+          "n": 147,
+          "total": 147,
+          "value": 0.9585620866938
+        },
+        {
+          "n": 150,
+          "total": 150,
+          "value": 0.9617814477122
+        },
+        {
+          "n": 153,
+          "total": 153,
+          "value": 0.9647648704224
+        }
+      ],
+      "notes": [
+        "One-sample arcsine-transformed normal approximation against the reference proportion. This is not exact binomial-test power.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "pwr: Cohen (1988) power calculations",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified one proportion planning model (two-sided alpha 0.05), 85 analyzable participants gives 80.21% power. Recruitment after 0% participant attrition is 85 participants. All assumptions are recorded in the accompanying plan. Calculation: pwr: Cohen (1988) power calculations; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Noninferiority · means",
+    "spec": {
+      "method": "ni_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.025,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0,
+        "sd": 1,
+        "margin": 0.3
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "ni_mean",
+      "solve": "n",
+      "params": {
+        "method": "ni_mean",
+        "alpha": 0.025,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 175,
+        "sides": 1,
+        "ratio": 1,
+        "delta": 0,
+        "sd": 1,
+        "margin": 0.3
+      },
+      "counts": {
+        "n": 175,
+        "n2": 175,
+        "groups": 2,
+        "analyzable": 350,
+        "recruit": 350,
+        "per_group": [175, 175],
+        "recruit_per_group": [175, 175],
+        "unit": "participants",
+        "participants": 350,
+        "events": null
+      },
+      "metric": 0.8013014554737,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 61,
+          "total": 122,
+          "value": 0.3808840294226
+        },
+        {
+          "n": 67,
+          "total": 134,
+          "value": 0.4115387762049
+        },
+        {
+          "n": 73,
+          "total": 146,
+          "value": 0.4413658925591
+        },
+        {
+          "n": 79,
+          "total": 158,
+          "value": 0.4703089675026
+        },
+        {
+          "n": 84,
+          "total": 168,
+          "value": 0.4937201997373
+        },
+        {
+          "n": 90,
+          "total": 180,
+          "value": 0.5209337349233
+        },
+        {
+          "n": 96,
+          "total": 192,
+          "value": 0.5471630578748
+        },
+        {
+          "n": 102,
+          "total": 204,
+          "value": 0.5723909114936
+        },
+        {
+          "n": 107,
+          "total": 214,
+          "value": 0.5926421379296
+        },
+        {
+          "n": 113,
+          "total": 226,
+          "value": 0.6160146991262
+        },
+        {
+          "n": 119,
+          "total": 238,
+          "value": 0.6383767626105
+        },
+        {
+          "n": 125,
+          "total": 250,
+          "value": 0.6597365599933
+        },
+        {
+          "n": 130,
+          "total": 260,
+          "value": 0.6767799833978
+        },
+        {
+          "n": 136,
+          "total": 272,
+          "value": 0.6963388332852
+        },
+        {
+          "n": 142,
+          "total": 284,
+          "value": 0.7149420950664
+        },
+        {
+          "n": 148,
+          "total": 296,
+          "value": 0.732612539496
+        },
+        {
+          "n": 154,
+          "total": 308,
+          "value": 0.7493753404781
+        },
+        {
+          "n": 159,
+          "total": 318,
+          "value": 0.7626705109184
+        },
+        {
+          "n": 165,
+          "total": 330,
+          "value": 0.7778408053956
+        },
+        {
+          "n": 171,
+          "total": 342,
+          "value": 0.7921839168165
+        },
+        {
+          "n": 177,
+          "total": 354,
+          "value": 0.8057302940568
+        },
+        {
+          "n": 182,
+          "total": 364,
+          "value": 0.816432684054
+        },
+        {
+          "n": 188,
+          "total": 376,
+          "value": 0.8285991298962
+        },
+        {
+          "n": 194,
+          "total": 388,
+          "value": 0.8400572865861
+        },
+        {
+          "n": 200,
+          "total": 400,
+          "value": 0.8508384157958
+        },
+        {
+          "n": 205,
+          "total": 410,
+          "value": 0.8593278793245
+        },
+        {
+          "n": 211,
+          "total": 422,
+          "value": 0.8689479474352
+        },
+        {
+          "n": 217,
+          "total": 434,
+          "value": 0.8779775528433
+        },
+        {
+          "n": 223,
+          "total": 446,
+          "value": 0.8864461378617
+        },
+        {
+          "n": 228,
+          "total": 456,
+          "value": 0.8930954665458
+        },
+        {
+          "n": 234,
+          "total": 468,
+          "value": 0.900609477564
+        },
+        {
+          "n": 240,
+          "total": 480,
+          "value": 0.9076416398304
+        },
+        {
+          "n": 246,
+          "total": 492,
+          "value": 0.9142182121717
+        },
+        {
+          "n": 252,
+          "total": 504,
+          "value": 0.9203645099105
+        },
+        {
+          "n": 257,
+          "total": 514,
+          "value": 0.9251753380778
+        },
+        {
+          "n": 263,
+          "total": 526,
+          "value": 0.9305953284669
+        },
+        {
+          "n": 269,
+          "total": 538,
+          "value": 0.9356514764544
+        },
+        {
+          "n": 275,
+          "total": 550,
+          "value": 0.9403653382873
+        },
+        {
+          "n": 280,
+          "total": 560,
+          "value": 0.9440469610718
+        },
+        {
+          "n": 286,
+          "total": 572,
+          "value": 0.9481860364569
+        },
+        {
+          "n": 292,
+          "total": 584,
+          "value": 0.9520386149948
+        },
+        {
+          "n": 298,
+          "total": 596,
+          "value": 0.9556225689528
+        },
+        {
+          "n": 303,
+          "total": 606,
+          "value": 0.9584162587974
+        },
+        {
+          "n": 309,
+          "total": 618,
+          "value": 0.9615511338403
+        },
+        {
+          "n": 315,
+          "total": 630,
+          "value": 0.9644631389836
+        }
+      ],
+      "notes": [
+        "Higher outcomes are better. The null boundary is difference = −margin. Uses a one-sided normal approximation with a common planning SD; justify the margin scientifically.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "Normal approximation; independent means with common planning SD",
+        "url": "https://www.sealedenvelope.com/power/continuous-noninferior/"
+      },
+      "statement": "Under the specified ni mean planning model (one-sided alpha 0.025), 350 analyzable participants gives 80.13% power. Recruitment after 0% participant attrition is 350 participants. All assumptions are recorded in the accompanying plan. Calculation: Normal approximation; independent means with common planning SD; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Equivalence · means",
+    "spec": {
+      "method": "equivalence_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0,
+        "sd": 1,
+        "margin": 0.3
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "equivalence_mean",
+      "solve": "n",
+      "params": {
+        "method": "equivalence_mean",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 191,
+        "sides": 1,
+        "ratio": 1,
+        "delta": 0,
+        "sd": 1,
+        "margin": 0.3
+      },
+      "counts": {
+        "n": 191,
+        "n2": 191,
+        "groups": 2,
+        "analyzable": 382,
+        "recruit": 382,
+        "per_group": [191, 191],
+        "recruit_per_group": [191, 191],
+        "unit": "participants",
+        "participants": 382,
+        "events": null
+      },
+      "metric": 0.8018601930519,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 67,
+          "total": 134,
+          "value": 0.07292210115032
+        },
+        {
+          "n": 73,
+          "total": 146,
+          "value": 0.1331046007759
+        },
+        {
+          "n": 79,
+          "total": 158,
+          "value": 0.1901481326939
+        },
+        {
+          "n": 86,
+          "total": 172,
+          "value": 0.2528335984585
+        },
+        {
+          "n": 92,
+          "total": 184,
+          "value": 0.3033491061518
+        },
+        {
+          "n": 98,
+          "total": 196,
+          "value": 0.3509960619975
+        },
+        {
+          "n": 105,
+          "total": 210,
+          "value": 0.403092492063
+        },
+        {
+          "n": 111,
+          "total": 222,
+          "value": 0.4448737343495
+        },
+        {
+          "n": 117,
+          "total": 234,
+          "value": 0.4841173060297
+        },
+        {
+          "n": 123,
+          "total": 246,
+          "value": 0.5209332938918
+        },
+        {
+          "n": 130,
+          "total": 260,
+          "value": 0.5609649433062
+        },
+        {
+          "n": 136,
+          "total": 272,
+          "value": 0.5929011089728
+        },
+        {
+          "n": 142,
+          "total": 284,
+          "value": 0.6227590305866
+        },
+        {
+          "n": 149,
+          "total": 298,
+          "value": 0.6551102371805
+        },
+        {
+          "n": 155,
+          "total": 310,
+          "value": 0.6808319136929
+        },
+        {
+          "n": 161,
+          "total": 322,
+          "value": 0.704808234087
+        },
+        {
+          "n": 168,
+          "total": 336,
+          "value": 0.730706837928
+        },
+        {
+          "n": 174,
+          "total": 348,
+          "value": 0.7512373841216
+        },
+        {
+          "n": 180,
+          "total": 360,
+          "value": 0.7703249229528
+        },
+        {
+          "n": 186,
+          "total": 372,
+          "value": 0.7880574067378
+        },
+        {
+          "n": 193,
+          "total": 386,
+          "value": 0.8071447221659
+        },
+        {
+          "n": 199,
+          "total": 398,
+          "value": 0.8222248277634
+        },
+        {
+          "n": 205,
+          "total": 410,
+          "value": 0.8362031997289
+        },
+        {
+          "n": 212,
+          "total": 424,
+          "value": 0.8512147226882
+        },
+        {
+          "n": 218,
+          "total": 436,
+          "value": 0.8630481229716
+        },
+        {
+          "n": 224,
+          "total": 448,
+          "value": 0.8739951385789
+        },
+        {
+          "n": 231,
+          "total": 462,
+          "value": 0.8857268143356
+        },
+        {
+          "n": 237,
+          "total": 474,
+          "value": 0.8949560935938
+        },
+        {
+          "n": 243,
+          "total": 486,
+          "value": 0.9034787089055
+        },
+        {
+          "n": 249,
+          "total": 498,
+          "value": 0.9113445797293
+        },
+        {
+          "n": 256,
+          "total": 512,
+          "value": 0.9197537270104
+        },
+        {
+          "n": 262,
+          "total": 524,
+          "value": 0.9263535032321
+        },
+        {
+          "n": 268,
+          "total": 536,
+          "value": 0.9324350552363
+        },
+        {
+          "n": 275,
+          "total": 550,
+          "value": 0.9389258416772
+        },
+        {
+          "n": 281,
+          "total": 562,
+          "value": 0.9440117700098
+        },
+        {
+          "n": 287,
+          "total": 574,
+          "value": 0.9486915495242
+        },
+        {
+          "n": 293,
+          "total": 586,
+          "value": 0.9529957496449
+        },
+        {
+          "n": 300,
+          "total": 600,
+          "value": 0.95758049988
+        },
+        {
+          "n": 306,
+          "total": 612,
+          "value": 0.9611659902931
+        },
+        {
+          "n": 312,
+          "total": 624,
+          "value": 0.9644594390881
+        },
+        {
+          "n": 319,
+          "total": 638,
+          "value": 0.967962758545
+        },
+        {
+          "n": 325,
+          "total": 650,
+          "value": 0.9706988509119
+        },
+        {
+          "n": 331,
+          "total": 662,
+          "value": 0.9732090652613
+        },
+        {
+          "n": 338,
+          "total": 676,
+          "value": 0.9758758573006
+        },
+        {
+          "n": 344,
+          "total": 688,
+          "value": 0.9779560354895
+        }
+      ],
+      "notes": [
+        "Equivalence bounds are −margin and +margin. Power is the joint probability of both one-sided z tests rejecting at the displayed per-test alpha; common planning SD. It is not power for a nonsignificant superiority test.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "Normal approximation; independent means with common planning SD",
+        "url": "https://www.sealedenvelope.com/power/continuous-equivalence/"
+      },
+      "statement": "Under the specified equivalence mean planning model (per-test alpha 0.05), 382 analyzable participants gives 80.19% power. Recruitment after 0% participant attrition is 382 participants. All assumptions are recorded in the accompanying plan. Calculation: Normal approximation; independent means with common planning SD; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Survival · two groups",
+    "spec": {
+      "method": "survival",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "hr": 0.7,
+        "event_fraction": 0.6
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "survival",
+      "solve": "n",
+      "params": {
+        "method": "survival",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 206,
+        "sides": 2,
+        "ratio": 1,
+        "hr": 0.7,
+        "event_fraction": 0.6
+      },
+      "counts": {
+        "n": 206,
+        "n2": 206,
+        "groups": 2,
+        "analyzable": 412,
+        "recruit": 412,
+        "per_group": [206, 206],
+        "recruit_per_group": [206, 206],
+        "unit": "participants",
+        "participants": 412,
+        "events": 248
+      },
+      "metric": 0.8006561593581,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 72,
+          "total": 144,
+          "value": 0.3813646687189
+        },
+        {
+          "n": 79,
+          "total": 158,
+          "value": 0.4116529841517
+        },
+        {
+          "n": 86,
+          "total": 172,
+          "value": 0.4411420013658
+        },
+        {
+          "n": 92,
+          "total": 184,
+          "value": 0.4657378264302
+        },
+        {
+          "n": 99,
+          "total": 198,
+          "value": 0.4935977970291
+        },
+        {
+          "n": 106,
+          "total": 212,
+          "value": 0.5205240296584
+        },
+        {
+          "n": 113,
+          "total": 226,
+          "value": 0.5464899983331
+        },
+        {
+          "n": 120,
+          "total": 240,
+          "value": 0.5714780036714
+        },
+        {
+          "n": 126,
+          "total": 252,
+          "value": 0.5921102323952
+        },
+        {
+          "n": 133,
+          "total": 266,
+          "value": 0.6152610439315
+        },
+        {
+          "n": 140,
+          "total": 280,
+          "value": 0.6374232650809
+        },
+        {
+          "n": 147,
+          "total": 294,
+          "value": 0.6586044493013
+        },
+        {
+          "n": 154,
+          "total": 308,
+          "value": 0.678816757018
+        },
+        {
+          "n": 160,
+          "total": 320,
+          "value": 0.6953825548612
+        },
+        {
+          "n": 167,
+          "total": 334,
+          "value": 0.7138407703031
+        },
+        {
+          "n": 174,
+          "total": 348,
+          "value": 0.7313845209836
+        },
+        {
+          "n": 181,
+          "total": 362,
+          "value": 0.7480380000097
+        },
+        {
+          "n": 188,
+          "total": 376,
+          "value": 0.7638272976134
+        },
+        {
+          "n": 194,
+          "total": 388,
+          "value": 0.7766940379042
+        },
+        {
+          "n": 201,
+          "total": 402,
+          "value": 0.7909524669199
+        },
+        {
+          "n": 208,
+          "total": 416,
+          "value": 0.8044282691575
+        },
+        {
+          "n": 215,
+          "total": 430,
+          "value": 0.8171514277076
+        },
+        {
+          "n": 221,
+          "total": 442,
+          "value": 0.827480906843
+        },
+        {
+          "n": 228,
+          "total": 456,
+          "value": 0.8388867330869
+        },
+        {
+          "n": 235,
+          "total": 470,
+          "value": 0.8496265421609
+        },
+        {
+          "n": 242,
+          "total": 484,
+          "value": 0.8597303783609
+        },
+        {
+          "n": 249,
+          "total": 498,
+          "value": 0.8692278889026
+        },
+        {
+          "n": 255,
+          "total": 510,
+          "value": 0.8769081213221
+        },
+        {
+          "n": 262,
+          "total": 524,
+          "value": 0.8853564025605
+        },
+        {
+          "n": 269,
+          "total": 538,
+          "value": 0.8932798559173
+        },
+        {
+          "n": 276,
+          "total": 552,
+          "value": 0.9007056099391
+        },
+        {
+          "n": 283,
+          "total": 566,
+          "value": 0.9076599657925
+        },
+        {
+          "n": 289,
+          "total": 578,
+          "value": 0.9132649481833
+        },
+        {
+          "n": 296,
+          "total": 592,
+          "value": 0.9194106318142
+        },
+        {
+          "n": 303,
+          "total": 606,
+          "value": 0.925155156844
+        },
+        {
+          "n": 310,
+          "total": 620,
+          "value": 0.9305213160761
+        },
+        {
+          "n": 316,
+          "total": 632,
+          "value": 0.934836318637
+        },
+        {
+          "n": 323,
+          "total": 646,
+          "value": 0.9395570416073
+        },
+        {
+          "n": 330,
+          "total": 660,
+          "value": 0.943959311358
+        },
+        {
+          "n": 337,
+          "total": 674,
+          "value": 0.9480622898041
+        },
+        {
+          "n": 344,
+          "total": 688,
+          "value": 0.9518842216885
+        },
+        {
+          "n": 350,
+          "total": 700,
+          "value": 0.9549496454499
+        },
+        {
+          "n": 357,
+          "total": 714,
+          "value": 0.958294986946
+        },
+        {
+          "n": 364,
+          "total": 728,
+          "value": 0.9614065300513
+        },
+        {
+          "n": 371,
+          "total": 742,
+          "value": 0.9642991767496
+        }
+      ],
+      "notes": [
+        "Two groups and proportional hazards. The event fraction is the expected proportion with an observed event by analysis; accrual, competing risks and time-varying effects are not modelled. Do not count event censoring again as generic attrition.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "Schoenfeld (1983), proportional-hazards approximation",
+        "url": "https://www.biostat.wisc.edu/~chappell/641/papers/paper31.pdf"
+      },
+      "statement": "Under the specified survival planning model (two-sided alpha 0.05), 412 analyzable participants gives 80.07% power. Recruitment after 0% participant attrition is 412 participants. All assumptions are recorded in the accompanying plan. Calculation: Schoenfeld (1983), proportional-hazards approximation; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Cluster-randomized means",
+    "spec": {
+      "method": "cluster_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 10,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1,
+        "cluster_size": 20,
+        "icc": 0.05
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "cluster_mean",
+      "solve": "n",
+      "params": {
+        "method": "cluster_mean",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 8,
+        "sides": 2,
+        "ratio": 1,
+        "delta": 0.5,
+        "sd": 1,
+        "cluster_size": 20,
+        "icc": 0.05
+      },
+      "counts": {
+        "n": 8,
+        "n2": 8,
+        "groups": 2,
+        "analyzable": 16,
+        "recruit": 16,
+        "per_group": [8, 8],
+        "recruit_per_group": [8, 8],
+        "unit": "clusters",
+        "participants": 320,
+        "events": null
+      },
+      "metric": 0.845357816473,
+      "metric_kind": "power",
+      "target": 0.8,
+      "effect": null,
+      "curve": [
+        {
+          "n": 3,
+          "total": 6,
+          "value": 0.3255613053375
+        },
+        {
+          "n": 4,
+          "total": 8,
+          "value": 0.4767451509681
+        },
+        {
+          "n": 5,
+          "total": 10,
+          "value": 0.6037617379977
+        },
+        {
+          "n": 6,
+          "total": 12,
+          "value": 0.7057833218653
+        },
+        {
+          "n": 7,
+          "total": 14,
+          "value": 0.7851503684505
+        },
+        {
+          "n": 8,
+          "total": 16,
+          "value": 0.845357816473
+        },
+        {
+          "n": 9,
+          "total": 18,
+          "value": 0.8900956564451
+        },
+        {
+          "n": 10,
+          "total": 20,
+          "value": 0.9227642601264
+        },
+        {
+          "n": 11,
+          "total": 22,
+          "value": 0.946265542093
+        },
+        {
+          "n": 12,
+          "total": 24,
+          "value": 0.9629533212916
+        },
+        {
+          "n": 13,
+          "total": 26,
+          "value": 0.9746678350639
+        },
+        {
+          "n": 14,
+          "total": 28,
+          "value": 0.982807699444
+        }
+      ],
+      "notes": [
+        "A cluster-level t-test for equal fixed cluster sizes, common ICC and independent clusters. Cluster-mean SD = individual SD × sqrt(ICC + (1−ICC)/cluster size). Attrition here means loss of whole clusters.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "Cluster-mean t-test; common ICC and equal cluster sizes",
+        "url": "https://cran.r-project.org/web/packages/pwr/pwr.pdf"
+      },
+      "statement": "Under the specified cluster mean planning model (two-sided alpha 0.05), 16 analyzable clusters gives 84.54% power. Recruitment after 0% cluster attrition is 16 clusters. All assumptions are recorded in the accompanying plan. Calculation: Cluster-mean t-test; common ICC and equal cluster sizes; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Precision of a mean",
+    "spec": {
+      "method": "precision_mean",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "sd": 1,
+        "width": 0.2
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "precision_mean",
+      "solve": "n",
+      "params": {
+        "method": "precision_mean",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 99,
+        "sides": 2,
+        "ratio": 1,
+        "sd": 1,
+        "width": 0.2
+      },
+      "counts": {
+        "n": 99,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 99,
+        "recruit": 99,
+        "per_group": 99,
+        "recruit_per_group": 99,
+        "unit": "participants",
+        "participants": 99,
+        "events": null
+      },
+      "metric": 0.1994464834932,
+      "metric_kind": "precision",
+      "target": 0.2,
+      "effect": null,
+      "curve": [
+        {
+          "n": 35,
+          "total": 35,
+          "value": 0.3435120187397
+        },
+        {
+          "n": 38,
+          "total": 38,
+          "value": 0.328691820837
+        },
+        {
+          "n": 41,
+          "total": 41,
+          "value": 0.3156389467646
+        },
+        {
+          "n": 44,
+          "total": 44,
+          "value": 0.3040277882943
+        },
+        {
+          "n": 48,
+          "total": 48,
+          "value": 0.2903697317854
+        },
+        {
+          "n": 51,
+          "total": 51,
+          "value": 0.2812545322268
+        },
+        {
+          "n": 54,
+          "total": 54,
+          "value": 0.2729474578978
+        },
+        {
+          "n": 57,
+          "total": 57,
+          "value": 0.2653357151104
+        },
+        {
+          "n": 61,
+          "total": 61,
+          "value": 0.2561118920673
+        },
+        {
+          "n": 64,
+          "total": 64,
+          "value": 0.2497925678151
+        },
+        {
+          "n": 67,
+          "total": 67,
+          "value": 0.243919165685
+        },
+        {
+          "n": 71,
+          "total": 71,
+          "value": 0.2366961382671
+        },
+        {
+          "n": 74,
+          "total": 74,
+          "value": 0.2316812099079
+        },
+        {
+          "n": 77,
+          "total": 77,
+          "value": 0.226972158714
+        },
+        {
+          "n": 80,
+          "total": 80,
+          "value": 0.2225390987952
+        },
+        {
+          "n": 84,
+          "total": 84,
+          "value": 0.217013303497
+        },
+        {
+          "n": 87,
+          "total": 87,
+          "value": 0.2131289180942
+        },
+        {
+          "n": 90,
+          "total": 90,
+          "value": 0.2094459450893
+        },
+        {
+          "n": 93,
+          "total": 93,
+          "value": 0.2059475572243
+        },
+        {
+          "n": 97,
+          "total": 97,
+          "value": 0.2015446208555
+        },
+        {
+          "n": 100,
+          "total": 100,
+          "value": 0.1984216951586
+        },
+        {
+          "n": 103,
+          "total": 103,
+          "value": 0.1954395951362
+        },
+        {
+          "n": 106,
+          "total": 106,
+          "value": 0.1925880443103
+        },
+        {
+          "n": 110,
+          "total": 110,
+          "value": 0.1889731854565
+        },
+        {
+          "n": 113,
+          "total": 113,
+          "value": 0.1863917814281
+        },
+        {
+          "n": 116,
+          "total": 116,
+          "value": 0.1839133631045
+        },
+        {
+          "n": 119,
+          "total": 119,
+          "value": 0.1815312594615
+        },
+        {
+          "n": 123,
+          "total": 123,
+          "value": 0.1784945099223
+        },
+        {
+          "n": 126,
+          "total": 126,
+          "value": 0.1763143891278
+        },
+        {
+          "n": 129,
+          "total": 129,
+          "value": 0.174212254306
+        },
+        {
+          "n": 133,
+          "total": 133,
+          "value": 0.1715229226537
+        },
+        {
+          "n": 136,
+          "total": 136,
+          "value": 0.1695857136969
+        },
+        {
+          "n": 139,
+          "total": 139,
+          "value": 0.1677126974965
+        },
+        {
+          "n": 142,
+          "total": 142,
+          "value": 0.1659004051892
+        },
+        {
+          "n": 146,
+          "total": 146,
+          "value": 0.1635729572619
+        },
+        {
+          "n": 149,
+          "total": 149,
+          "value": 0.1618902625624
+        },
+        {
+          "n": 152,
+          "total": 152,
+          "value": 0.1602584546452
+        },
+        {
+          "n": 155,
+          "total": 155,
+          "value": 0.158675019239
+        },
+        {
+          "n": 159,
+          "total": 159,
+          "value": 0.1566349900204
+        },
+        {
+          "n": 162,
+          "total": 162,
+          "value": 0.1551555770244
+        },
+        {
+          "n": 165,
+          "total": 165,
+          "value": 0.1537173082516
+        },
+        {
+          "n": 168,
+          "total": 168,
+          "value": 0.1523183112011
+        },
+        {
+          "n": 172,
+          "total": 172,
+          "value": 0.1505110529659
+        },
+        {
+          "n": 175,
+          "total": 175,
+          "value": 0.149197048982
+        },
+        {
+          "n": 178,
+          "total": 178,
+          "value": 0.1479168709472
+        }
+      ],
+      "notes": [
+        "Half-width of a two-sided t interval using the assumed SD. Realized SD and interval width vary; this is not an assurance calculation.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "Student t confidence interval, planning SD",
+        "url": "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/t.test.html"
+      },
+      "statement": "Under the specified precision mean planning model (95% confidence), 99 analyzable participants gives a planned interval half-width of 0.19945. Recruitment after 0% participant attrition is 99 participants. All assumptions are recorded in the accompanying plan. Calculation: Student t confidence interval, planning SD; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  },
+  {
+    "name": "Precision of a proportion",
+    "spec": {
+      "method": "precision_proportion",
+      "solve": "n",
+      "params": {
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 64,
+        "sides": 2,
+        "ratio": 1,
+        "p1": 0.5,
+        "width": 0.05
+      }
+    },
+    "result": {
+      "schema": 1,
+      "method": "precision_proportion",
+      "solve": "n",
+      "params": {
+        "method": "precision_proportion",
+        "alpha": 0.05,
+        "target": 0.8,
+        "dropout": 0,
+        "n": 381,
+        "sides": 2,
+        "ratio": 1,
+        "p1": 0.5,
+        "width": 0.05
+      },
+      "counts": {
+        "n": 381,
+        "n2": null,
+        "groups": 1,
+        "analyzable": 381,
+        "recruit": 381,
+        "per_group": 381,
+        "recruit_per_group": 381,
+        "unit": "participants",
+        "participants": 381,
+        "events": null
+      },
+      "metric": 0.04995479363498,
+      "metric_kind": "precision",
+      "target": 0.05,
+      "effect": null,
+      "curve": [
+        {
+          "n": 133,
+          "total": 133,
+          "value": 0.08377399908097
+        },
+        {
+          "n": 146,
+          "total": 146,
+          "value": 0.0800575138333
+        },
+        {
+          "n": 158,
+          "total": 158,
+          "value": 0.07703235996594
+        },
+        {
+          "n": 171,
+          "total": 171,
+          "value": 0.07411325449681
+        },
+        {
+          "n": 184,
+          "total": 184,
+          "value": 0.07150268810084
+        },
+        {
+          "n": 196,
+          "total": 196,
+          "value": 0.06932267291058
+        },
+        {
+          "n": 209,
+          "total": 209,
+          "value": 0.06717226333759
+        },
+        {
+          "n": 221,
+          "total": 221,
+          "value": 0.06535516239669
+        },
+        {
+          "n": 234,
+          "total": 234,
+          "value": 0.06354396573605
+        },
+        {
+          "n": 246,
+          "total": 246,
+          "value": 0.06199916518971
+        },
+        {
+          "n": 259,
+          "total": 259,
+          "value": 0.06044650023259
+        },
+        {
+          "n": 271,
+          "total": 271,
+          "value": 0.05911217956805
+        },
+        {
+          "n": 284,
+          "total": 284,
+          "value": 0.05776189354819
+        },
+        {
+          "n": 297,
+          "total": 297,
+          "value": 0.05650010466954
+        },
+        {
+          "n": 309,
+          "total": 309,
+          "value": 0.05540589110989
+        },
+        {
+          "n": 322,
+          "total": 322,
+          "value": 0.05428938533888
+        },
+        {
+          "n": 334,
+          "total": 334,
+          "value": 0.05331649894255
+        },
+        {
+          "n": 347,
+          "total": 347,
+          "value": 0.05231938631799
+        },
+        {
+          "n": 359,
+          "total": 359,
+          "value": 0.05144695120608
+        },
+        {
+          "n": 372,
+          "total": 372,
+          "value": 0.050549370636
+        },
+        {
+          "n": 384,
+          "total": 384,
+          "value": 0.04976121542345
+        },
+        {
+          "n": 397,
+          "total": 397,
+          "value": 0.04894764237946
+        },
+        {
+          "n": 410,
+          "total": 410,
+          "value": 0.04817271205855
+        },
+        {
+          "n": 422,
+          "total": 422,
+          "value": 0.04748912032222
+        },
+        {
+          "n": 435,
+          "total": 435,
+          "value": 0.04678043655302
+        },
+        {
+          "n": 447,
+          "total": 447,
+          "value": 0.04615366273561
+        },
+        {
+          "n": 460,
+          "total": 460,
+          "value": 0.0455022962233
+        },
+        {
+          "n": 472,
+          "total": 472,
+          "value": 0.04492488315328
+        },
+        {
+          "n": 485,
+          "total": 485,
+          "value": 0.04432350332043
+        },
+        {
+          "n": 497,
+          "total": 497,
+          "value": 0.04378929562931
+        },
+        {
+          "n": 510,
+          "total": 510,
+          "value": 0.04323182052196
+        },
+        {
+          "n": 523,
+          "total": 523,
+          "value": 0.04269510869466
+        },
+        {
+          "n": 535,
+          "total": 535,
+          "value": 0.0422170218961
+        },
+        {
+          "n": 548,
+          "total": 548,
+          "value": 0.04171679476541
+        },
+        {
+          "n": 560,
+          "total": 560,
+          "value": 0.04127048687318
+        },
+        {
+          "n": 573,
+          "total": 573,
+          "value": 0.0408027901835
+        },
+        {
+          "n": 585,
+          "total": 585,
+          "value": 0.04038489010042
+        },
+        {
+          "n": 598,
+          "total": 598,
+          "value": 0.03994634464065
+        },
+        {
+          "n": 610,
+          "total": 610,
+          "value": 0.03955396152005
+        },
+        {
+          "n": 623,
+          "total": 623,
+          "value": 0.03914165989748
+        },
+        {
+          "n": 636,
+          "total": 636,
+          "value": 0.03874198841041
+        },
+        {
+          "n": 648,
+          "total": 648,
+          "value": 0.03838372381444
+        },
+        {
+          "n": 661,
+          "total": 661,
+          "value": 0.03800660247741
+        },
+        {
+          "n": 673,
+          "total": 673,
+          "value": 0.03766817842786
+        },
+        {
+          "n": 686,
+          "total": 686,
+          "value": 0.03731156363314
+        }
+      ],
+      "notes": [
+        "Wilson interval half-width at the anticipated proportion, which can be fractional at a proposed n. This is not a guarantee of realized width or an assurance calculation.",
+        "Planning calculations depend on the stated effect, variability and design assumptions; they do not establish those assumptions.",
+        "Use an effect justified by prior evidence or scientific importance. Changing assumptions to obtain a convenient sample size changes the design question."
+      ],
+      "reference": {
+        "label": "Wilson score interval, planning half-width",
+        "url": "https://www.itl.nist.gov/div898/handbook/prc/section2/prc241.htm"
+      },
+      "statement": "Under the specified precision proportion planning model (95% confidence), 381 analyzable participants gives a planned interval half-width of 0.049955. Recruitment after 0% participant attrition is 381 participants. All assumptions are recorded in the accompanying plan. Calculation: Wilson score interval, planning half-width; R 4.6.0; pwr 1.3.0.",
+      "engine": {
+        "R": "4.6.0",
+        "pwr": "1.3.0"
+      }
+    }
+  }
+]

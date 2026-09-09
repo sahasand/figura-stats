@@ -6,6 +6,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderPlannerPage } from "./planner.mjs";
 import { PAGES, SITE } from "./registry.mjs";
 import { toCsv } from "../../web/lib/csv.js";
 import { renderAnalysisPage, renderAboutPage, renderSitemap, renderRobots } from "./html.mjs";
@@ -16,6 +17,7 @@ export async function buildAll({ webDir }) {
     { href: "../", label: "App" },
     ...PAGES.map((p) => ({ href: `../${p.slug}/`, label: p.title, slug: p.slug,
                            current: p.slug === currentSlug })),
+    { href: "../sample-size/", label: "Sample size & power" },
     { href: "../about/", label: "About", current: currentSlug === "about" },
     { href: "../validation.html", label: "Validation" },
   ];
@@ -26,8 +28,9 @@ export async function buildAll({ webDir }) {
     out.set(`${p.slug}/sample.csv`, toCsv(p.demo.rows, p.demo.columns));
   }
   out.set("about/index.html", renderAboutPage(navFor("about")));
+  out.set("sample-size/index.html", renderPlannerPage());
   out.set("sitemap.xml", renderSitemap([
-    `${SITE}/`, `${SITE}/validation.html`, `${SITE}/about/`,
+    `${SITE}/`, `${SITE}/validation.html`, `${SITE}/about/`, `${SITE}/sample-size/`,
     ...PAGES.map((p) => `${SITE}/${p.slug}/`)]));
   out.set("robots.txt", renderRobots());
   return out;

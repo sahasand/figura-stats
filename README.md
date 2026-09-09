@@ -47,6 +47,28 @@ by mapping your own CSV columns to the roles the method needs.
   expression is deparsed into the code pane, so the script is literally the
   call that ran.
 
+## Study planning
+
+The standalone `sample-size/` workspace plans sample size, power, detectable effects
+and interval precision for academic research, including psychology. Its 15 designs
+cover independent/paired/one-sample means, one-way ANOVA, correlation, omnibus
+regression, chi-square, proportions, continuous noninferiority/equivalence,
+survival, equal-size cluster means, and precision of means/proportions.
+
+Calculations use `pwr` and `stats` in a dedicated webR worker. Each result records
+its assumptions, approximation, units and package versions. Compare up to eight
+scenarios; export a reopenable JSON plan, CSV comparison, printable report or
+standalone R script. Imported plans contain assumptions and are recalculated.
+Repeated-measures interactions, mixed models, adaptive designs and Bayesian
+assurance are outside this catalogue.
+
+Developer checks: `devtools::test(filter="sample-size")` and
+`node web/sample-size/planner.test.mjs` (also included in the full suites).
+`npm run build:planner-references` refreshes native-R browser-reference fixtures
+from the displayed defaults; it requires R and `pwr`. The planner's index is
+part of `npm run build:pages`. Copy `R/` into `web/R/` as usual before previewing.
+See [the design contract](docs/superpowers/specs/2026-09-09-sample-size-workspace.md).
+
 ## Export for submission
 
 Every result downloads from the pane toolbars:

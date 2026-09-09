@@ -46,7 +46,7 @@ assert.deepEqual(
 );
 
 // 3. Structure of every analysis page.
-const expectedUrls = new Set([`${SITE}/`, `${SITE}/validation.html`, `${SITE}/about/`,
+const expectedUrls = new Set([`${SITE}/`, `${SITE}/validation.html`, `${SITE}/about/`, `${SITE}/sample-size/`,
   ...PAGES.map((p) => `${SITE}/${p.slug}/`)]);
 for (const p of PAGES) {
   const html = built.get(`${p.slug}/index.html`);
@@ -92,7 +92,7 @@ assert.ok(about.includes("/cdn-cgi/rum"), "About names the beacon path");
 assert.ok(about.includes("@misc{figura2026"), "About carries BibTeX");
 const sitemap = built.get("sitemap.xml");
 const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-assert.deepEqual(new Set(locs), expectedUrls, "sitemap lists exactly the nine URLs");
-assert.equal(locs.length, 9);
+assert.deepEqual(new Set(locs), expectedUrls, "sitemap lists exactly the ten URLs");
+assert.equal(locs.length, 10);
 assert.ok(built.get("robots.txt").includes(`Sitemap: ${SITE}/sitemap.xml`));
 console.log("build.test.mjs OK");

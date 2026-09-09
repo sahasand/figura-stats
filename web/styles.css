@@ -284,7 +284,7 @@ body {
   border-top: 1px solid var(--line);
 }
 
-.nav-pane nav button {
+.nav-pane nav button, .nav-pane nav .planning-link {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -310,7 +310,7 @@ body {
   color: var(--ink-muted);
 }
 
-.nav-pane nav button:hover { background: var(--segment-track); }
+.nav-pane nav button:hover, .nav-pane nav .planning-link:hover { background: var(--segment-track); }
 
 /* Active analysis is the one solid teal block in the rail — unmissable. */
 .nav-pane nav button.active {
@@ -1019,7 +1019,7 @@ figcaption.synthetic {
     gap: .25rem;
     align-items: center;
   }
-  .nav-pane nav button { width: auto; min-height: 44px; border: 1px solid var(--border-card); }
+  .nav-pane nav button, .nav-pane nav .planning-link { width: auto; min-height: 44px; border: 1px solid var(--border-card); }
   .nav-pane nav button.active { border-color: var(--accent); }
   .nav-desc { display: none; }
   .nav-group { width: 100%; margin: .375rem .25rem .125rem; }
@@ -1066,3 +1066,6 @@ figcaption.synthetic {
     to   { opacity: 1; transform: none; }
   }
 }
+
+.nav-pane nav .planning-link { text-decoration: none; }
+.nav-pane nav .planning-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
