@@ -49,7 +49,7 @@
 - `web/lib/modelform.js` (+ `modelform.test.mjs`) — `requireEventValue` option on `renderReadiness`.
 - `web/worker.js` — `"linear.R"` in the boot fetch loop.
 - `web/app.js`, `web/index.html`, `web/sw.js` (`CACHE` v13 → v14), `scripts/pages/html.mjs` lede, `web/guided/understand-sections.test.mjs`, `tests/e2e/smoke.spec.js`, `package.json`.
-- `scripts/pages/registry.mjs` — `linear-regression` entry; then `npm run build:examples && npm run build:pages`.
+- `scripts/pages/registry.mjs` — `linear-regression` entry; then `npm run build:examples && npm run build:pages`. `scripts/pages/build.test.mjs` sitemap count; `README.md` analysis list.
 - `stats-validation/Makefile`, `harness/build-spec.mjs` (+ test), `harness/run-script.R`, `python/validate/cli.py`, `python/INTERFACES.md`, `compare/compare.py` (+ `compare/tests/test_compare.py`), `build_scorecard.py`, `e2e/compare-text.mjs`, `e2e/webr-parity.spec.js`, `expected-findings.json`.
 - `CLAUDE.md`.
 
@@ -1971,7 +1971,7 @@ git commit -m "feat(linear): register the seventh guided analysis; e2e"
 ## Task 11: Landing page, sitemap, About lede
 
 **Files:**
-- Modify: `scripts/pages/registry.mjs` (imports + one `PAGES` entry after logistic), `scripts/pages/html.mjs:125` (lede)
+- Modify: `scripts/pages/registry.mjs` (imports + one `PAGES` entry after logistic), `scripts/pages/html.mjs:125` (lede), `scripts/pages/build.test.mjs:95-96` (sitemap count 10 → 11), `README.md` (analysis list)
 - Generate: `web/linear-regression/{index.html,sample.csv,example.json}`, `web/about/index.html`, `web/sitemap.xml`, `web/robots.txt`
 
 - [ ] **Step 1: Add the registry entry**
@@ -1996,6 +1996,23 @@ import { buildLinearDemoSpec, DEFAULT_DEMO_STATE as LINEAR_STATE } from "../../w
 
 In `scripts/pages/html.mjs:125` change "Cox and logistic regression tables" to "Cox, logistic and linear regression tables".
 
+In `scripts/pages/build.test.mjs:95-96` the sitemap assertion hardcodes the URL count (ten since the sample-size planner landed). Change it to eleven:
+
+```js
+assert.deepEqual(new Set(locs), expectedUrls, "sitemap lists exactly the eleven URLs");
+assert.equal(locs.length, 11);
+```
+
+In `README.md`, after the **Logistic regression** bullet of the analysis list, add:
+
+```markdown
+- **Linear regression** — the "Table 3" for a continuous outcome: unadjusted
+  beside adjusted coefficients with t-based 95% CIs, an adjusted-β forest plot
+  with its null line at 0, a residuals-vs-fitted and normal Q-Q pair, plus
+  non-blocking checks (residual normality, constant variance, collinearity,
+  influential points) reported alongside.
+```
+
 - [ ] **Step 2: Build**
 
 Run: `npm run build:examples && npm run build:pages`
@@ -2009,8 +2026,8 @@ Expected: test passes; count ≥ 1; `Adjusted β` printed (the example table ren
 - [ ] **Step 4: Commit**
 
 ```bash
-make -C stats-validation all; git add scripts/pages web/linear-regression web/about web/sitemap.xml web/robots.txt stats-validation/results web/validation.html
-git commit -m "pages: linear-regression landing page, sitemap, About lede"
+make -C stats-validation all; git add scripts/pages README.md web/linear-regression web/about web/sitemap.xml web/robots.txt stats-validation/results web/validation.html
+git commit -m "pages: linear-regression landing page, sitemap, About lede, README"
 ```
 
 ---
@@ -2867,6 +2884,8 @@ Expected: nine cases compared in one booted session; `linear-confounding` shows 
 - Statistical validation: nine cases; the `coef_table` display kind row in the `display.kind` table (`coef_table` → `compareText`, linear).
 - The `renderReadiness` `requireEventValue` option in the `modelform.js` sentence.
 - Remove the stale line "six crawlable analysis pages" → seven.
+- The sample-size planner (`web/sample-size/`, `R/sample-size.R`, shipped 2026-09-09) is untouched by this work and stays outside the validation roster; do not fold it into the seven-analyses counts or the `data-figure` set.
+- Environment notes: `pwr` is a declared Import since the planner landed, so `devtools::test()` needs it installed locally (`install.packages("pwr")`), or the whole R suite refuses to load.
 
 - [ ] **Step 6: Final verification and commit**
 
