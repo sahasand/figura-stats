@@ -803,8 +803,10 @@ would see.</p>
 #      know about: a DOCUMENT layout instead of the fixed three-pane workbench,
 #      and a dark-scheme remap of the SAME token names (the app itself ships
 #      light-only, and styles.css is not this task's to edit).
-#   2. IT ADDS NO NETWORK CALL. No CDN font, no external link; the Cloudflare analytics beacon is edge-injected and disclosed in the footer.
-#      the no-egress invariant covers this page like every other byte of web/.
+#   2. IT ADDS NO NETWORK CALL. No CDN font, no external link — the no-egress
+#      invariant covers this page like every other byte of web/. (Cloudflare's
+#      analytics beacon is edge-injected, not added here, and is disclosed in
+#      the footer.)
 #      Every href here is relative and same-origin; `python -c` grep for
 #      "http" over the built file is part of the verification.
 #   3. IT IS THE SAME PURE FUNCTION build() is (see the module header): files

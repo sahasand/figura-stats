@@ -12,8 +12,11 @@ Free, open-source statistics for journal manuscripts, rendered by real R
 step. You point the page at a CSV, the file is parsed in the tab, and R runs
 on your own machine inside the WebAssembly sandbox. The only network requests
 the app makes are for the webR runtime and R packages from the r-wasm CDN.
-The only network requests the app itself makes are for the webR runtime and R packages from the r-wasm CDN. Cloudflare, which serves the site, injects a Web Analytics beacon at the edge: it reports that a page loaded, the referrer, country, device type and browser, and carries no uploaded research data or analysis results. See [About](https://figurastats.org/about/). This is an architectural invariant, not a policy
-promise — there is no backend that *could* receive your data.
+Cloudflare, which serves the site, injects a Web Analytics beacon at the edge:
+it reports that a page loaded, the referrer, country, device type and browser,
+and carries no uploaded research data or analysis results. See
+[About](https://figurastats.org/about/). This is an architectural invariant,
+not a policy promise — there is no backend that *could* receive your data.
 
 ## Analyses
 
