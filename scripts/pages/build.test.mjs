@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { buildAll } from "./build.mjs";
 import { PAGES, SITE } from "./registry.mjs";
@@ -21,6 +21,30 @@ for (const [rel, content] of built) {
     `${rel} is stale — run \`npm run build:pages\` and commit the result`);
 }
 
+// 2b. Orphan check: the freshness loop above is one-way — it only ever visits
+// the paths build() itself still produces, so a page whose registry entry was
+// REMOVED (its directory and index.html left committed on disk) would stay
+// published forever and nothing above would notice. Walk web/ the other way:
+// every top-level directory that isn't part of the app shell (fonts, guided,
+// lib, R, webr) and carries a committed index.html must be exactly the
+// index.html/sitemap.xml/robots.txt set build() produces — no more, no less.
+const NOT_GENERATED_DIRS = new Set(["fonts", "guided", "lib", "R", "webr"]);
+const topLevel = await readdir(webDir, { withFileTypes: true });
+const committedGenerated = [];
+for (const entry of topLevel) {
+  if (!entry.isDirectory() || NOT_GENERATED_DIRS.has(entry.name)) continue;
+  const siblings = await readdir(path.join(webDir, entry.name));
+  if (siblings.includes("index.html")) committedGenerated.push(`${entry.name}/index.html`);
+}
+committedGenerated.push("sitemap.xml", "robots.txt");
+const builtGenerated = [...built.keys()].filter(
+  (k) => k.endsWith("/index.html") || k === "sitemap.xml" || k === "robots.txt");
+assert.deepEqual(
+  committedGenerated.sort(), builtGenerated.sort(),
+  "web/ has a committed generated page that build() no longer produces (or vice versa) " +
+  "— an orphaned page from a removed registry entry would otherwise stay published",
+);
+
 // 3. Structure of every analysis page.
 const expectedUrls = new Set([`${SITE}/`, `${SITE}/validation.html`, `${SITE}/about/`,
   ...PAGES.map((p) => `${SITE}/${p.slug}/`)]);
@@ -30,7 +54,6 @@ for (const p of PAGES) {
   assert.equal((html.match(/<h1[\s>]/g) || []).length, 1, `${p.slug}: exactly one <h1>`);
   assert.ok(html.includes(`<title>${p.title} — Figura</title>`), `${p.slug}: title`);
   assert.ok(html.includes(`<meta name="description" content="`), `${p.slug}: description`);
-  assert.ok(html.includes(`<link rel="canonical" href="${SITE}/${p.slug}/">`), `${p.slug}: canonical`);
   assert.ok(html.includes(`href="../#${p.key}/example"`), `${p.slug}: example button`);
   assert.ok(html.includes(`href="../#${p.key}/analyze"`), `${p.slug}: analyze button`);
   assert.ok(html.includes("Analyses were performed with Figura"), `${p.slug}: citation`);

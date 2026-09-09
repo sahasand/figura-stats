@@ -5,6 +5,7 @@
 // the committed web/<slug>/example.json renders (npm run build:examples).
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PAGES, SITE } from "./registry.mjs";
 import { toCsv } from "../../web/lib/csv.js";
 import { renderAnalysisPage, renderAboutPage, renderSitemap, renderRobots } from "./html.mjs";
@@ -43,6 +44,6 @@ export async function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await main();
 }

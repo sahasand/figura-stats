@@ -55,9 +55,12 @@ function citeBlock() {
 </section>`;
 }
 
-function foot() {
+function foot(currentSlug) {
+  const aboutLink = currentSlug === "about"
+    ? "What the page does connect to, and why"
+    : `<a href="../about/">What the page does connect to, and why</a>`;
   return `<footer class="doc-foot">
-<p>Figura runs R in your browser via webR. There is no backend: your CSV and your results never leave the tab. <a href="../about/">What the page does connect to, and why</a>.</p>
+<p>Figura runs R in your browser via webR. There is no backend: your CSV and your results never leave the tab. ${aboutLink}.</p>
 <p><a href="../validation.html">How the numbers are checked</a> · Feedback: feedback@figurastats.org</p>
 </footer>`;
 }
@@ -102,7 +105,7 @@ ${page.textKind === "code"
 </section>
 ${citeBlock()}
 </article>
-${foot()}
+${foot(page.slug)}
 </div>
 </body>
 </html>
@@ -111,7 +114,7 @@ ${foot()}
 
 export function renderAboutPage(nav) {
   const canonical = `${SITE}/about/`;
-  return `${head({ title: "About Figura", description: "What Figura is, whether you can use it with patient data, what the page connects to, how the numbers are checked, and how to cite it.", canonical })}
+  return `${head({ title: "About", description: "What Figura is, whether you can use it with patient data, what the page connects to, how the numbers are checked, and how to cite it.", canonical })}
 <body>
 <div class="doc">
 ${masthead()}
@@ -144,7 +147,7 @@ ${citeBlock()}
 ${nav.filter((n) => n.slug).map((n) => `<li><a href="${n.href}">${escapeHtml(n.label)}</a></li>`).join("\n")}
 </ul>
 </article>
-${foot()}
+${foot("about")}
 </div>
 </body>
 </html>
