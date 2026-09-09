@@ -97,6 +97,11 @@ All ten issues in `.scratch/logistic-regression/issues/` are **resolved** as of 
 
 One gap is knowingly left open and has no issue yet: cox does not reject a status column that is also selected as a covariate, where logistic rejects the analogous case. Closing it changes behavior.
 
+**Landing pages + citation shipped 2026-09-09** (spec `docs/superpowers/specs/2026-09-09-landing-pages-and-citation-design.md`): six crawlable analysis pages, `/about/`, `sitemap.xml`, `robots.txt`, the hash deep link, and the citation sentence every `fig_*` appends. Open from that work:
+- `.scratch/landing-pages-and-citation/issues/01-unseeded-jitter-in-summary-and-groupcompare-renders.md` (**needs-triage**): `geom_jitter` is unseeded in `R/summarize.R` and `R/groupcompare.R`, so a user's re-export moves points; the committed page renders only reproduce because `scripts/pages/render-examples.R` seeds. Fixing it changes shipped rendering and needs `npm run build:examples` + the validation pipeline.
+- Owner, after each deploy that changes the page set: submit `https://figurastats.org/sitemap.xml` in Search Console (property already verified).
+- DOI, when minted: swap `FIGURA_CITE_URL` in `R/script.R` and `CITATION`/`BIBTEX` in `scripts/pages/registry.mjs`; nothing else references the URL.
+
 ### Triage labels
 
 Uses the standard `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` vocabulary. See `docs/agents/triage-labels.md`.
