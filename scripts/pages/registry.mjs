@@ -25,8 +25,12 @@ import { buildExploreDemoSpec, DEFAULT_DEMO_STATE as EXPLORE_STATE } from "../..
 
 export const SITE = "https://figurastats.org";
 
-// Same wording as R/script.R `.citation_sentence` with no package clause; the
-// R side is the source of truth and test-script.R pins its exact text.
+// Two deliberately different forms of the same attribution. R/script.R
+// `.citation_sentence` is the METHODS-SECTION sentence appended to every
+// analysis's text; CITATION (and BIBTEX below) is the REFERENCE-LIST form
+// shown on the About page and page footers. They share the facts — author,
+// year, URL — not the wording. If FIGURA_CITE_URL in R/script.R ever changes
+// (e.g. to a DOI), change the URL here too.
 export const CITATION =
   "Saha S. Figura: clinical manuscript figures and statistics in the browser. 2026. https://figurastats.org";
 export const BIBTEX = `@misc{figura2026,
