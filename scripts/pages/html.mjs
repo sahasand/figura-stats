@@ -69,9 +69,10 @@ export function renderAnalysisPage(page, example, nav) {
   const teaching = page.teachingVisual
     ? `<figure class="teaching-visual" aria-label="${escapeHtml(page.teachingVisual.alt)}">${page.teachingVisual.svg}<figcaption><strong>Illustration—not computed data.</strong></figcaption></figure>`
     : "";
-  const exampleBlock = example.svg.trimStart().startsWith("<svg")
-    ? `<figure>${example.svg}<figcaption>${escapeHtml(page.demo.label)}: the figure Figura renders for the example dataset.</figcaption></figure>`
-    : `<figure>${example.svg}<figcaption>${escapeHtml(page.demo.label)}: the table Figura renders for the example dataset.</figcaption></figure>`;
+  const isTable = /<table[\s>]/.test(example.svg);
+  const exampleBlock = isTable
+    ? `<figure>${example.svg}<figcaption>${escapeHtml(page.demo.label)}: the table Figura renders for the example dataset.</figcaption></figure>`
+    : `<figure>${example.svg}<figcaption>${escapeHtml(page.demo.label)}: the figure Figura renders for the example dataset.</figcaption></figure>`;
   return `${head({ title: page.title, description: page.description, canonical })}
 <body>
 <div class="doc">

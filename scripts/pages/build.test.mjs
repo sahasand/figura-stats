@@ -39,6 +39,10 @@ for (const p of PAGES) {
   // Code output is never labelled as methods text.
   const labelledAsMethods = html.includes("ready to paste into a methods section");
   assert.equal(labelledAsMethods, p.textKind !== "code", `${p.slug}: example text label matches its kind`);
+  // The example caption names what the render actually is.
+  const isTable = /<table[\s>]/.test(JSON.parse(await readFile(path.join(webDir, p.slug, "example.json"), "utf8")).svg);
+  assert.ok(html.includes(isTable ? "the table Figura renders" : "the figure Figura renders"), `${p.slug}: example caption`);
+  assert.ok(!html.includes(isTable ? "the figure Figura renders" : "the table Figura renders"), `${p.slug}: example caption is not the other kind`);
   // No off-origin FETCHED resource: stylesheets, scripts, images. Plain links
   // (canonical, og:url, nav) are allowed to be absolute — they are not fetched.
   const fetched = [
