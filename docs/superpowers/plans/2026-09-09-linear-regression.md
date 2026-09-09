@@ -19,7 +19,7 @@
 - **Cell format** is `"%.2f (%.2f to %.2f, %s)"` with the word `to`, ASCII hyphen-minus for negatives, `p<0.001` / `p=%.3f`. A cell reads `not reliably estimated` when est/lo/hi/p are not all finite. Reference rows' effect cells read `0 (reference)` in HTML.
 - **`web/R/` is a gitignored build copy.** Before any e2e/serve: `rm -rf web/R && cp -R R web/R`.
 - **Every new `*.test.mjs` is appended to `test:unit` in `package.json` in the same commit that creates it.**
-- **A `web/` source change requires `make -C stats-validation all` in the same commit** (it regenerates `web/validation.html`). During Tasks 6–11 the pipeline has no `linear` case yet, so `make all` regenerates the digest only; run it and commit its output with each `web/` commit. It exits non-zero by design (`logistic-dirty`), and that is not a failure.
+- **A `web/` source change requires `make -C stats-validation all` in the same commit** (it regenerates `web/validation.html`). During Tasks 6–11 the pipeline has no `linear` case yet, so `make all` regenerates the digest only; run it and commit its output with each `web/` commit. It exits 0 today (every case, `logistic-dirty` included, publishes zero findings); a non-zero exit means a case published findings — read the scorecard, never treat it as a broken pipeline.
 - **Path B independence.** The Python implementer (Task 14) reads ONLY `stats-validation/spec/linear-confounding.md`, `stats-validation/python/INTERFACES.md`, and `stats-validation/python/tests/test_linear.py`. Never `R/`, never `web/`, never `results/`. State this prohibition verbatim in that subagent's prompt.
 - Commit messages end with the attribution trailer in force for the session.
 
@@ -48,7 +48,7 @@
 - `R/dispatch.R` — `linear = fig_linear(spec),` in the switch.
 - `web/lib/modelform.js` (+ `modelform.test.mjs`) — `requireEventValue` option on `renderReadiness`.
 - `web/worker.js` — `"linear.R"` in the boot fetch loop.
-- `web/app.js`, `web/index.html`, `web/sw.js` (`CACHE` v13 → v14), `scripts/pages/html.mjs` lede, `web/guided/understand-sections.test.mjs`, `tests/e2e/smoke.spec.js`, `package.json`.
+- `web/app.js`, `web/index.html`, `web/sw.js` (`CACHE` v15 → v16), `scripts/pages/html.mjs` lede, `web/guided/understand-sections.test.mjs`, `tests/e2e/smoke.spec.js`, `package.json`.
 - `scripts/pages/registry.mjs` — `linear-regression` entry; then `npm run build:examples && npm run build:pages`. `scripts/pages/build.test.mjs` sitemap count; `README.md` analysis list.
 - `stats-validation/Makefile`, `harness/build-spec.mjs` (+ test), `harness/run-script.R`, `python/validate/cli.py`, `python/INTERFACES.md`, `compare/compare.py` (+ `compare/tests/test_compare.py`), `build_scorecard.py`, `e2e/compare-text.mjs`, `e2e/webr-parity.spec.js`, `expected-findings.json`.
 - `CLAUDE.md`.
@@ -242,8 +242,10 @@ test_that("adjusting for age reveals a larger treatment effect than the crude on
 test_that("reference level appears, reads 0 (reference) in HTML, and can be overridden", {
   out <- fig_linear(sc_lin(mk_lin_rows()))
   expect_match(out$svg, "reference: Control", fixed = TRUE)
-  expect_match(out$svg, "0 (reference)", fixed = TRUE)
+  expect_match(out$svg, "<td>0 (reference)</td><td>0 (reference)</td>", fixed = TRUE)
   expect_false(grepl("1 (reference)", out$svg, fixed = TRUE))
+  # The TSV header row stays blank: the validation parser's contract.
+  expect_match(out$text, "arm (reference: Control)\t\t\n", fixed = TRUE)
   out2 <- fig_linear(sc_lin(mk_lin_rows(), ref_levels = list(arm = "Treated")))
   expect_match(out2$svg, "reference: Treated", fixed = TRUE)
   expect_match(out2$text, "\nControl\t", fixed = TRUE)
@@ -305,6 +307,11 @@ test_that("blank cells are dropped and counted", {
   out <- fig_linear(sc_lin(rows))
   expect_match(out$text, "n = 238", fixed = TRUE)
   expect_match(out$text, "2 row(s) with missing values were excluded.", fixed = TRUE)
+})
+
+test_that("a perfect fit stops readably and leaks no summary.lm warning", {
+  rows <- lapply(mk_lin_rows(), function(r) { r$los <- 2 * r$age; r })
+  expect_error(fig_linear(sc_lin(rows)), "perfect fit")
 })
 
 test_that("render_figure routes linear specs and returns ok JSON", {
@@ -443,6 +450,19 @@ Expected: errors "could not find function fig_linear".
 
 .linear_pfmt <- function(p) if (p < 0.001) "p<0.001" else sprintf("p=%.3f", p)
 
+# summary.lm's own "essentially perfect fit" test, evaluated BEFORE any summary()
+# call so its warning can never fire (that warning would leak from
+# .linear_terms, .linear_lead, .linear_bp and .logistic_vif — seven times on a
+# y = x upload). A fit this exact has undefined standard errors and p-values,
+# and it is always a data problem: a covariate that duplicates or derives from
+# the outcome. Checking the joint model suffices — it nests every univariable
+# model, so its residual sum of squares is the smallest of all of them.
+.linear_perfect_fit <- function(fit) {
+  r <- stats::resid(fit); f <- stats::fitted(fit)
+  resvar <- sum(r^2) / fit$df.residual
+  is.finite(resvar) && resvar < (mean(f)^2 + stats::var(c(f))) * 1e-30
+}
+
 # "%.2f (%.2f to %.2f, p)" — the word "to", because a coefficient can be
 # negative and "-2.10–-0.36" is unreadable.
 .linear_cell <- function(terms, key) {
@@ -479,8 +499,12 @@ Expected: errors "could not find function fig_linear".
   rows
 }
 
-# HTML table (reuses .esc). "(reference:" header rows keep blank effect cells;
-# any other blank cell reads "0 (reference)" — the null of a difference is 0.
+# HTML table (reuses .esc). The "(reference: X)" header row is where a reader
+# looks for the reference level's effect, so its two effect cells read
+# "0 (reference)" — the null of a difference is 0 — in the HTML ONLY. The TSV
+# keeps them blank: the validation parser (stats-validation/compare/compare.py,
+# parse_ratio_tsv) requires a reference header row to carry empty cells, and
+# every level row below it always carries a real cell.
 .linear_table_html <- function(disp_rows) {
   header <- "<tr><th>Characteristic</th><th>Unadjusted β (95% CI, p)</th><th>Adjusted β (95% CI, p)</th></tr>"
   body <- vapply(disp_rows, function(r) {
@@ -488,11 +512,8 @@ Expected: errors "could not find function fig_linear".
     indent <- startsWith(r$term, "  ")
     label <- .esc(trimws(r$term))
     if (indent) label <- paste0("<span class=\"lvl\">", label, "</span>")
-    if (is_header) { unadj <- ""; adj <- "" }
-    else {
-      unadj <- if (nzchar(r$unadj)) .esc(r$unadj) else "0 (reference)"
-      adj <- if (nzchar(r$adj)) .esc(r$adj) else "0 (reference)"
-    }
+    if (is_header) { unadj <- "0 (reference)"; adj <- "0 (reference)" }
+    else { unadj <- .esc(r$unadj); adj <- .esc(r$adj) }
     sprintf("<tr><td>%s</td><td>%s</td><td>%s</td></tr>", label, unadj, adj)
   }, character(1))
   paste0("<table class=\"table1\"><thead>", header, "</thead><tbody>",
@@ -521,6 +542,10 @@ Expected: errors "could not find function fig_linear".
 fig_linear <- function(spec) {
   p <- .linear_prep(spec)
   fits <- .linear_fits(p$df, p$covs)
+  if (.linear_perfect_fit(fits$joint$fit)) stop(paste0(
+    "The outcome is an exact function of the covariates (a perfect fit), so standard ",
+    "errors and p-values are undefined; check for a covariate that duplicates or ",
+    "derives from the outcome."))
   disp_rows <- .linear_rows(p, fits)
   jfit <- fits$joint$fit
 
@@ -576,7 +601,7 @@ git commit -m "feat(linear): fig_linear core — lm Table 3 with t-based CIs"
   - aliased: `" CAUTION: one or more covariates were dropped from the adjusted model because they are linear combinations of others (their cells read \"not reliably estimated\"); remove a redundant variable."`
   - other-warn: `" CAUTION: fitting reported a numerical warning (\"<msg>\"); the coefficients above may come from a model that did not fit cleanly. Check the covariates for extreme values, and seek statistical review."`
   - obs/term: `" CAUTION: about %.1f observations per model term (fewer than 10); the adjusted estimates may be unstable and are best treated as exploratory."`
-  - Shapiro: `" Residuals depart from normality (Shapiro–Wilk %s); with n = %d the confidence intervals are %s."` where the tail is `still approximately valid by the central limit theorem` (n ≥ 30) or `not reliable; consider transforming the outcome or a non-parametric comparison` (n < 30). Only when 3 ≤ n ≤ 5000 and p < 0.05.
+  - Shapiro: `" Residuals depart from normality (Shapiro–Wilk %s); with n = %d %s."` where the tail is `the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points` (n ≥ 30) or `the confidence intervals may be unreliable; consider transforming the outcome or a non-parametric comparison` (n < 30). Neither tail is a verdict: sample size alone does not make an interval valid, so the large-n tail points at the other two diagnostics. Only when 3 ≤ n ≤ 5000 and p < 0.05.
   - BP: `" CAUTION: residual variance is not constant across fitted values (Breusch–Pagan %s); the standard errors may be misleading, and robust standard errors or an outcome transform are worth considering."` when p < 0.05.
   - VIF and Cook's: logistic's exact wording.
 
@@ -614,14 +639,14 @@ test_that("Shapiro-Wilk caution fires on skewed residuals, with the large-n tail
   set.seed(5)
   rows <- lapply(mk_lin_rows(), function(r) { r$los <- round(r$los + rexp(1, 0.3), 2); r })
   out <- fig_linear(sc_lin(rows))
-  expect_match(out$text, "Residuals depart from normality \\(Shapiro–Wilk p[<=][0-9.]+\\); with n = 240 the confidence intervals are still approximately valid by the central limit theorem\\.")
+  expect_match(out$text, "Residuals depart from normality \\(Shapiro–Wilk p[<=][0-9.]+\\); with n = 240 the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points\\.")
 })
 
 test_that("Shapiro-Wilk caution uses the small-n tail under 30 observations", {
   set.seed(6)
   rows <- lapply(1:25, function(i) list(los = round(rexp(1, 0.2), 2), age = 40 + i))
   out <- fig_linear(sc_lin(rows, covariates = "age"))
-  expect_match(out$text, "with n = 25 the confidence intervals are not reliable; consider transforming the outcome", fixed = TRUE)
+  expect_match(out$text, "with n = 25 the confidence intervals may be unreliable; consider transforming the outcome", fixed = TRUE)
 })
 
 test_that("Breusch-Pagan caution fires on heteroscedastic residuals", {
@@ -713,6 +738,10 @@ Replace `fig_linear` with:
 fig_linear <- function(spec) {
   p <- .linear_prep(spec)
   fits <- .linear_fits(p$df, p$covs)
+  if (.linear_perfect_fit(fits$joint$fit)) stop(paste0(
+    "The outcome is an exact function of the covariates (a perfect fit), so standard ",
+    "errors and p-values are undefined; check for a covariate that duplicates or ",
+    "derives from the outcome."))
   disp_rows <- .linear_rows(p, fits)
   jfit <- fits$joint$fit
 
@@ -736,11 +765,12 @@ fig_linear <- function(spec) {
 
   sw_p <- .linear_shapiro(jfit)
   sw_line <- if (!is.null(sw_p) && sw_p < 0.05)
-    sprintf(paste0(" Residuals depart from normality (Shapiro–Wilk %s); with n = %d ",
-                   "the confidence intervals are %s."),
+    # Conditional guidance, not a verdict: n alone does not validate an interval,
+    # so the large-n tail defers to the variance and influence checks below.
+    sprintf(" Residuals depart from normality (Shapiro–Wilk %s); with n = %d %s.",
             .linear_pfmt(sw_p), p$n,
-            if (p$n >= 30) "still approximately valid by the central limit theorem"
-            else "not reliable; consider transforming the outcome or a non-parametric comparison")
+            if (p$n >= 30) paste0("the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points")
+            else "the confidence intervals may be unreliable; consider transforming the outcome or a non-parametric comparison")
     else ""
 
   bp <- .linear_bp(jfit)
@@ -1015,6 +1045,17 @@ test_that("the generated script runs and reproduces the app's coefficients", {
   expect_true(is.numeric(env$bp))
 })
 
+test_that("the script runs on 5,001 rows, where the app skips Shapiro-Wilk", {
+  # shapiro.test() errors outside 3..5000 observations; the app guards it, and an
+  # unguarded export would stop where the app carried on.
+  set.seed(12)
+  rows <- lapply(1:5001, function(i) list(los = round(rnorm(1, 6, 2), 2), age = 40 + (i %% 50)))
+  out <- fig_linear(sc_lin(rows, covariates = "age"))
+  expect_false(grepl("Shapiro", out$text, fixed = TRUE))
+  env <- new.env(parent = globalenv())
+  expect_silent(eval(parse(text = out$code), env))
+})
+
 test_that("the script runs for a single non-syntactic covariate", {
   rows <- lapply(mk_lin_rows(), function(r) list(los = r$los, `study arm` = r$arm))
   out <- fig_linear(sc_lin(rows, covariates = "study arm"))
@@ -1080,7 +1121,7 @@ Add above `fig_linear`:
     "summary(fit)                                  # coefficients, R-squared, adjusted R-squared",
     "cbind(beta = coef(fit), confint(fit))         # adjusted coefficients + t-based 95% CI", "",
     "# Residual diagnostics the app reported:",
-    "shapiro.test(resid(fit))                      # residual normality (n between 3 and 5000)",
+    "if (nrow(dat) >= 3 && nrow(dat) <= 5000) shapiro.test(resid(fit))   # residual normality; the app skips it outside this range, and so must the script",
     "aux <- lm(resid(fit)^2 ~ fitted(fit))         # Breusch-Pagan (Koenker): n * R^2 of squared residuals on fitted values",
     "bp <- nrow(dat) * summary(aux)$r.squared",
     "pchisq(bp, df = 1, lower.tail = FALSE)",
@@ -1947,7 +1988,7 @@ test("analyze stage fits an uploaded linear model with adjusted coefficients", a
 ```
 
   and in the `<meta name="description">` change "Cox regression, logistic regression, Table 1" to "Cox, logistic and linear regression, Table 1".
-- `web/sw.js:14`: `const CACHE = "figura-v14";  // v13 -> v14: linear regression analysis.`
+- `web/sw.js:14`: `const CACHE = "figura-v16";  // v15 -> v16: linear regression analysis.` (read the current value first; bump whatever it is by one)
 
 - [ ] **Step 4: Run e2e**
 
@@ -1972,7 +2013,7 @@ git commit -m "feat(linear): register the seventh guided analysis; e2e"
 
 **Files:**
 - Modify: `scripts/pages/registry.mjs` (imports + one `PAGES` entry after logistic), `scripts/pages/html.mjs:125` (lede), `scripts/pages/build.test.mjs:95-96` (sitemap count 10 → 11), `README.md` (analysis list)
-- Generate: `web/linear-regression/{index.html,sample.csv,example.json}`, `web/about/index.html`, `web/sitemap.xml`, `web/robots.txt`
+- Generate: `web/linear-regression/{index.html,sample.csv,example.json}`, `web/about/index.html`, `web/sample-size/index.html` (its sidebar lists every `PAGES` entry), `web/sitemap.xml`, `web/robots.txt`
 
 - [ ] **Step 1: Add the registry entry**
 
@@ -2016,7 +2057,7 @@ In `README.md`, after the **Logistic regression** bullet of the analysis list, a
 - [ ] **Step 2: Build**
 
 Run: `npm run build:examples && npm run build:pages`
-Expected: `web/linear-regression/` appears with `index.html`, `sample.csv`, `example.json`; `web/sitemap.xml` lists it; `web/about/index.html` is regenerated.
+Expected: `web/linear-regression/` appears with `index.html`, `sample.csv`, `example.json`; `web/sitemap.xml` lists it; `web/about/index.html` and `web/sample-size/index.html` are regenerated (the planner's sidebar derives from `PAGES`, and `build.test.mjs` checks the committed copy against a fresh build).
 
 - [ ] **Step 3: Verify**
 
@@ -2026,7 +2067,7 @@ Expected: test passes; count ≥ 1; `Adjusted β` printed (the example table ren
 - [ ] **Step 4: Commit**
 
 ```bash
-make -C stats-validation all; git add scripts/pages README.md web/linear-regression web/about web/sitemap.xml web/robots.txt stats-validation/results web/validation.html
+make -C stats-validation all; git add scripts/pages README.md web/linear-regression web/about web/sample-size/index.html web/sitemap.xml web/robots.txt stats-validation/results web/validation.html
 git commit -m "pages: linear-regression landing page, sitemap, About lede, README"
 ```
 
@@ -2240,7 +2281,7 @@ def test_linear_diagnostics_agree_when_states_and_values_match():
 
 
 def test_linear_diagnostics_flag_a_shapiro_state_disagreement():
-    text = LEAD + " Residuals depart from normality (Shapiro–Wilk p=0.012); with n = 320 the confidence intervals are still approximately valid by the central limit theorem." + COOKS
+    text = LEAD + " Residuals depart from normality (Shapiro–Wilk p=0.012); with n = 320 the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points." + COOKS
     exact = {"diagnostics": {"r_squared": 0.4123, "adj_r_squared": 0.4049, "shapiro_p": 0.012, "bp_p": 0.52}}
     targets = _Targets(["shapiro_note"])
     findings, _ = _compare_linear_diagnostics(text, exact, _linear_python(), targets)
@@ -2852,7 +2893,7 @@ make -C stats-validation test
 make -C stats-validation all; echo "exit $?"
 ```
 
-Expected: exit 1 (the standing `logistic-dirty` disposition). Open `stats-validation/results/scorecard.html` and read the `linear-confounding` row: every tier compared, `targets_met: true`, 0 findings. If it publishes findings:
+Expected: exit 0 (no case publishes findings today; `logistic-dirty` has been at zero since 2026-07-28). A non-zero exit means findings exist — read them; it is not a broken pipeline. Open `stats-validation/results/scorecard.html` and read the `linear-confounding` row: every tier compared, `targets_met: true`, 0 findings. If it publishes findings:
 - `MISSING_QUANTITY` on a `*_note` or on `se` → a contract gap between Tasks 12/13/14; fix the offending side (harvest, spec, or comparator — never Path B by reading R).
 - `DEFECT` on `est/se/lo/hi/p` → a real disagreement; write it up in `stats-validation/issues/` before touching anything, per `docs/agents/issue-tracker.md`.
 - `DISPLAY_ARTIFACT` → accept; it is dispositioned by the baseline.
@@ -2875,7 +2916,7 @@ make -C stats-validation webr
 make -C stats-validation all
 ```
 
-Expected: nine cases compared in one booted session; `linear-confounding` shows zero drift. The second `make all` publishes the webR result and clears the staleness box on `web/validation.html`.
+Expected: nine cases compared in one booted session (the `make all` after it exits 0 as above); `linear-confounding` shows zero drift. The second `make all` publishes the webR result and clears the staleness box on `web/validation.html`.
 
 - [ ] **Step 5: Update `CLAUDE.md`**
 

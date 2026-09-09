@@ -114,6 +114,12 @@ factor + relevel categoricals. Hard stops, in this order:
 4. A categorical covariate with one level after complete cases.
 5. Outcome constant (zero variance) → "The outcome has no variation after removing
    missing values."
+6. After the fits: a **perfect fit** — the joint model's residual variance below
+   `summary.lm`'s own "essentially perfect fit" threshold, tested before any `summary()`
+   call so that warning can never leak → "The outcome is an exact function of the
+   covariates (a perfect fit), so standard errors and p-values are undefined; check for a
+   covariate that duplicates or derives from the outcome." The joint model nests every
+   univariable model, so checking it alone suffices.
 
 **Fits** (`.linear_fits`): one `stats::lm(.y ~ \`cl\`, data = df)` per covariate and the
 joint `stats::lm(.y ~ \`a\` + \`b\` + …, data = df)`, each wrapped by a `withCallingHandlers`
@@ -133,9 +139,9 @@ column — R drops it from the joint fit) or any of β, lower, upper is non-fini
 
 **Rows** (`.linear_rows`): the logistic row model — a `"%s (reference: %s)"` header row
 with blank cells per categorical covariate, then one row per non-reference level, and one
-row per numeric covariate labelled `"%s (per %g units)"` / `"%s (per 1 unit)"`. Reference
-rows' blank effect cells read **"0 (reference)"** in the HTML table (logistic prints
-"1 (reference)").
+row per numeric covariate labelled `"%s (per %g units)"` / `"%s (per 1 unit)"`. The reference header row's two effect cells read **"0 (reference)"** in the HTML table only;
+in the TSV they stay blank, because the validation parser requires a reference header row
+to carry empty cells (logistic leaves both blank).
 
 **Table** (`.linear_table_html`): three columns — `Characteristic`,
 `Unadjusted β (95% CI, p)`, `Adjusted β (95% CI, p)` — inside
@@ -160,9 +166,9 @@ styling applies with no CSS change. The `text` field's TSV uses the same three h
    are best treated as exploratory."
 5. **Residual normality** — `stats::shapiro.test(stats::resid(jfit))` when
    `3 ≤ n ≤ 5000`; if p < 0.05: " Residuals depart from normality (Shapiro–Wilk p=%s);
-   with n = %d the confidence intervals are %s." where the tail is "still approximately
-   valid by the central limit theorem" for n ≥ 30 and "not reliable; consider transforming
-   the outcome or a non-parametric comparison" for n < 30. Outside the size window the
+   with n = %d %s." where the tail is "the coefficient estimates are unaffected, and the confidence intervals are usually robust to this unless the residual plots also show non-constant variance or influential points" for n ≥ 30 and "the confidence intervals may be unreliable; consider transforming the outcome or a non-parametric comparison" for n < 30.
+   Neither tail is a verdict: sample size alone does not validate an interval, so the
+   large-n tail defers to the variance and influence checks. Outside the size window the
    sentence is omitted (never a stop).
 6. **Heteroscedasticity** — Koenker's studentized Breusch–Pagan, hand-rolled: regress
    `resid(jfit)^2` on `fitted(jfit)`, statistic `LM = n · R²` of that auxiliary fit,
@@ -209,7 +215,7 @@ m_uni <- lm(.y ~ `arm`, data = dat)                # one per covariate
 fit   <- lm(.y ~ `arm` + `age` + `stage`, data = dat)
 cbind(coef(fit), confint(fit))
 summary(fit)                                       # R², adjusted R², p-values
-shapiro.test(resid(fit))
+if (nrow(dat) >= 3 && nrow(dat) <= 5000) shapiro.test(resid(fit))   # same guard as the app
 # Breusch–Pagan (Koenker): the same statistic the app reported
 aux <- lm(resid(fit)^2 ~ fitted(fit)); bp <- nrow(dat) * summary(aux)$r.squared
 pchisq(bp, df = 1, lower.tail = FALSE)
