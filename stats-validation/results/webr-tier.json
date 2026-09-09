@@ -2,7 +2,7 @@
   "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
   "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 17 webr.r-wasm.org request(s) during this run.",
   "date": "2026-09-09",
-  "commit": "2a774a0fef8da5b59e11e5519f583cb6518555ba",
+  "commit": "ffd67d1ca8f3de1373b30a003f239170f7188402",
   "native_digest": "sha256:85e694f248d1b0dab60b98924d7aa44d37110c9c4fa0a0b6fcdaddc3a0d44665",
   "web_digest": "sha256:aa01dc023fb74c94d0d1faf834b518efa62165794f393bd1d46717be7b18ee8e",
   "web_files": 51,
@@ -18,9 +18,9 @@
         "value": 8,
         "empty": 4,
         "methods": 5,
-        "methods_with_number": 4
+        "methods_with_number": 3
       },
-      "cells_with_numbers": 12
+      "cells_with_numbers": 11
     },
     {
       "id": "logistic-dirty",
@@ -33,9 +33,9 @@
         "value": 10,
         "empty": 4,
         "methods": 5,
-        "methods_with_number": 4
+        "methods_with_number": 3
       },
-      "cells_with_numbers": 14
+      "cells_with_numbers": 13
     },
     {
       "id": "cox-adjusted",
@@ -48,9 +48,9 @@
         "value": 4,
         "empty": 2,
         "methods": 4,
-        "methods_with_number": 3
+        "methods_with_number": 2
       },
-      "cells_with_numbers": 7
+      "cells_with_numbers": 6
     },
     {
       "id": "km-twoarm",
@@ -63,9 +63,9 @@
         "value": 0,
         "empty": 0,
         "methods": 4,
-        "methods_with_number": 3
+        "methods_with_number": 2
       },
-      "cells_with_numbers": 3
+      "cells_with_numbers": 2
     },
     {
       "id": "groupcompare-numeric",
@@ -78,9 +78,9 @@
         "value": 0,
         "empty": 0,
         "methods": 5,
-        "methods_with_number": 3
+        "methods_with_number": 2
       },
-      "cells_with_numbers": 3
+      "cells_with_numbers": 2
     },
     {
       "id": "groupcompare-categorical",
@@ -93,9 +93,9 @@
         "value": 0,
         "empty": 0,
         "methods": 3,
-        "methods_with_number": 2
+        "methods_with_number": 1
       },
-      "cells_with_numbers": 2
+      "cells_with_numbers": 1
     },
     {
       "id": "groupcompare-dirty",
@@ -108,9 +108,9 @@
         "value": 0,
         "empty": 0,
         "methods": 6,
-        "methods_with_number": 4
+        "methods_with_number": 3
       },
-      "cells_with_numbers": 4
+      "cells_with_numbers": 3
     },
     {
       "id": "summary-table1",
@@ -123,12 +123,12 @@
         "value": 19,
         "empty": 8,
         "methods": 5,
-        "methods_with_number": 2
+        "methods_with_number": 1
       },
-      "cells_with_numbers": 21
+      "cells_with_numbers": 20
     }
   ],
   "cells_compared": 125,
-  "cells_with_numbers": 66,
-  "cells_note": "125 = 41 table value cells + 37 displayed sentences (25 containing a number) + 25 row labels + 4 table header line(s) + 18 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 66 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
+  "cells_with_numbers": 58,
+  "cells_note": "125 = 41 table value cells + 37 displayed sentences (17 containing a number) + 25 row labels + 4 table header line(s) + 18 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 58 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
 }

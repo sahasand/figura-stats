@@ -142,6 +142,16 @@ export function sentences(paragraph) {
   return paragraph.split(/(?<=\.)\s+/).filter((s) => s.trim() !== "");
 }
 
+// The citation sentence every fig_* appends (R/script.R `.citation_sentence`)
+// carries one constant number — the year — that cannot drift between
+// runtimes. It stays a compared "methods" cell (the webR gate must still
+// prove both sides print it identically) but is never counted as
+// number-bearing; the Python comparator strips it for the same reason
+// (compare.py `strip_citation`).
+export const CITATION_SENTENCE_RE =
+  /^Analyses were performed with Figura \([^()\n]*\), which runs R(?: with the [^.\n]+ packages?)? in the browser\.$/;
+export function isCitationSentence(s) { return CITATION_SENTENCE_RE.test(String(s).trim()); }
+
 // The one accumulator every comparison shape below writes through, so the five
 // cell kinds partition every compared cell no matter which shape produced it —
 // the invariant webr-tier.json's published breakdown rests on. The KIND is
@@ -156,7 +166,7 @@ function collector() {
     cell(term, column, kind, a, b) {
       compared += 1;
       cellKinds[kind] += 1;
-      if (kind === "methods" && /\d/.test(a)) cellKinds.methodsWithNumber += 1;
+      if (kind === "methods" && !isCitationSentence(a) && /\d/.test(a)) cellKinds.methodsWithNumber += 1;
       if (a !== b) differing.push({ term, column, native: a, webr: b });
     },
     result() {

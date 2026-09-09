@@ -15,6 +15,7 @@ import {
   nativeDigest,
   webDigest,
   isWebSource,
+  isCitationSentence,
 } from "./compare-text.mjs";
 
 // Regression pin for the review finding this file exists to close:
@@ -455,6 +456,72 @@ const KM_TEXT =
     "a newly added web/ module must move the digest");
 
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+// isCitationSentence: the predicate that keeps the citation's constant year
+// out of the "carrying a number" sub-count (R/script.R `.citation_sentence`
+// grammar; mirrors compare.py's `strip_citation`). True for the zero-, one-,
+// two- and three-package forms; false the moment anything follows the final
+// period on the line, or a nested paren breaks the parenthetical.
+{
+  const zeroPkg =
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), " +
+    "which runs R in the browser.";
+  const onePkg =
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), " +
+    "which runs R with the ggplot2 package in the browser.";
+  const twoPkg =
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), " +
+    "which runs R with the survival and ggplot2 packages in the browser.";
+  const threePkg =
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), " +
+    "which runs R with the survival, cowplot, and ggplot2 packages in the browser.";
+  assert.equal(isCitationSentence(zeroPkg), true, "zero-package form");
+  assert.equal(isCitationSentence(onePkg), true, "one-package form");
+  assert.equal(isCitationSentence(twoPkg), true, "two-package form");
+  assert.equal(isCitationSentence(threePkg), true, "three-package form");
+
+  assert.equal(
+    isCitationSentence(zeroPkg + " Another sentence."),
+    false,
+    "a second sentence appended on the same line is not the bare citation",
+  );
+  assert.equal(
+    isCitationSentence(
+      "Analyses were performed with Figura (Saha, 2026; https://figurastats.org (v2)), " +
+      "which runs R in the browser.",
+    ),
+    false,
+    "a nested paren inside the attribution breaks the parenthetical grammar",
+  );
+}
+
+// compareProse: the citation line is still compared (and any drift on it would
+// still be caught) but is excluded from methodsWithNumber, while an ordinary
+// numeric methods sentence on another line is not.
+{
+  const citation =
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org), " +
+    "which runs R with the survival and ggplot2 packages in the browser.";
+  const twoLine = "Median survival 12.0 months.\n" + citation;
+  const { compared, differing, cellKinds } = compareProse(twoLine, twoLine);
+  assert.equal(differing.length, 0);
+  assert.equal(compared, 2, "two lines, two comparable units");
+  assert.equal(cellKinds.methods, 2, "both lines are methods cells");
+  assert.equal(
+    cellKinds.methodsWithNumber,
+    1,
+    "only the non-citation sentence counts as number-bearing; the citation's " +
+    "constant year must not inflate the count",
+  );
+
+  // Drift on the citation line itself must still be reported — the gate still
+  // proves both runtimes print the citation identically, it just doesn't
+  // count that as evidence of numeric parity.
+  const drifted = compareProse(twoLine, twoLine.replace("2026", "2027"));
+  assert.equal(drifted.differing.length, 1);
+  assert.equal(drifted.differing[0].term, "(displayed text, line 2)");
 }
 
 console.log("compare-text.test.mjs ok");
