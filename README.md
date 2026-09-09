@@ -42,6 +42,11 @@ by mapping your own CSV columns to the roles the method needs.
   beside adjusted odds ratios, an adjusted-OR forest plot on a log axis with
   a null line at OR = 1, plus non-blocking diagnostic checks (separation,
   events-per-variable, collinearity) reported alongside.
+- **Linear regression** — the "Table 3" for a continuous outcome: unadjusted
+  beside adjusted coefficients with t-based 95% CIs, an adjusted-β forest plot
+  with its null line at 0, a residuals-vs-fitted and normal Q-Q pair, plus
+  non-blocking checks (residual normality, constant variance, collinearity,
+  influential points) reported alongside.
 - **Explore plot** — build a ggplot2 figure interactively. The R shown to you
   is never string-built; the plot is constructed as an expression and the same
   expression is deparsed into the code pane, so the script is literally the

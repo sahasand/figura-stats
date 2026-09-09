@@ -8,6 +8,7 @@ import { UNDERSTAND_SECTIONS as KM_SECTIONS } from "../../web/guided/km/content.
 import { UNDERSTAND_SECTIONS as GC_SECTIONS } from "../../web/guided/groupcompare/content.js";
 import { UNDERSTAND_SECTIONS as COX_SECTIONS } from "../../web/guided/cox/content.js";
 import { UNDERSTAND_SECTIONS as LOGISTIC_SECTIONS } from "../../web/guided/logistic/content.js";
+import { UNDERSTAND_SECTIONS as LINEAR_SECTIONS } from "../../web/guided/linear/content.js";
 import { UNDERSTAND_SECTIONS as EXPLORE_SECTIONS } from "../../web/guided/explore/content.js";
 import { TEACHING_VISUAL_SVG, TEACHING_VISUAL_ALT } from "../../web/guided/km/teaching-visual.js";
 import { SUMMARY_DEMO } from "../../web/guided/summary/demo-data.js";
@@ -15,12 +16,14 @@ import { KM_DEMO } from "../../web/guided/km/demo-data.js";
 import { GROUPCOMPARE_DEMO } from "../../web/guided/groupcompare/demo-data.js";
 import { COX_DEMO } from "../../web/guided/cox/demo-data.js";
 import { LOGISTIC_DEMO } from "../../web/guided/logistic/demo-data.js";
+import { LINEAR_DEMO } from "../../web/guided/linear/demo-data.js";
 import { EXPLORE_DEMO } from "../../web/guided/explore/demo-data.js";
 import { buildSummaryDemoSpec } from "../../web/guided/summary/demo.js";
 import { buildDemoSpec as buildKmDemoSpec } from "../../web/guided/km/demo.js";
 import { buildGroupCompareDemoSpec, DEFAULT_DEMO_STATE as GC_STATE } from "../../web/guided/groupcompare/demo.js";
 import { buildCoxDemoSpec, DEFAULT_DEMO_STATE as COX_STATE } from "../../web/guided/cox/demo.js";
 import { buildLogisticDemoSpec, DEFAULT_DEMO_STATE as LOGISTIC_STATE } from "../../web/guided/logistic/demo.js";
+import { buildLinearDemoSpec, DEFAULT_DEMO_STATE as LINEAR_STATE } from "../../web/guided/linear/demo.js";
 import { buildExploreDemoSpec, DEFAULT_DEMO_STATE as EXPLORE_STATE } from "../../web/guided/explore/demo.js";
 
 export const SITE = "https://figurastats.org";
@@ -73,6 +76,11 @@ export const PAGES = [
     lede: "A binary outcome, a set of covariates, and a Table 3 of odds ratios: unadjusted and adjusted side by side, a forest plot on a log axis, and continuous covariates reported per a clinically meaningful step such as age per 10 years.",
     sections: LOGISTIC_SECTIONS, demo: LOGISTIC_DEMO,
     demoSpec: () => buildLogisticDemoSpec(LOGISTIC_STATE()) },
+  { slug: "linear-regression", key: "linear", title: "Linear regression coefficients",
+    description: "Univariable and multivariable linear regression from a CSV: unadjusted and adjusted coefficients with t-based 95% CIs, a forest plot, residual and Q-Q diagnostics, per-increment scaling for continuous covariates, and Shapiro–Wilk, Breusch–Pagan, VIF and Cook's-distance checks.",
+    lede: "A continuous outcome, a set of covariates, and a Table 3 of coefficients: unadjusted and adjusted side by side in the outcome's own units, a forest plot with its null at 0, residual diagnostics drawn for you, and continuous covariates reported per a clinically meaningful step.",
+    sections: LINEAR_SECTIONS, demo: LINEAR_DEMO,
+    demoSpec: () => buildLinearDemoSpec(LINEAR_STATE()) },
   { slug: "explore-plot", key: "explore", title: "Explore plot with ggplot2",
     description: "An interactive ggplot2 builder: scatter, line, box, violin, bar and histogram from your CSV, with the exact R code that drew the figure ready to paste.",
     lede: "Map columns to x, y, colour and facets and watch the figure redraw. Every plot comes with the ggplot2 code that produced it, so the explorer doubles as a way to learn the grammar of graphics on your own data.",

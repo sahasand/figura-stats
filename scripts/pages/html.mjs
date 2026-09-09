@@ -122,7 +122,7 @@ ${pageNav(nav)}
 <article class="card">
 <p class="eyebrow">About</p>
 <h1>About Figura</h1>
-<p class="lede">Figura makes journal-ready tables and figures for clinical manuscripts: a Table 1, Kaplan–Meier curves, group comparisons, Cox and logistic regression tables, and ggplot2 figures. Real R packages do the statistics, running inside your browser through webR. It is free, and it has no server.</p>
+<p class="lede">Figura makes journal-ready tables and figures for clinical manuscripts: a Table 1, Kaplan–Meier curves, group comparisons, Cox, logistic and linear regression tables, and ggplot2 figures. Real R packages do the statistics, running inside your browser through webR. It is free, and it has no server.</p>
 
 <h2>Can I use this with patient data?</h2>
 <p><strong>Your data stays in the tab.</strong> There is no backend, no upload, and no request that carries any part of your CSV or any result. R runs in a Web Worker in your browser; the figures you download are produced there.</p>
