@@ -803,7 +803,7 @@ would see.</p>
 #      know about: a DOCUMENT layout instead of the fixed three-pane workbench,
 #      and a dark-scheme remap of the SAME token names (the app itself ships
 #      light-only, and styles.css is not this task's to edit).
-#   2. IT ADDS NO NETWORK CALL. No analytics, no CDN font, no external link —
+#   2. IT ADDS NO NETWORK CALL. No CDN font, no external link; the Cloudflare analytics beacon is edge-injected and disclosed in the footer.
 #      the no-egress invariant covers this page like every other byte of web/.
 #      Every href here is relative and same-origin; `python -c` grep for
 #      "http" over the built file is part of the verification.
@@ -2172,8 +2172,9 @@ ambiguities its author hit, the comparator
 <footer class="doc-foot">
 <p>Figura runs entirely in your browser: there is no backend that could receive
 your data, and this page adds none. It loads the app's own stylesheet and
-self-hosted fonts, and makes no other request &mdash; no analytics, no external
-resource of any kind.</p>
+self-hosted fonts. Cloudflare, which serves the site, injects its Web
+Analytics beacon at the edge (a page-load count with referrer, country and
+device type; no uploaded research data or analysis results) &mdash; see <a href="about/">About</a>.</p>
 <p><a href="index.html">Back to the app</a></p>
 </footer>
 
