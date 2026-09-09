@@ -1982,6 +1982,86 @@ def _web_download_caveat(data: dict) -> str:
         f"other case's script reproduces the app exactly.</p></div>")
 
 
+# ---------------------------------------------------------------------------
+# The sample-size planner's evidence. It is outside the CSV-case roster (no
+# Path B, no case.json), so its browser-versus-native check lives in a QA
+# record under docs/qa/ rather than in results/. The record pins the sources
+# it measured with the SAME digest rule webr-tier.json uses (`path NUL bytes
+# NUL`, here over the record's own `source_paths` in their listed order), so
+# the page can say whether the planner shipping today is the one that was
+# checked — the same staleness direction _stale_web_digest measures for the
+# figure app. Never fabricates: no record, or no digest, renders no claim.
+# ---------------------------------------------------------------------------
+
+
+def _planner_record(repo_root: Path) -> tuple[Path, dict] | None:
+    """The newest docs/qa/*sample-size*.json, or None when there is none."""
+    qa = Path(repo_root) / "docs" / "qa"
+    if not qa.is_dir():
+        return None
+    candidates = sorted(qa.glob("*sample-size*.json"))
+    if not candidates:
+        return None
+    path = candidates[-1]
+    try:
+        return path, json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _planner_sources_digest(repo_root: Path, source_paths) -> str | None:
+    """sha256 over `relpath NUL bytes NUL` for each listed source, in the
+    record's order. None when any listed source is missing — a missing file is
+    not evidence of freshness."""
+    digest = hashlib.sha256()
+    for rel in source_paths:
+        f = Path(repo_root) / rel
+        if not f.is_file():
+            return None
+        digest.update(str(rel).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(f.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _planner_section(web_dir: Path) -> str:
+    """The planner paragraph of the public page: what was checked, where the
+    record is, and whether the shipped planner is still the one measured."""
+    lead = ("<p>The <a href=\"sample-size/#methodology\">sample-size and power "
+            "planner</a> is outside this CSV-case comparison. It has separate "
+            "native-R reference and solver tests, exported-script checks, and "
+            "browser-versus-native checks. Those checks are not an independent "
+            "Python reimplementation of the planning methods, and the CSV cases "
+            "here must not be read as covering that planner.")
+    found = _planner_record(Path(web_dir).parent)
+    if found is None:
+        return lead + "</p>"
+    path, rec = found
+    cases = rec.get("cases") or []
+    n_agree = sum(1 for c in cases
+                  if isinstance(c.get("absolute_difference"), (int, float))
+                  and c["absolute_difference"] <= float(rec.get("tolerance", 0) or 0))
+    engine = rec.get("engine") or {}
+    # Named, not linked: every href on this page must stay same-origin and
+    # relative (test_web_page_issues_no_external_request), and the record is
+    # a repository file, not a published page.
+    detail = (f" The browser check on record (<code>docs/qa/{esc(path.name)}</code> "
+              f"in the repository, {esc(rec.get('date'))}) "
+              f"compared the displayed result for {len(cases)} designs against "
+              f"native R {esc(engine.get('R'))} with pwr {esc(engine.get('pwr'))}; "
+              f"{n_agree} of {len(cases)} agreed within {esc(rec.get('tolerance'))}.")
+    stale = ""
+    recorded = rec.get("sources_sha256")
+    current = (_planner_sources_digest(Path(web_dir).parent, rec.get("source_paths") or [])
+               if recorded else None)
+    if recorded and current and current != recorded:
+        stale = ("<div class=\"warn-box\"><p>The planner's sources have changed "
+                 "since that browser check was recorded, so it describes an "
+                 "earlier version of the planner. It needs re-running.</p></div>")
+    return lead + detail + "</p>" + stale
+
+
 def build_web(findings_path: Path | str | None = None,
               out_path: Path | str | None = None,
               web_dir: Path | str | None = None,
@@ -2105,11 +2185,7 @@ And the whole table above is <b>native R</b> &mdash; the runtime that actually
 runs in your browser is checked separately, and how much of the roster that
 check reaches is stated where it is reported; see
 <a href="#webr">webR against native R</a>.</p>
-<p>The <a href="sample-size/#methodology">sample-size and power planner</a>
-is outside this CSV-case comparison. It has separate native-R reference and
-solver tests, exported-script checks, and browser-versus-native checks.
-Those checks are not an independent Python reimplementation of the planning
-methods, and the CSV cases here must not be read as covering that planner.</p>
+{_planner_section(web_dir)}
 
 <h3>Case by case</h3>
 {_web_case_table(data, pending, cases_dir)}

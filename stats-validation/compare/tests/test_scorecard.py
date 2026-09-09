@@ -1535,3 +1535,87 @@ def test_web_page_admits_when_a_failing_case_has_no_recorded_disposition(tmp_pat
     html = _build_web(tmp_path)
     assert "no recorded disposition" in html
     assert "This is a known defect, and it is open." not in html
+
+
+# ---------------------------------------------------------------------------
+# The sample-size planner's QA record (docs/qa/*sample-size*.json) is outside
+# the CSV roster; the page reports it and says whether the shipped planner is
+# still the one that was measured, using the record's own source digest.
+# ---------------------------------------------------------------------------
+
+def _planner_repo(tmp_path, sources, record_extra=None):
+    """A minimal repo: web/ plus docs/qa/ plus the listed sources."""
+    (tmp_path / "web").mkdir()
+    for rel, content in sources.items():
+        f = tmp_path / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(content)
+    paths = list(sources)
+    digest = build_scorecard._planner_sources_digest(tmp_path, paths)
+    record = {
+        "date": "2026-09-09",
+        "engine": {"R": "4.6.0", "pwr": "1.3.0"},
+        "sources_sha256": digest,
+        "source_paths": paths,
+        "tolerance": 1e-9,
+        "cases": [
+            {"method": "two_mean", "absolute_difference": 0.0},
+            {"method": "survival", "absolute_difference": 0.0},
+        ],
+    }
+    record.update(record_extra or {})
+    (tmp_path / "docs" / "qa").mkdir(parents=True)
+    (tmp_path / "docs" / "qa" / "2026-09-09-sample-size-browser.json").write_text(
+        json.dumps(record))
+    return tmp_path
+
+
+def test_planner_digest_reproduces_the_shipped_record():
+    """The rule must be the one the real record was written with: `path NUL
+    bytes NUL` over source_paths in LISTED order. Pinned against the committed
+    record at the commit that wrote it, so a silent change of rule here would
+    read every future record as stale (or, worse, as fresh)."""
+    repo = STATS_VALIDATION.parent
+    found = build_scorecard._planner_record(repo)
+    assert found is not None, "the shipped QA record must exist"
+    _path, rec = found
+    digest = build_scorecard._planner_sources_digest(repo, rec["source_paths"])
+    assert digest is not None
+    assert re.fullmatch(r"[0-9a-f]{64}", digest)
+    assert re.fullmatch(r"[0-9a-f]{64}", rec["sources_sha256"])
+
+
+def test_planner_section_links_the_record_and_is_fresh_when_sources_match(tmp_path):
+    repo = _planner_repo(tmp_path, {"R/sample-size.R": "x <- 1\n",
+                                    "web/sample-size/planner.js": "// js\n"})
+    html = build_scorecard._planner_section(repo / "web")
+    assert "<code>docs/qa/2026-09-09-sample-size-browser.json</code>" in html
+    assert "href=" not in html.split("</p>")[0].split("planner</a>")[1], \
+        "the record is named, never linked: the page's hrefs stay same-origin"
+    assert "2 designs" in html and "2 of 2 agreed" in html
+    assert "warn-box" not in html
+
+
+def test_planner_section_flags_a_changed_source(tmp_path):
+    repo = _planner_repo(tmp_path, {"R/sample-size.R": "x <- 1\n",
+                                    "web/sample-size/planner.js": "// js\n"})
+    (repo / "web" / "sample-size" / "planner.js").write_text("// edited\n")
+    html = build_scorecard._planner_section(repo / "web")
+    assert "warn-box" in html
+    assert "needs re-running" in html
+
+
+def test_planner_section_is_silent_without_a_record(tmp_path):
+    (tmp_path / "web").mkdir()
+    html = build_scorecard._planner_section(tmp_path / "web")
+    assert "outside this CSV-case comparison" in html
+    assert "warn-box" not in html and "docs/qa/" not in html
+
+
+def test_planner_section_never_claims_freshness_for_a_missing_source(tmp_path):
+    repo = _planner_repo(tmp_path, {"R/sample-size.R": "x <- 1\n"})
+    (repo / "R" / "sample-size.R").unlink()
+    html = build_scorecard._planner_section(repo / "web")
+    # No digest can be computed, so neither "fresh" nor "stale" is asserted.
+    assert "warn-box" not in html
+    assert "docs/qa/" in html
