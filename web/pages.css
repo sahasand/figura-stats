@@ -1,0 +1,149 @@
+/* web/pages.css — the seven crawlable pages (web/<slug>/index.html), in the
+   app's own tokens. styles.css is LINKED beside this file, never copied, so a
+   page cannot drift from the shipped design system. This file holds only what
+   a workbench stylesheet cannot: a scrolling document and a dark remap. Every
+   colour is a token from styles.css, never a literal. validation.html carries
+   the same rules inline because a different builder generates it. */
+
+/* The workbench pins html/body to the viewport and lays body out as a flex
+   column. A document scrolls instead. */
+html, body { height: auto; }
+body { display: block; font-size: 14px; line-height: 1.6; }
+
+/* Dark scheme: the same token names, re-pointed. Because every rule here and
+   in styles.css reads the variables rather than literals, this is the whole of
+   it — no second colour vocabulary, no duplicated rules. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chrome: #14130f;
+    --panel: #1c1b16;
+    --panel-raised: #232219;
+    --rail: #191813;
+    --output-canvas: #14130f;
+    --segment-track: #232219;
+    --sheet: #1f1e18;
+    --ink: #ece7dc;
+    --ink-2: #ddd8cc;
+    --ink-muted: #a49e90;
+    --ink-faint: #7c766a;
+    --line: #2e2c24;
+    --line-soft: #29271f;
+    --border-card: #3a372d;
+    --sheet-border: #35322a;
+    --accent: #5cb8ac;
+    --accent-dark: #7fd0c4;
+    --accent-wash: #172724;
+    --accent-tint-border: #2c4a45;
+    --ok: #74c08d;
+    --error: #e8877a;
+    --warn-bg: #2a2317;
+    --warn-border: #4b3f25;
+    --warn-ink: #e0b877;
+    --shadow-pane: 0 1px 2px rgba(0, 0, 0, .45), 0 2px 10px rgba(0, 0, 0, .35);
+    --shadow-sheet: 0 1px 0 #2a2820, 0 18px 44px -22px rgba(0, 0, 0, .8);
+  }
+}
+
+/* ---- Document frame ----------------------------------------------------- */
+
+/* Wider than the reading measure below on purpose: the prose is capped at
+   40rem wherever it appears, and the extra width goes to the evidence tables,
+   which have seven columns and must not push the second value column off the
+   edge of a laptop screen. */
+.doc { max-width: 58rem; margin: 0 auto; padding: 12px 10px 3.5rem; }
+
+/* The pane treatment from the workbench: a card floating on the warm desk. */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pane);
+  padding: 2rem 2.25rem 2.5rem;
+}
+
+/* Measure. Tables and figures may use the full card; prose may not. */
+.doc p, .doc li, .lede { max-width: 40rem; text-wrap: pretty; }
+
+.eyebrow {
+  margin: 0 0 .5rem;
+  font: .6875rem/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-muted);
+}
+
+.doc h1 {
+  margin: 0 0 .625rem;
+  font: 600 1.75rem/1.2 var(--serif);
+  letter-spacing: -.01em;
+}
+
+.lede { font: 1rem/1.6 var(--serif); color: var(--ink-2); margin: 0 0 1.25rem; }
+
+.doc h2 {
+  margin: 2.5rem 0 .75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font: 600 1.1875rem/1.25 var(--serif);
+}
+
+.doc h3 { margin: 1.75rem 0 .375rem; font: 600 1rem/1.35 var(--serif); }
+.doc h4 { margin: 1.25rem 0 .25rem; font-size: .8125rem; font-weight: 650; }
+.doc ul { padding-left: 1.125rem; }
+.doc li { margin: .25rem 0; }
+
+.doc code {
+  font: .8125em var(--mono);
+  background: var(--panel-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 3px;
+  padding: 0 .25rem;
+  overflow-wrap: anywhere;
+}
+
+.doc a { color: var(--accent); text-underline-offset: 2px; }
+.doc a:hover { color: var(--accent-dark); }
+
+/* ---- Masthead ----------------------------------------------------------- */
+
+/* .toolbar/.brand/.mark come from styles.css unchanged — the page wears the
+   app's own chrome. Only the wordmark needs restating, because in the app it
+   is an <h1> and here the <h1> belongs to the document. */
+.wordmark {
+  font: 600 1.0625rem/1.4 var(--serif);
+  letter-spacing: -.01em;
+  color: var(--ink);
+}
+
+/* ---- Landing-page pieces ------------------------------------------------ */
+.page-nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: .75rem 0 1.5rem;
+  font: .8125rem/1.5 var(--sans); color: var(--ink-muted); }
+.page-nav a { color: var(--ink-muted); text-decoration: none; }
+.page-nav a:hover, .page-nav a[aria-current] { color: var(--accent); text-decoration: underline; }
+
+.cta-row { display: flex; flex-wrap: wrap; gap: .625rem; margin: 1.25rem 0 2rem; }
+.cta { display: inline-block; padding: .625rem 1rem; border-radius: var(--radius-ctl);
+  font: 600 .875rem/1.2 var(--sans); text-decoration: none;
+  background: var(--accent); color: var(--paper); border: 1px solid var(--accent); }
+.cta:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.cta.secondary { background: transparent; color: var(--accent); }
+.cta.secondary:hover { background: var(--accent-wash); }
+@media (pointer: coarse) { .cta { font-size: 16px; } }
+
+.example { margin: 1rem 0 0; }
+.example figure { margin: 0; }
+.example svg { display: block; max-width: 100%; height: auto; }
+.example .summary-output { overflow-x: auto; }
+.example figcaption { font: italic .8125rem/1.5 var(--serif); color: var(--ink-muted); margin-top: .5rem; }
+.example-text { margin: 1rem 0 0; padding: .75rem 1rem; border-left: 3px solid var(--line);
+  font: .8125rem/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--panel-raised); color: var(--ink-2); }
+
+.cite pre { margin: .5rem 0 0; padding: .75rem 1rem; font: .8125rem/1.5 var(--mono);
+  background: var(--panel-raised); border: 1px solid var(--line-soft);
+  border-radius: 3px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.doc-foot { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+  font-size: .8125rem; color: var(--ink-muted); }
+.doc-foot p { margin: .375rem 0; }
+.teaching-visual svg { max-width: 100%; height: auto; }
