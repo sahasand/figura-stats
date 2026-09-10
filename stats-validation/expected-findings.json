@@ -20,7 +20,7 @@
     "as a drive-by. A finding disappearing is a failure here for exactly that",
     "reason: when the Phase-2 export-path fix lands, that PR updates this file."
   ],
-  "total_compared": 331,
+  "total_compared": 379,
   "total_findings": 0,
   "cases": [
     {
@@ -102,6 +102,32 @@
         "n": 1,
         "n_dropped": 1,
         "n_event": 1
+      },
+      "deferred_targets": [],
+      "findings": []
+    },
+    {
+      "id": "linear-confounding",
+      "kind": "coef_table",
+      "compared": 48,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adj_r_squared": 1,
+        "adjusted_beta": 4,
+        "adjusted_ci": 12,
+        "adjusted_p": 4,
+        "aliased_note": 1,
+        "bp_note": 1,
+        "bp_p": 1,
+        "cooks_note": 1,
+        "n": 1,
+        "n_dropped": 1,
+        "obs_per_term_note": 1,
+        "r_squared": 1,
+        "shapiro_note": 1,
+        "shapiro_p": 1,
+        "vif_note": 1
       },
       "deferred_targets": [],
       "findings": []

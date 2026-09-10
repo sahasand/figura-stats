@@ -1,11 +1,11 @@
 {
   "runtime": "webR 0.6.1-dev+7603db7 (R 4.6.0)",
   "runtime_source": "read from the WebR instance's own version fields, from the module the app loads (https://webr.r-wasm.org/latest/webr.mjs); the page itself prints no version string. Runtime binaries served from 17 webr.r-wasm.org request(s) during this run.",
-  "date": "2026-09-09",
-  "commit": "2d9c702958b61dc711975ac735ada5a48a4570b1",
-  "native_digest": "sha256:85e694f248d1b0dab60b98924d7aa44d37110c9c4fa0a0b6fcdaddc3a0d44665",
-  "web_digest": "sha256:ece3719c2cc32eafcf26930cb4ff3b3d4edd2e25e058767d632a7d5ec74da1e8",
-  "web_files": 55,
+  "date": "2026-09-10",
+  "commit": "31a4b5d218c326000afff22bb6c22ace78b2f805",
+  "native_digest": "sha256:1fbfc1266ba8f66ad8cbb4fddd5d1b02b731b074dfb1ce63e08e6d654592577d",
+  "web_digest": "sha256:5da6022047dddd6b4d8fab5df80a2318a1b1032f09d0f53ea2b83250bcb530a0",
+  "web_files": 61,
   "cases": [
     {
       "id": "logistic-confounding",
@@ -36,6 +36,21 @@
         "methods_with_number": 3
       },
       "cells_with_numbers": 13
+    },
+    {
+      "id": "linear-confounding",
+      "identical": true,
+      "cells_compared": 23,
+      "differing_cells": [],
+      "cell_kinds": {
+        "header": 1,
+        "term": 6,
+        "value": 8,
+        "empty": 4,
+        "methods": 4,
+        "methods_with_number": 3
+      },
+      "cells_with_numbers": 11
     },
     {
       "id": "cox-adjusted",
@@ -128,7 +143,7 @@
       "cells_with_numbers": 20
     }
   ],
-  "cells_compared": 125,
-  "cells_with_numbers": 58,
-  "cells_note": "125 = 41 table value cells + 37 displayed sentences (17 containing a number) + 25 row labels + 4 table header line(s) + 18 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 58 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
+  "cells_compared": 148,
+  "cells_with_numbers": 69,
+  "cells_note": "148 = 49 table value cells + 41 displayed sentences (20 containing a number) + 31 row labels + 5 table header line(s) + 22 empty-vs-empty placeholder cells (blank by construction — a categorical variable's own header row carries no value). Only the 69 numeric cells (the table value cells plus the number-bearing sentences) can actually show wasm-vs-native drift — the row labels, header lines, and empty cells are static or intentionally blank."
 }

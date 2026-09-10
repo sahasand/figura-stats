@@ -638,7 +638,7 @@ def _webr_section(results_dir: Path, web_dir: Path | None = None) -> str:
     # whole-roster parity. Both numbers are read off files on disk (the tier's
     # own case list, and results/ for the registered roster), so this stays a
     # pure function of its inputs like everything else here — and the ratio
-    # keeps being stated even now that it is 8 of 8, because "all of them" is a
+    # keeps being stated even now that it is 9 of 9, because "all of them" is a
     # claim a reader is entitled to see counted rather than asserted.
     #
     # AN ABORTED CASE IS NOT COVERED — it produced no comparison at all, so

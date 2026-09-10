@@ -14,7 +14,7 @@
 PY := $(CURDIR)/.venv/bin/python
 CASES := logistic-confounding cox-adjusted km-twoarm \
          groupcompare-numeric groupcompare-categorical groupcompare-dirty \
-         logistic-dirty summary-table1
+         logistic-dirty summary-table1 linear-confounding
 
 # validate/summary.py (the clean-room half of Task 11) has landed, so
 # summary-table1 now runs Path B like every other case and is compared like

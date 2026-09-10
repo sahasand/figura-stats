@@ -81,7 +81,7 @@ Five properties are deliberate.
   `git rev-parse`.
 - **Every honesty guard the scorecard grew is rendered here too**, in the
   reader's language: registered-but-uncompared cases, deferred targets, the
-  webR tier's coverage ratio (8 of 8 since 2026-07-28, and still counted rather
+  webR tier's coverage ratio (9 of 9 since 2026-09-09, and still counted rather
   than asserted), and both staleness digests.
 - **It publishes the findings before they are fixed.** The 30 export-path
   findings of `issues/02` were explained on the page in clinical terms — which
@@ -449,14 +449,14 @@ stays excluded from CI. Before that split, `compareText` had no test anywhere
 reachable from CI; an edit that made the comparison always report "identical"
 would have failed nothing.
 
-**Three comparison shapes, one vocabulary.** Only three of the eight cases are
+**Three comparison shapes, one vocabulary.** Only three of the nine cases are
 ratio tables, so "compare the rendered table cell by cell" is not a shape the
 roster shares. `compareDisplay(kind, native, webr)` dispatches on the case's own
 `display.kind` — never on a guess from the text — into:
 
 | `display.kind` | analyses | shape |
 | --- | --- | --- |
-| `ratio_table` | cox, logistic | `compareText`, on `harness/parse-cells.mjs`'s `parseRatioTable` (unchanged) |
+| `ratio_table`, `coef_table` | cox, logistic, linear | `compareText`, on `harness/parse-cells.mjs`'s `parseRatioTable` (unchanged) — linear's coefficient table is the same three-column TSV shape, just with a different header and a `"est (lo to hi, p)"` cell, and `parseRatioTable` is column-agnostic so it needs no special case |
 | `table1` | summary | `compareTable`, a general N-column TSV (the column count is the number of groups plus two) |
 | `km_summary`, `gc_summary` | KM, group comparison | `compareProse` — these display no table at all, so the comparable units are the lines of the displayed sentence block and, within a line, its sentences |
 
@@ -630,17 +630,18 @@ state whatsoever: it is a function of files in the checked-out tree (`results/`
 and `web/`), never of the clock, the environment, or `HEAD`.
 `test_scorecard_is_a_pure_function_of_its_inputs` pins that.
 
-Coverage is **8 of the 8 cases** since 2026-07-28 — the whole registered
+Coverage is **9 of the 9 cases** since 2026-09-09 (8 of the 8 since
+2026-07-28, before linear-confounding joined) — the whole registered
 roster, driven through the shipped UI in **one booted webR session** (a page
-reload throws away the Web Worker and therefore the runtime, so the eight cases
-share one page and the wall clock stays around 15 seconds). It was 2 of 8 until
+reload throws away the Web Worker and therefore the runtime, so the nine cases
+share one page and the wall clock stays around 15-20 seconds). It was 2 of 8 until
 then; widening it needed the shared-webR-boot refactor of `tests/e2e/`
 (`TODOS.md`, absorbed in the same change) and the two extra comparison shapes
 above. The spec asserts that its own case list is exactly the set of cases
 `results/` registers, so a case added to the roster without a driver fails the
 gate instead of quietly shrinking the coverage the page keeps advertising. The
 scorecard and the public page both state the ratio in the rendered WebR tier
-section, at 8 of 8 as much as at 2 of 8: "all of them" is a claim a reader is
+section, at 9 of 9 as much as at 2 of 8: "all of them" is a claim a reader is
 entitled to see counted rather than asserted.
 
 **The first whole-roster result: 113 displayed strings compared across the eight

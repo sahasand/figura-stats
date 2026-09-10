@@ -141,8 +141,34 @@
       },
       "deferred_targets": [],
       "findings": []
+    },
+    {
+      "id": "linear-confounding",
+      "kind": "coef_table",
+      "compared": 48,
+      "passed": true,
+      "targets_met": true,
+      "targets": {
+        "adjusted_beta": 4,
+        "adjusted_ci": 12,
+        "adjusted_p": 4,
+        "n": 1,
+        "n_dropped": 1,
+        "r_squared": 1,
+        "adj_r_squared": 1,
+        "shapiro_p": 1,
+        "bp_p": 1,
+        "shapiro_note": 1,
+        "bp_note": 1,
+        "obs_per_term_note": 1,
+        "vif_note": 1,
+        "cooks_note": 1,
+        "aliased_note": 1
+      },
+      "deferred_targets": [],
+      "findings": []
     }
   ],
-  "total_compared": 331,
+  "total_compared": 379,
   "total_findings": 0
 }
