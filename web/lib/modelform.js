@@ -1,9 +1,10 @@
 // web/lib/modelform.js
-// Pure decision logic shared by the regression analyze forms (Cox and logistic,
-// web/guided/{cox,logistic}/analyze-form.js). Both forms have the same shape —
-// an outcome column plus a user-confirmed event value, a covariate multi-select,
-// and one reference-level dropdown per categorical covariate — so the rules that
-// carry a real decision live here once instead of drifting apart in two files.
+// Pure decision logic shared by the regression analyze forms (Cox, logistic,
+// and linear; web/guided/{cox,logistic,linear}/analyze-form.js). All three
+// forms share the same shape — an outcome column (with a user-confirmed event
+// value for Cox and logistic), a covariate multi-select, and one reference-
+// level dropdown per categorical covariate — so the rules that carry a real
+// decision live here once instead of drifting apart across the three files.
 // Unit-tested in modelform.test.mjs; the DOM wiring stays in each form.
 
 // A remembered dropdown value carried across an options rebuild: kept only when

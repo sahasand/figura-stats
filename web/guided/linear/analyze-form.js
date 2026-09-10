@@ -8,7 +8,7 @@ import { parseCsv, toCsv } from "../../lib/csv.js";
 import { renderColumnPicker } from "../../lib/columnpicker.js";
 import { buildLinearSpec, distinctValues, mostFrequent } from "./spec.js";
 import { LINEAR_DEMO } from "./demo-data.js";
-import { retainedSelection, reconcileRefLevels, renderReadiness, countDroppedRows }
+import { reconcileRefLevels, renderReadiness, countDroppedRows }
   from "../../lib/modelform.js";
 import { normalizeIncrement } from "../logistic/analyze-form.js";
 export { normalizeIncrement, countDroppedRows };
