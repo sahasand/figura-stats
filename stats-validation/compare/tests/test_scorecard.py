@@ -1073,7 +1073,7 @@ def test_web_lede_cannot_contradict_the_coverage_table(tmp_path):
     shipped_lede = _plain(
         re.search(r'<p class="lede">(.*?)</p>', shipped, re.S).group(1))
     assert not ABSOLUTE_OVER_NUMBERS.search(shipped_lede), shipped_lede
-    assert "eight fixed test datasets" in shipped_lede
+    assert "nine fixed test datasets" in shipped_lede
 
 
 def test_web_page_states_the_claim_and_its_limit(tmp_path):
@@ -1233,7 +1233,7 @@ def test_web_page_always_says_a_download_can_differ_from_the_screen(tmp_path):
         assert issue in html, f"the open divergence is unfindable on {name}"
     # The count it quotes is the page's own case count, not a written-down one.
     assert "all four datasets" in green
-    assert "all eight datasets" in shipped
+    assert "all nine datasets" in shipped
 
 
 def test_web_page_shows_a_registered_but_uncompared_case(tmp_path):
