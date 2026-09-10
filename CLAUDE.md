@@ -107,6 +107,10 @@ One gap is knowingly left open and has no issue yet: cox does not reject a statu
 - Owner, after each deploy that changes the page set: submit `https://figurastats.org/sitemap.xml` in Search Console (property already verified).
 - DOI, when minted: swap `FIGURA_CITE_URL` in `R/script.R` and `CITATION`/`BIBTEX` in `scripts/pages/registry.mjs`; nothing else references the URL.
 
+**Linear regression shipped 2026-09-10** (spec `docs/superpowers/specs/2026-09-09-linear-regression-design.md`, plan `docs/superpowers/plans/2026-09-09-linear-regression.md`, executed subagent-driven in a worktree and fast-forwarded into `main`): the seventh guided analysis, its landing page, and the validation roster's ninth case (`linear-confounding`, display kind `coef_table`, 48 values compared with 0 findings; webR gate re-run, 0 drift). Open from that work:
+- `stats-validation/issues/04-treatment-dummies-tie-break-not-locale-aware.md` (**needs-triage**): pre-existing — `validate/io.py`'s `treatment_dummies` breaks most-frequent-level ties by code-point sort where the specs state a locale-aware rule; `validate/linear.py` sidesteps it, the other Path B modules may not. No shipped case has mixed-case levels.
+- The sitemap grew to eleven URLs: the Search Console resubmission bullet above applies to this deploy too.
+
 ### Triage labels
 
 Uses the standard `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` vocabulary. See `docs/agents/triage-labels.md`.

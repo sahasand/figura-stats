@@ -15,7 +15,7 @@ Two changes address this together.
 1. **Crawlable pages, one per analysis plus About.** Each explains in plain HTML what the analysis makes, for whom, what data it needs, what it cannot do, shows a real rendered example, offers a sample CSV, and opens the matching analysis in the app. This gives the index and assistants substantive text per analysis.
 2. **A citation sentence in the methods text.** Every user is writing a paper, and journals require a software statement. If the generated methods paragraph ends with a scholarly attribution, authors paste it as-is and each published paper links the next reader to the tool. This was planned for late July (see the traction-strategy notes) and never built.
 
-What the traffic data cannot say: which analyses people run. The app imports every guided module statically, so a fetch of any `guided/*.js` file is a page load, not a choice. The only per-analysis signal is a fetch of an analysis's `analyze-form.js` reaching the "Analyze your data" stage, and even that is lost to the service worker cache on repeat visits.
+What the traffic data cannot say: whether anyone runs an analysis at all. The app imports every guided module, including each `analyze-form.js`, statically, so any `guided/*.js` fetch is a page load, not a choice; a render itself makes no network request (the spec goes to a Web Worker, and the lazy package installs go to the webR CDN, not this origin). Cloudflare sees page loads and nothing else. This is a consequence of the no-egress design, not an oversight, and any instrument that changed it would be a deliberate, disclosed decision.
 
 The statistical code does not change. The R text output gains one deterministic paragraph.
 
