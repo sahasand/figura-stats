@@ -2968,3 +2968,112 @@ def test_linear_diagnostics_flag_an_r_squared_value_defect():
     targets = _Targets(["r_squared"])
     findings, _ = _compare_linear_diagnostics(LEAD + COOKS, exact, _linear_python(r_squared=0.39), targets)
     assert any(f["code"] == "DEFECT" and f["quantity"] == "r_squared" for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# compare_coef_table itself: `compare_ratio_table` parametrised for the
+# coefficient scale, exercised directly (a "handler-level" test, the same
+# altitude as `_compare_linear_diagnostics` above) rather than only through
+# `compare_case`'s dispatch, so the import at the top of this section is
+# genuinely exercised. Shape mirrors `_base()`/linear-confounding's real
+# case.json; the TSV and LEAD/COOKS methods sentence reuse the exact display
+# rule (`format_coef_cell`) and diagnostics fixture already pinned above.
+# ---------------------------------------------------------------------------
+
+_LINEAR_TSV_ROWS = "\n".join([
+    "Characteristic\tUnadjusted β (95% CI, p)\tAdjusted β (95% CI, p)",
+    "arm (reference: Standard care)\t\t",
+    "New treatment\t-1.89 (-3.67 to -0.11, p=0.038)\t-2.35 (-4.01 to -0.68, p=0.006)",
+    "age (per 10 units)\t0.55 (0.14 to 0.96, p=0.009)\t0.61 (0.22 to 1.00, p=0.002)",
+    "stage (reference: I)\t\t",
+    "II\t0.98 (-0.12 to 2.08, p=0.081)\t1.20 (0.14 to 2.27, p=0.027)",
+    "III\t2.41 (1.16 to 3.66, p<0.001)\t2.88 (1.68 to 4.08, p<0.001)",
+])
+
+
+def _linear_base():
+    """A linear-confounding fixture whose three artifacts agree everywhere."""
+    case = {
+        "id": "linear-confounding",
+        "figure": "linear",
+        "roles": {"outcome": "los", "covariates": ["arm", "age", "stage"]},
+        "options": {
+            "ref_levels": {"arm": "Standard care", "stage": "I"},
+            "increments": {"age": 10},
+        },
+        "display": {"kind": "coef_table"},
+        "exact_targets": [
+            "adjusted_beta", "adjusted_ci", "adjusted_p", "n", "n_dropped",
+            "r_squared", "adj_r_squared", "shapiro_p", "bp_p",
+            "shapiro_note", "bp_note", "obs_per_term_note", "vif_note",
+            "cooks_note", "aliased_note",
+        ],
+    }
+    figura = {
+        "id": "linear-confounding",
+        "text": _LINEAR_TSV_ROWS + "\n\n" + LEAD + COOKS + "\n\n" + CITE,
+        "code": "# script",
+    }
+    exact_terms = {
+        "armNew treatment": {"est": -2.345, "se": 0.851, "lo": -4.0130, "hi": -0.6770, "p": 0.0064},
+        "age": {"est": 0.612, "se": 0.198, "lo": 0.2239, "hi": 1.0001, "p": 0.0021},
+        "stageII": {"est": 1.204, "se": 0.543, "lo": 0.1397, "hi": 2.2683, "p": 0.0268},
+        "stageIII": {"est": 2.876, "se": 0.612, "lo": 1.6765, "hi": 4.0755, "p": 0.00003},
+    }
+    exact = {
+        "id": "linear-confounding", "figure": "linear",
+        "terms": copy.deepcopy(exact_terms),
+        "n": 320, "n_dropped": 0,
+        "diagnostics": {"r_squared": 0.4123, "adj_r_squared": 0.4049,
+                        "shapiro_p": 0.31, "bp_p": 0.52},
+    }
+    unadjusted = {
+        "armNew treatment": {"est": -1.890, "se": 0.910, "lo": -3.6736, "hi": -0.1064, "p": 0.0381},
+        "age": {"est": 0.550, "se": 0.210, "lo": 0.1384, "hi": 0.9616, "p": 0.0089},
+        "stageII": {"est": 0.980, "se": 0.560, "lo": -0.1176, "hi": 2.0776, "p": 0.0806},
+        "stageIII": {"est": 2.410, "se": 0.640, "lo": 1.1556, "hi": 3.6644, "p": 0.00017},
+    }
+    python = {
+        "id": "linear-confounding", "figure": "linear",
+        "terms": copy.deepcopy(exact_terms),
+        "unadjusted": copy.deepcopy(unadjusted),
+        "display_terms": {
+            "arm:New treatment": copy.deepcopy(exact_terms["armNew treatment"]),
+            "age": copy.deepcopy(exact_terms["age"]),
+            "stage:II": copy.deepcopy(exact_terms["stageII"]),
+            "stage:III": copy.deepcopy(exact_terms["stageIII"]),
+        },
+        "display_unadjusted": {
+            "arm:New treatment": copy.deepcopy(unadjusted["armNew treatment"]),
+            "age": copy.deepcopy(unadjusted["age"]),
+            "stage:II": copy.deepcopy(unadjusted["stageII"]),
+            "stage:III": copy.deepcopy(unadjusted["stageIII"]),
+        },
+        "n": 320, "n_dropped": 0,
+        "r_squared": 0.4123, "adj_r_squared": 0.4049,
+        "diagnostics": _linear_python()["diagnostics"],
+    }
+    return case, figura, exact, python
+
+
+def test_compare_coef_table_agreeing_fixture_passes_everything_and_meets_targets():
+    case, figura, exact, python = _linear_base()
+    findings, compared, targets = compare_coef_table(case, figura, exact, python)
+    assert [f for f in findings if f["code"] not in PASS_CODES] == []
+    assert compared > 0
+    assert targets.met
+
+
+def test_compare_coef_table_ratio_formatted_adjusted_cell_is_a_defect_and_a_script_divergence():
+    case, figura, exact, python = _linear_base()
+    # Mutate ONE adjusted cell to ratio formatting (en dash, exponentiated-
+    # looking numbers, no " to ") — a defect on the displayed cell, since it no
+    # longer parses under the coefficient rule at all, AND a script divergence,
+    # since the exported script's own render (still coefficient-scale) can no
+    # longer match what the wrongly-formatted screen shows.
+    figura["text"] = figura["text"].replace(
+        "-2.35 (-4.01 to -0.68, p=0.006)", "1.20 (0.60–1.80, p=0.002)")
+    findings, compared, targets = compare_coef_table(case, figura, exact, python)
+    tagged = {(f["term"], f["quantity"], f["code"]) for f in findings}
+    assert ("arm:New treatment", "displayed adjusted cell", "DEFECT") in tagged
+    assert ("arm:New treatment", "exported script cell", "SCRIPT_DIVERGENCE") in tagged

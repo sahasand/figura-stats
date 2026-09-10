@@ -220,12 +220,14 @@ if (nrow(dat) >= 3 && nrow(dat) <= 5000) shapiro.test(resid(fit))   # same guard
 aux <- lm(resid(fit)^2 ~ fitted(fit)); bp <- nrow(dat) * summary(aux)$r.squared
 pchisq(bp, df = 1, lower.tail = FALSE)
 cooks.distance(fit)
-plot(fit, which = 1:2)
+# plot(fit, which = 1:2)                      # residuals vs fitted; normal Q-Q
 ```
 
 followed by an equivalent ggplot2 forest. The model calls are deparsed from the exact
 expressions `fig_linear` evaluated, so the script's numbers match the screen by
-construction; the header keeps the default "exact calls" honesty line.
+construction; the header keeps the default "exact calls" honesty line. `plot(fit, which =
+1:2)` is emitted **commented out**: a sourced script must not open a graphics device, so
+the line is left for the user to uncomment interactively rather than run automatically.
 
 ## Web UI
 
@@ -250,8 +252,9 @@ explicitly and omits `source_filename` (script embeds the data). The generator w
 `demo-data.js` **and** the fixture CSV the R tests and the validation case share.
 
 **Analyze your data** (`analyze-form.js`): the logistic form with the event-value picker
-**removed** and the outcome dropdown **filtered to numeric columns**; the covariate
-multi-select excludes the chosen outcome; per-categorical reference-level dropdowns and
+**removed** and the outcome dropdown **filtered to numeric columns**; the form rejects an
+outcome that is also selected as a covariate via `renderReadiness`'s overlap check
+(identical to logistic); per-categorical reference-level dropdowns and
 per-numeric increment inputs reused unchanged (same ids pattern: `#linear-config`,
 `#linear-refs`, `#linear-increments`, `#linear-render`); dropped-row preview via
 `countDroppedRows`. Readiness comes from `modelform.js`'s `renderReadiness` with a new

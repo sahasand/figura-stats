@@ -41,6 +41,12 @@ fit <- stats::lm(los ~ arm + age + stage, data = dat)
 adj <- stats::confint(fit)["armNew treatment", ]
 stopifnot(crude[1] < 0, crude[2] > 0)     # crude CI straddles 0
 stopifnot(adj[2] < 0)                      # adjusted CI entirely below 0
+# The e2e spec (tests/e2e/linear-guided.spec.js) asserts the adjusted arm
+# estimate is < -0.5 and the per-10-years age estimate is > 0.4; age is fit
+# per year here, so its coefficient is scaled by 10 to match the displayed
+# per-10-years increment.
+stopifnot(unname(stats::coef(fit)["armNew treatment"]) < -0.5)
+stopifnot(unname(stats::coef(fit)["age"]) * 10 > 0.4)
 stopifnot(stats::shapiro.test(stats::resid(fit))$p.value > 0.10)
 aux <- stats::lm(stats::resid(fit)^2 ~ stats::fitted(fit))
 bp <- nrow(dat) * summary(aux)$r.squared

@@ -1574,11 +1574,12 @@ def compare_ratio_table(case, figura, exact, python, *,
     # -- exact tier, adjusted terms only (the unadjusted column is a display
     # claim; only the joint model is harvested at full precision).
     #
-    # `se` is compared explicitly and separately from lo/hi: lo and hi are
-    # built as exp(est ± 1.96·se) on BOTH sides, so agreement there is partly
-    # tautological once est and se agree. se is the primary standard-error
-    # evidence, and a CI that agrees while se does not would mean one path
-    # built its interval from something other than its own model.
+    # `se` is compared explicitly and separately from lo/hi: on the ratio scale
+    # (cox/logistic) lo and hi are built as exp(est ± 1.96·se), and on the
+    # coefficient scale (linear) as est ± t·se — either way, agreement there is
+    # partly tautological once est and se agree. se is the primary standard-
+    # error evidence, and a CI that agrees while se does not would mean one
+    # path built its interval from something other than its own model.
     exact_terms = {_strip_backticks(k): v for k, v in exact.get("terms", {}).items()}
     py_terms = python.get("terms") or {}
     for key in sorted(set(exact_terms) | set(py_terms)):

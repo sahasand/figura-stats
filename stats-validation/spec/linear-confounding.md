@@ -575,11 +575,12 @@ Displayed, when triggered:
 
 ## Which tier judges which diagnostic
 
-The exported `.R` script computes and prints `summary(fit)` (which carries R²
-and adjusted R²), `shapiro.test(resid(fit))` under the identical `3 ≤ n ≤ 5000`
-guard, and the Breusch–Pagan pair `aux <- lm(resid(fit)^2 ~ fitted(fit))`,
-`pchisq(n * summary(aux)$r.squared, df = 1, lower.tail = FALSE)`. Those four
-quantities — **R², adjusted R², `shapiro_p` and `bp_p`** — therefore have
+The exported `.R` script computes and prints the joint model's summary (which
+carries R² and adjusted R²), the Shapiro–Wilk test on its residuals under the
+identical `3 ≤ n ≤ 5000` guard, and the Breusch–Pagan pair described above (the
+auxiliary regression of squared residuals on fitted values, then the upper-tail
+chi-square p-value). Those four quantities — **R², adjusted R², `shapiro_p` and
+`bp_p`** — therefore have
 full-precision **Path A values on the exact tier**, harvested from the script's
 own objects with the identical expressions, and are compared as numbers.
 

@@ -24,6 +24,7 @@
 // a shape that fits what they actually display:
 //
 //   ratio_table  cox, logistic     -> compareText   (parseRatioTable, unchanged)
+//   coef_table   linear            -> compareText   (parseRatioTable, unchanged)
 //   table1       summary           -> compareTable  (general N-column TSV)
 //   km_summary   km                -> compareProse  (no table at all: one
 //   gc_summary   group comparison  -> compareProse   displayed sentence block)
@@ -91,8 +92,8 @@ function assertPrecondition(condition, message) {
 //      field is discarded on both sides and an extra column webR emitted (or
 //      dropped) is invisible. The general `parseDisplayTable` used by
 //      `compareTable` does NOT have this hole — it keeps every field and
-//      asserts the per-row cell count — so it is specific to the three
-//      ratio_table cases.
+//      asserts the per-row cell count — so it is specific to the four ratio
+//      and coefficient table cases.
 //
 // NEGATIVE CONTROL, AND ITS PROVENANCE. The direction that matters — would a
 // real drift actually be CAUGHT end to end — was exercised on 2026-07-28 by

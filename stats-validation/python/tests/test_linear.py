@@ -1,4 +1,4 @@
-import math
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -16,7 +16,7 @@ R_REFERENCE = {
     "r_squared": 0.2460968579, "adj_r_squared": 0.2365234847,
     "shapiro_p": 0.5101217193, "bp_p": 0.2209419134, "cooks_influential": 18,
 }
-CASE = "../cases/linear-confounding"
+CASE = Path(__file__).resolve().parents[2] / "cases" / "linear-confounding"
 
 
 def _rel(a, b, tol=1e-6):
@@ -24,7 +24,7 @@ def _rel(a, b, tol=1e-6):
 
 
 def test_reproduces_r_on_the_shipped_case():
-    df, case = load_case(CASE)
+    df, _ = load_case(str(CASE))
     out = fit_linear(df, "los", ["arm", "age", "stage"],
                      {"arm": "Standard care", "stage": "I"}, {"age": 10})
     for key in ("armNew treatment", "age", "stageII", "stageIII"):
