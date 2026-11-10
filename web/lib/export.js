@@ -75,8 +75,55 @@ export function textExportDescriptor(figureKey) {
   }
   return { buttonLabel: ".tsv", copyLabel: "Copy", ext: "tsv",
     mime: "text/tab-separated-values",
-    copyTitle: "Copy the table and methods text — journals want tables as editable text, paste into Word or Excel",
+    copyTitle: "Copy the table and methods text — pastes into Word as an editable table (journals want tables as editable text), or into Excel",
     downloadTitle: "Download the table and methods text as .tsv" };
+}
+
+// ---- Word-ready table copy --------------------------------------------
+// Authors write in Word, where a tab-separated paste lands as loose text
+// that has to be rebuilt into a table by hand. Copy therefore also carries a
+// text/html flavour: the rendered table as a real <table>, then the methods
+// text as paragraphs. Word, Google Docs and Excel take the HTML flavour;
+// plain-text targets still get the tab-separated text.
+//
+// Everything is inline because a paste target reads no stylesheet. No font is
+// set, so the table adopts the manuscript's own. The borders are the journal
+// three-rule table — over the header, under it, and under the last row.
+
+const escapeHtml = (s) => String(s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const RULE_HEAVY = "1.5pt solid #000";
+const RULE_LIGHT = "1pt solid #000";
+// Non-breaking spaces, not padding or a margin: the one indent every paste
+// target keeps (Excel drops both of the others).
+const LEVEL_INDENT = "&nbsp;".repeat(4);
+
+function wordTable({ header, rows }) {
+  const align = (i) => `text-align:${i === 0 ? "left" : "center"}`;
+  const head = header.map((h, i) =>
+    `<th style="border-top:${RULE_HEAVY};border-bottom:${RULE_LIGHT};padding:3pt 8pt;${align(i)}">` +
+    `${escapeHtml(h)}</th>`).join("");
+  const body = rows.map((r, n) => {
+    const closing = n === rows.length - 1 ? `border-bottom:${RULE_HEAVY};` : "";
+    const cells = r.cells.map((c, i) =>
+      `<td style="${closing}padding:2pt 8pt;${align(i)}">` +
+      `${i === 0 && r.indent ? LEVEL_INDENT : ""}${escapeHtml(c)}</td>`).join("");
+    return `<tr>${cells}</tr>`;
+  }).join("");
+  return `<table style="border-collapse:collapse"><thead><tr>${head}</tr></thead>` +
+    `<tbody>${body}</tbody></table>`;
+}
+
+// tables: [{ header: [string], rows: [{ cells: [string], indent: boolean }] }]
+// (see collectTables); text: the text pane. The pane's tab-separated block is
+// the same table again, so it is dropped — every other block is a paragraph.
+export function richTableHtml(tables, text) {
+  const paragraphs = String(text).split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter((block) => block !== "" && !block.includes("\t"))
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br>")}</p>`);
+  return tables.map(wordTable).join("") + paragraphs.join("");
 }
 
 // ---- PNG DPI stamping -------------------------------------------------
@@ -135,6 +182,25 @@ export function collectSvgPanels(previewEl) {
     const { width, height } = svgDimensions(svg);
     return { svg, width, height };
   });
+}
+
+// The rendered tables as plain data for richTableHtml. Summary's per-row
+// ".why" note explains the mean-vs-median choice on screen; it is teaching
+// text, absent from the .tsv, and stays out of the manuscript table too.
+export function collectTables(previewEl) {
+  const cellText = (cell) => {
+    const copy = cell.cloneNode(true);
+    copy.querySelectorAll(".why").forEach((n) => n.remove());
+    return copy.textContent.trim();
+  };
+  return [...previewEl.querySelectorAll("table.table1")].map((table) => ({
+    header: [...table.querySelectorAll("thead th")].map(cellText),
+    rows: [...table.querySelectorAll("tbody tr")].map((tr) => {
+      const cells = [...tr.children];
+      return { cells: cells.map(cellText),
+        indent: !!(cells[0] && cells[0].querySelector(".lvl")) };
+    }),
+  }));
 }
 
 // Rasterize an SVG string to a DPI-stamped PNG Blob at journal resolution.

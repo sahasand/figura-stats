@@ -1,5 +1,6 @@
 import assert from "node:assert";
-import { svgDimensions, combineSvgs, exportFilename, crc32, setPngDpi, textExportDescriptor } from "./export.js";
+import { svgDimensions, combineSvgs, exportFilename, crc32, setPngDpi, textExportDescriptor,
+  richTableHtml } from "./export.js";
 
 // svgDimensions: svglite emits pt (1pt = 4/3 px)
 const svgPt = `<svg xmlns="http://www.w3.org/2000/svg" width="504.00pt" height="252.00pt" viewBox="0 0 504.00 252.00"><rect/></svg>`;
@@ -117,3 +118,74 @@ console.log("ok - export pHYs stamping (journal dpi metadata)");
 }
 
 console.log("ok - analysis-aware text export descriptor");
+
+// ---- Word-ready copy: the text/html clipboard flavour ---------------------
+// Authors write in Word, and a tab-separated paste there is loose text they
+// must rebuild into a table by hand. The HTML flavour pastes as a real table
+// carrying the journal three-rule borders inline (Word ignores stylesheets).
+{
+  const tables = [{
+    header: ["Characteristic", "Unadjusted HR (95% CI)", "Adjusted HR (95% CI)"],
+    rows: [
+      { cells: ["arm (reference: Standard care)", "", ""], indent: false },
+      { cells: ["New treatment", "0.78 (0.57–1.06, p=0.115)", "0.58 (0.41–0.80, p<0.001)"], indent: true },
+      { cells: ["age (per 1 unit)", "1.05 (1.03–1.06, p<0.001)", "1.06 (1.04–1.08, p<0.001)"], indent: false },
+    ],
+  }];
+  const text = "Characteristic\tUnadjusted HR (95% CI, p)\tAdjusted HR (95% CI, p)\n" +
+    "arm (reference: Standard care)\t\t\nNew treatment\t0.78\t0.58\n\n" +
+    "Multivariable Cox regression (n = 220) adjusted for arm & age.\n\n" +
+    "Analyses were performed with Figura (Saha, 2026; https://figurastats.org).";
+  const html = richTableHtml(tables, text);
+
+  // one real table, every header and cell present
+  assert.equal((html.match(/<table/g) || []).length, 1);
+  assert.equal((html.match(/<th /g) || []).length, 3);
+  assert.equal((html.match(/<td /g) || []).length, 9);
+  assert.match(html, />Unadjusted HR \(95% CI\)<\/th>/);
+
+  // cell text is escaped — "p<0.001" must not open a tag
+  assert.match(html, /p&lt;0\.001/);
+  assert.doesNotMatch(html, /p<0\.001/);
+
+  // a factor level is indented with non-breaking spaces (survives Word,
+  // Google Docs and Excel alike); a top-level row is not
+  assert.match(html, />(&nbsp;){4}New treatment<\/td>/);
+  assert.match(html, />age \(per 1 unit\)<\/td>/);
+
+  // three rules, inline: over and under the header, under the LAST body row only
+  const ths = html.match(/<th [^>]*>/g);
+  for (const th of ths) {
+    assert.match(th, /border-top:[^;"]*solid/);
+    assert.match(th, /border-bottom:[^;"]*solid/);
+  }
+  const trs = html.match(/<tr>.*?<\/tr>/gs);
+  assert.equal(trs.length, 4);                       // header + 3 body rows
+  assert.doesNotMatch(trs[1], /border-bottom/);
+  assert.doesNotMatch(trs[2], /border-bottom/);
+  assert.equal((trs[3].match(/border-bottom:[^;"]*solid/g) || []).length, 3);
+
+  // the methods text follows as paragraphs, in order; the tab-separated block
+  // is NOT repeated (the table already carries it)
+  const paras = html.match(/<p>.*?<\/p>/gs);
+  assert.equal(paras.length, 2);
+  assert.match(paras[0], /^<p>Multivariable Cox regression \(n = 220\) adjusted for arm &amp; age\.<\/p>$/);
+  assert.match(paras[1], /figurastats\.org/);
+  assert.ok(html.indexOf("</table>") < html.indexOf("<p>"));
+  assert.doesNotMatch(html, /\t/);
+
+  // no stylesheet, class or script — everything Word needs is inline
+  assert.doesNotMatch(html, /class=|<style|<script/);
+
+  // two tables keep their order; a single-row table closes on that row
+  const two = richTableHtml([
+    { header: ["A", "B"], rows: [{ cells: ["first", "1"], indent: false }] },
+    { header: ["C", "D"], rows: [{ cells: ["second", "2"], indent: false }] },
+  ], "");
+  assert.equal((two.match(/<table/g) || []).length, 2);
+  assert.ok(two.indexOf("first") < two.indexOf("second"));
+  assert.equal((two.match(/<td [^>]*border-bottom/g) || []).length, 4);
+  assert.doesNotMatch(two, /<p>/);
+}
+
+console.log("ok - Word-ready table copy (text/html clipboard flavour)");

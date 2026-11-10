@@ -73,9 +73,44 @@ test("journal-grade exports: 600dpi-stamped PNG, stitched SVG, per-panel row, ts
   expect(tsv.name).toBe("summary-output.tsv");
   expect(tsv.buf.toString("utf8")).toMatch(/^Characteristic\t/);
   await page.locator("#export-copy").click();
-  await expect(page.locator("#export-feedback-console")).toHaveText("Copied");
+  await expect(page.locator("#export-feedback-console")).toHaveText("Copied as a table for Word");
   const clip = await page.evaluate(() => navigator.clipboard.readText());
   expect(clip).toMatch(/^Characteristic\t/);
+
+  // The same copy carries an HTML flavour, so a paste into Word is a real
+  // table rather than tab-separated text: one table, the on-screen header,
+  // indented factor levels, the methods text as paragraphs, and none of the
+  // on-screen ".why" teaching notes.
+  const rich = await page.evaluate(async () => {
+    for (const item of await navigator.clipboard.read())
+      if (item.types.includes("text/html"))
+        return (await item.getType("text/html")).text();
+    return null;
+  });
+  expect(rich).not.toBeNull();
+  const pasted = await page.evaluate((html) => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const rows = [...doc.querySelectorAll("tbody tr")];
+    return {
+      tables: doc.querySelectorAll("table").length,
+      header: [...doc.querySelectorAll("thead th")].map((th) => th.textContent),
+      bodyRows: rows.length,
+      firstCells: rows.map((tr) => tr.children[0].textContent),
+      paragraphs: [...doc.querySelectorAll("p")].map((p) => p.textContent),
+    };
+  }, rich);
+  const screen = await page.evaluate(() => ({
+    header: [...document.querySelectorAll("#preview table.table1 thead th")].map((th) => th.textContent),
+    bodyRows: document.querySelectorAll("#preview table.table1 tbody tr").length,
+    why: document.querySelector("#preview table.table1 .why").textContent,
+  }));
+  expect(pasted.tables).toBe(1);
+  expect(pasted.header).toEqual(screen.header);
+  expect(pasted.bodyRows).toBe(screen.bodyRows);
+  expect(pasted.firstCells).toContain("\u00a0\u00a0\u00a0\u00a0Female");
+  expect(pasted.firstCells.join("|")).not.toContain(screen.why);
+  expect(pasted.paragraphs.length).toBeGreaterThanOrEqual(2);
+  expect(pasted.paragraphs.join(" ")).toContain("figurastats.org");
 
   // Switching analyses clears the shared output — a stale figure must never
   // export under the new analysis's filename (journal correctness).

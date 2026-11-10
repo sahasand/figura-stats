@@ -4,7 +4,7 @@
 // changes to R, worker.js, or the shell factory. A MutationObserver keeps the
 // buttons' disabled state (and the per-panel row) in sync with the panes.
 import { collectSvgPanels, combineSvgs, svgToPngBlob, downloadBlob, exportFilename,
-  textExportDescriptor } from "./lib/export.js";
+  textExportDescriptor, collectTables, richTableHtml } from "./lib/export.js";
 
 export function initExportUI(getFigureKey) {
   const preview = document.getElementById("preview");
@@ -43,8 +43,23 @@ export function initExportUI(getFigureKey) {
     downloadBlob(new Blob([stats.textContent], { type: d.mime }),
       exportFilename(getFigureKey(), d.ext, {}));
   });
-  copyBtn.addEventListener("click", () => navigator.clipboard.writeText(stats.textContent)
-    .then(() => note(conNote, "Copied"))
+  // Copy carries two flavours when a table is on screen: the tab-separated
+  // text as before, plus an HTML table Word pastes as a real table. Browsers
+  // without ClipboardItem, and a refused rich write, fall back to plain text.
+  function copyOutput() {
+    const text = stats.textContent;
+    const plain = () => navigator.clipboard.writeText(text).then(() => "Copied");
+    const tables = collectTables(preview);
+    if (!tables.length || typeof ClipboardItem === "undefined" || !navigator.clipboard.write)
+      return plain();
+    const item = new ClipboardItem({
+      "text/plain": new Blob([text], { type: "text/plain" }),
+      "text/html": new Blob([richTableHtml(tables, text)], { type: "text/html" }),
+    });
+    return navigator.clipboard.write([item]).then(() => "Copied as a table for Word", plain);
+  }
+  copyBtn.addEventListener("click", () => copyOutput()
+    .then((msg) => note(conNote, msg))
     .catch(() => note(conNote, "Copy failed — select the text manually")));
   rBtn.addEventListener("click", () => {
     const code = stats.dataset.rCode || "";
